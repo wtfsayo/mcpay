@@ -10,6 +10,7 @@
     "@vercel/mcp-adapter": "0.6.2",
     "ai": "5.0.0-alpha.3",
     "hono": "^4.7.10",
+    "x402": "^0.3.7",
     "zod": "^3.25.42"
   },
   "devDependencies": {
