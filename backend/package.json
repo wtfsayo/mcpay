@@ -4,9 +4,6 @@
   "description": "MCPay.fun Backend on Vercel",
   "type": "module",
   "private": true,
-  "scripts": {
-    "build": "node scripts/build.cjs"
-  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@vercel/ai-sdk-gateway": "^0.1.8",
