@@ -10,12 +10,16 @@
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build"
   },
-  "keywords": ["mcpay", "sdk", "typescript"],
+  "keywords": [
+    "mcpay",
+    "sdk",
+    "typescript"
+  ],
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "typescript": "^5.0.0",
-    "@types/node": "^20.0.0"
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
   },
   "engines": {
     "node": ">=18.0.0",
@@ -23,5 +27,11 @@
   },
   "files": [
     "dist"
-  ]
-} 
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "viem": "^2.30.5",
+    "x402": "^0.3.7",
+    "zod": "^3.25.42"
+  }
+}
