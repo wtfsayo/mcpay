@@ -76,11 +76,11 @@ app.get('/servers', async (c) => {
 app.get('/servers/:id', async (c) => {
     const serverId = c.req.param('id')
     const server = await withTransaction(txOperations.getMcpServerByServerId(serverId))
-    
+
     if (!server) {
         return c.json({ error: 'Server not found' }, 404)
     }
-    
+
     return c.json(server)
 })
 
@@ -124,7 +124,7 @@ app.post('/servers', async (c) => {
             name: tool.name,
             description: tool.description,
             inputSchema: tool.inputSchema,
-          }))
+        }))
 
 
         const serverInformation = await generateObject({
@@ -144,7 +144,7 @@ app.post('/servers', async (c) => {
         })
 
 
-          try {
+        try {
             let server: any
             let userId: string
             console.log('Starting database transaction')
@@ -153,7 +153,7 @@ app.post('/servers', async (c) => {
                 // Check if user exists, create if not
                 console.log('Checking if user exists with wallet address:', data.receiverAddress)
                 let user = await txOperations.getUserByWalletAddress(data.receiverAddress)(tx)
-                
+
                 if (!user) {
                     console.log('User not found, creating new user with wallet address:', data.receiverAddress)
                     user = await txOperations.createUser({
@@ -164,7 +164,7 @@ app.post('/servers', async (c) => {
                 } else {
                     console.log('Found existing user with ID:', user.id)
                 }
-                
+
                 userId = user.id
 
                 console.log('Creating server record')
@@ -207,12 +207,12 @@ app.post('/servers', async (c) => {
                         )(tx)
                     }
                 }
-                
+
                 // Assign ownership of the server to the user
                 console.log('Assigning server ownership to user:', userId)
                 await txOperations.assignOwnership(server.id, userId, 'owner')(tx)
                 console.log('Server ownership assigned successfully')
-                
+
                 console.log('Transaction completed successfully')
                 return server
             })
