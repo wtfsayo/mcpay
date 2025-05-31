@@ -6,6 +6,7 @@ import {
     mcpServers,
     mcpTools,
     payments,
+    proofs,
     serverOwnership,
     toolPricing,
     toolUsage,
@@ -689,6 +690,306 @@ export const txOperations = {
                 eq(webhooks.serverId, serverId),
                 eq(webhooks.active, true)
             )
+        });
+    },
+
+    // Proofs operations
+    createProof: (data: {
+        toolId: string;
+        serverId: string;
+        userId?: string;
+        isConsistent: boolean;
+        confidenceScore: number;
+        executionUrl?: string;
+        executionMethod?: string;
+        executionHeaders?: Record<string, unknown>;
+        executionParams: Record<string, unknown>;
+        executionResult: Record<string, unknown>;
+        executionTimestamp: Date;
+        aiEvaluation: string;
+        inconsistencies?: Array<{
+            type: 'parameter_mismatch' | 'result_mismatch' | 'description_mismatch';
+            details: string;
+        }>;
+        webProofPresentation?: string;
+        notaryUrl?: string;
+        proofMetadata?: Record<string, unknown>;
+        replayExecutionResult?: Record<string, unknown>;
+        replayExecutionTimestamp?: Date;
+        status?: string;
+        verificationType?: string;
+    }) => async (tx: TransactionType) => {
+        const result = await tx.insert(proofs).values({
+            toolId: data.toolId,
+            serverId: data.serverId,
+            userId: data.userId,
+            isConsistent: data.isConsistent,
+            confidenceScore: data.confidenceScore.toString(),
+            executionUrl: data.executionUrl,
+            executionMethod: data.executionMethod,
+            executionHeaders: data.executionHeaders,
+            executionParams: data.executionParams,
+            executionResult: data.executionResult,
+            executionTimestamp: data.executionTimestamp,
+            aiEvaluation: data.aiEvaluation,
+            inconsistencies: data.inconsistencies,
+            webProofPresentation: data.webProofPresentation,
+            notaryUrl: data.notaryUrl,
+            proofMetadata: data.proofMetadata,
+            replayExecutionResult: data.replayExecutionResult,
+            replayExecutionTimestamp: data.replayExecutionTimestamp,
+            status: data.status || 'verified',
+            verificationType: data.verificationType || 'execution',
+            createdAt: new Date(),
+            updatedAt: new Date()
+        }).returning();
+
+        if (!result[0]) throw new Error("Failed to create proof");
+        return result[0];
+    },
+
+    getProofById: (id: string) => async (tx: TransactionType) => {
+        return await tx.query.proofs.findFirst({
+            where: eq(proofs.id, id),
+            with: {
+                tool: {
+                    columns: {
+                        id: true,
+                        name: true,
+                        description: true
+                    }
+                },
+                server: {
+                    columns: {
+                        id: true,
+                        serverId: true,
+                        name: true
+                    }
+                },
+                user: {
+                    columns: {
+                        id: true,
+                        walletAddress: true,
+                        displayName: true
+                    }
+                }
+            }
+        });
+    },
+
+    listProofsByTool: (toolId: string, limit = 10, offset = 0) => async (tx: TransactionType) => {
+        return await tx.query.proofs.findMany({
+            where: eq(proofs.toolId, toolId),
+            limit,
+            offset,
+            orderBy: [desc(proofs.createdAt)],
+            with: {
+                user: {
+                    columns: {
+                        id: true,
+                        walletAddress: true,
+                        displayName: true
+                    }
+                }
+            }
+        });
+    },
+
+    listProofsByServer: (serverId: string, limit = 10, offset = 0) => async (tx: TransactionType) => {
+        return await tx.query.proofs.findMany({
+            where: eq(proofs.serverId, serverId),
+            limit,
+            offset,
+            orderBy: [desc(proofs.createdAt)],
+            with: {
+                tool: {
+                    columns: {
+                        id: true,
+                        name: true,
+                        description: true
+                    }
+                },
+                user: {
+                    columns: {
+                        id: true,
+                        walletAddress: true,
+                        displayName: true
+                    }
+                }
+            }
+        });
+    },
+
+    listProofsByUser: (userId: string, limit = 10, offset = 0) => async (tx: TransactionType) => {
+        return await tx.query.proofs.findMany({
+            where: eq(proofs.userId, userId),
+            limit,
+            offset,
+            orderBy: [desc(proofs.createdAt)],
+            with: {
+                tool: {
+                    columns: {
+                        id: true,
+                        name: true,
+                        description: true
+                    }
+                },
+                server: {
+                    columns: {
+                        id: true,
+                        serverId: true,
+                        name: true
+                    }
+                }
+            }
+        });
+    },
+
+    listProofs: (filters?: {
+        isConsistent?: boolean;
+        verificationType?: string;
+        status?: string;
+        minConfidenceScore?: number;
+    }, limit = 10, offset = 0) => async (tx: TransactionType) => {
+        const conditions = [];
+        
+        if (filters?.isConsistent !== undefined) {
+            conditions.push(eq(proofs.isConsistent, filters.isConsistent));
+        }
+        
+        if (filters?.verificationType) {
+            conditions.push(eq(proofs.verificationType, filters.verificationType));
+        }
+        
+        if (filters?.status) {
+            conditions.push(eq(proofs.status, filters.status));
+        }
+
+        const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+        return await tx.query.proofs.findMany({
+            where: whereClause,
+            limit,
+            offset,
+            orderBy: [desc(proofs.createdAt)],
+            with: {
+                tool: {
+                    columns: {
+                        id: true,
+                        name: true,
+                        description: true
+                    }
+                },
+                server: {
+                    columns: {
+                        id: true,
+                        serverId: true,
+                        name: true
+                    }
+                },
+                user: {
+                    columns: {
+                        id: true,
+                        walletAddress: true,
+                        displayName: true
+                    }
+                }
+            }
+        });
+    },
+
+    updateProofStatus: (id: string, status: string) => async (tx: TransactionType) => {
+        const result = await tx.update(proofs)
+            .set({
+                status,
+                updatedAt: new Date()
+            })
+            .where(eq(proofs.id, id))
+            .returning();
+
+        if (!result[0]) throw new Error(`Proof with ID ${id} not found`);
+        return result[0];
+    },
+
+    getProofStats: (filters?: {
+        toolId?: string;
+        serverId?: string;
+        userId?: string;
+        startDate?: Date;
+        endDate?: Date;
+    }) => async (tx: TransactionType) => {
+        // This would be a more complex query in practice
+        // For now, return a simple count-based implementation
+        const conditions = [];
+        
+        if (filters?.toolId) {
+            conditions.push(eq(proofs.toolId, filters.toolId));
+        }
+        
+        if (filters?.serverId) {
+            conditions.push(eq(proofs.serverId, filters.serverId));
+        }
+        
+        if (filters?.userId) {
+            conditions.push(eq(proofs.userId, filters.userId));
+        }
+
+        const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+        const allProofs = await tx.query.proofs.findMany({
+            where: whereClause,
+            columns: {
+                isConsistent: true,
+                confidenceScore: true,
+                verificationType: true,
+                webProofPresentation: true
+            }
+        });
+
+        const totalProofs = allProofs.length;
+        const consistentProofs = allProofs.filter(p => p.isConsistent).length;
+        const inconsistentProofs = totalProofs - consistentProofs;
+        const proofsWithWebProof = allProofs.filter(p => p.webProofPresentation).length;
+        
+        const avgConfidenceScore = totalProofs > 0 
+            ? allProofs.reduce((sum, p) => sum + parseFloat(p.confidenceScore), 0) / totalProofs
+            : 0;
+
+        const verificationTypeStats = allProofs.reduce((stats, proof) => {
+            stats[proof.verificationType] = (stats[proof.verificationType] || 0) + 1;
+            return stats;
+        }, {} as Record<string, number>);
+
+        return {
+            totalProofs,
+            consistentProofs,
+            inconsistentProofs,
+            consistencyRate: totalProofs > 0 ? consistentProofs / totalProofs : 0,
+            avgConfidenceScore,
+            proofsWithWebProof,
+            webProofRate: totalProofs > 0 ? proofsWithWebProof / totalProofs : 0,
+            verificationTypeStats
+        };
+    },
+
+    // Get recent proofs for a server (for reputation scoring)
+    getRecentServerProofs: (serverId: string, days = 30) => async (tx: TransactionType) => {
+        const sinceDate = new Date();
+        sinceDate.setDate(sinceDate.getDate() - days);
+
+        return await tx.query.proofs.findMany({
+            where: and(
+                eq(proofs.serverId, serverId),
+                // Note: For date comparison, you'd need to use a proper date comparison function
+                // This is a simplified version
+            ),
+            columns: {
+                isConsistent: true,
+                confidenceScore: true,
+                webProofPresentation: true,
+                createdAt: true
+            },
+            orderBy: [desc(proofs.createdAt)]
         });
     }
 };

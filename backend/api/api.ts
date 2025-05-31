@@ -16,6 +16,7 @@ import { randomUUID } from "node:crypto";
 import { generateObject } from "ai";
 import { gateway } from "@vercel/ai-sdk-gateway";
 import db from "../db/index.js";
+import { VLayer, type ExecutionContext, type VerificationResult } from "../lib/3rd-parties/vlayer.js";
 
 export const runtime = 'nodejs'
 
@@ -290,6 +291,296 @@ app.get('/inspect-mcp-tools', async (c) => {
     return c.json(tools);
 });
 
+// Proofs endpoints
+app.post('/proofs', async (c) => {
+    try {
+        const data = await c.req.json() as {
+            toolId: string;
+            serverId: string;
+            userId?: string;
+            executionParams: Record<string, unknown>;
+            executionResult: Record<string, unknown>;
+            executionUrl?: string;
+            executionMethod?: 'GET' | 'POST';
+            executionHeaders?: string[];
+            toolMetadata?: {
+                name: string;
+                description: string;
+                parameters: Array<{
+                    name: string;
+                    type: string;
+                    description: string;
+                }>;
+            };
+        };
+
+        // Create execution context for VLayer
+        const executionContext: ExecutionContext = {
+            tool: data.toolMetadata || {
+                name: 'unknown',
+                description: 'Unknown tool',
+                parameters: []
+            },
+            params: data.executionParams,
+            result: data.executionResult,
+            timestamp: Date.now(),
+            url: data.executionUrl,
+            method: data.executionMethod,
+            headers: data.executionHeaders
+        };
+
+        // Use VLayer to verify the execution
+        const verificationResult = await VLayer.verifyExecution(executionContext);
+
+        // Store the proof in the database
+        const proof = await withTransaction(async (tx) => {
+            return await txOperations.createProof({
+                toolId: data.toolId,
+                serverId: data.serverId,
+                userId: data.userId,
+                isConsistent: verificationResult.isConsistent,
+                confidenceScore: verificationResult.confidenceScore,
+                executionUrl: data.executionUrl,
+                executionMethod: data.executionMethod,
+                executionHeaders: data.executionHeaders ? { headers: data.executionHeaders } : undefined,
+                executionParams: data.executionParams,
+                executionResult: data.executionResult,
+                executionTimestamp: new Date(executionContext.timestamp),
+                aiEvaluation: verificationResult.proof?.aiEvaluation || 'No evaluation available',
+                inconsistencies: verificationResult.inconsistencies,
+                webProofPresentation: verificationResult.proof?.webProof?.presentation,
+                notaryUrl: data.executionUrl ? 'https://test-notary.vlayer.xyz' : undefined,
+                proofMetadata: verificationResult.proof?.webProof ? { 
+                    hasWebProof: true,
+                    toolMetadata: data.toolMetadata 
+                } : { 
+                    hasWebProof: false,
+                    toolMetadata: data.toolMetadata 
+                },
+                verificationType: 'execution'
+            })(tx);
+        });
+
+        return c.json({
+            proof,
+            verification: {
+                isConsistent: verificationResult.isConsistent,
+                confidenceScore: verificationResult.confidenceScore,
+                hasWebProof: !!verificationResult.proof?.webProof
+            }
+        }, 201);
+    } catch (error) {
+        console.error('Error creating proof:', error);
+        return c.json({ error: (error as Error).message }, 400);
+    }
+});
+
+app.get('/proofs/:id', async (c) => {
+    try {
+        const id = c.req.param('id');
+        const proof = await withTransaction(txOperations.getProofById(id));
+
+        if (!proof) {
+            return c.json({ error: 'Proof not found' }, 404);
+        }
+
+        return c.json(proof);
+    } catch (error) {
+        console.error('Error fetching proof:', error);
+        return c.json({ error: (error as Error).message }, 500);
+    }
+});
+
+app.get('/proofs', async (c) => {
+    try {
+        const limit = c.req.query('limit') ? parseInt(c.req.query('limit') as string) : 10;
+        const offset = c.req.query('offset') ? parseInt(c.req.query('offset') as string) : 0;
+        const isConsistent = c.req.query('isConsistent') === 'true' ? true : 
+                             c.req.query('isConsistent') === 'false' ? false : undefined;
+        const verificationType = c.req.query('verificationType') as string;
+        const status = c.req.query('status') as string;
+
+        const filters = {
+            ...(isConsistent !== undefined && { isConsistent }),
+            ...(verificationType && { verificationType }),
+            ...(status && { status })
+        };
+
+        const proofs = await withTransaction(async (tx) => {
+            return await txOperations.listProofs(filters, limit, offset)(tx);
+        });
+
+        return c.json(proofs);
+    } catch (error) {
+        console.error('Error listing proofs:', error);
+        return c.json({ error: (error as Error).message }, 500);
+    }
+});
+
+app.get('/tools/:toolId/proofs', async (c) => {
+    try {
+        const toolId = c.req.param('toolId');
+        const limit = c.req.query('limit') ? parseInt(c.req.query('limit') as string) : 10;
+        const offset = c.req.query('offset') ? parseInt(c.req.query('offset') as string) : 0;
+
+        const proofs = await withTransaction(async (tx) => {
+            return await txOperations.listProofsByTool(toolId, limit, offset)(tx);
+        });
+
+        return c.json(proofs);
+    } catch (error) {
+        console.error('Error fetching tool proofs:', error);
+        return c.json({ error: (error as Error).message }, 500);
+    }
+});
+
+app.get('/servers/:serverId/proofs', async (c) => {
+    try {
+        const serverId = c.req.param('serverId');
+        const limit = c.req.query('limit') ? parseInt(c.req.query('limit') as string) : 10;
+        const offset = c.req.query('offset') ? parseInt(c.req.query('offset') as string) : 0;
+
+        const proofs = await withTransaction(async (tx) => {
+            return await txOperations.listProofsByServer(serverId, limit, offset)(tx);
+        });
+
+        return c.json(proofs);
+    } catch (error) {
+        console.error('Error fetching server proofs:', error);
+        return c.json({ error: (error as Error).message }, 500);
+    }
+});
+
+app.get('/users/:userId/proofs', async (c) => {
+    try {
+        const userId = c.req.param('userId');
+        const limit = c.req.query('limit') ? parseInt(c.req.query('limit') as string) : 10;
+        const offset = c.req.query('offset') ? parseInt(c.req.query('offset') as string) : 0;
+
+        const proofs = await withTransaction(async (tx) => {
+            return await txOperations.listProofsByUser(userId, limit, offset)(tx);
+        });
+
+        return c.json(proofs);
+    } catch (error) {
+        console.error('Error fetching user proofs:', error);
+        return c.json({ error: (error as Error).message }, 500);
+    }
+});
+
+app.get('/proofs/stats', async (c) => {
+    try {
+        const toolId = c.req.query('toolId') as string;
+        const serverId = c.req.query('serverId') as string;
+        const userId = c.req.query('userId') as string;
+
+        const filters = {
+            ...(toolId && { toolId }),
+            ...(serverId && { serverId }),
+            ...(userId && { userId })
+        };
+
+        const stats = await withTransaction(async (tx) => {
+            return await txOperations.getProofStats(filters)(tx);
+        });
+
+        return c.json(stats);
+    } catch (error) {
+        console.error('Error fetching proof stats:', error);
+        return c.json({ error: (error as Error).message }, 500);
+    }
+});
+
+app.post('/proofs/:id/verify', async (c) => {
+    try {
+        const id = c.req.param('id');
+        
+        // Get the proof from database
+        const proof = await withTransaction(txOperations.getProofById(id));
+        
+        if (!proof) {
+            return c.json({ error: 'Proof not found' }, 404);
+        }
+
+        // Recreate execution context from stored proof
+        const executionContext: ExecutionContext = {
+            tool: {
+                name: 'stored_tool',
+                description: 'Tool from stored proof',
+                parameters: []
+            },
+            params: proof.executionParams as Record<string, unknown>,
+            result: proof.executionResult,
+            timestamp: proof.executionTimestamp.getTime(),
+            url: proof.executionUrl || undefined,
+            method: proof.executionMethod as 'GET' | 'POST' || undefined,
+            headers: proof.executionHeaders ? (proof.executionHeaders as any).headers : undefined
+        };
+
+        // Re-verify using VLayer
+        const verificationResult = await VLayer.verifyExecution(executionContext);
+
+        // Update proof status if needed
+        if (verificationResult.isConsistent !== proof.isConsistent) {
+            await withTransaction(async (tx) => {
+                return await txOperations.updateProofStatus(
+                    id, 
+                    verificationResult.isConsistent ? 'verified' : 'invalid'
+                )(tx);
+            });
+        }
+
+        return c.json({
+            proofId: id,
+            verification: verificationResult,
+            originalVerification: {
+                isConsistent: proof.isConsistent,
+                confidenceScore: parseFloat(proof.confidenceScore),
+                status: proof.status
+            }
+        });
+    } catch (error) {
+        console.error('Error re-verifying proof:', error);
+        return c.json({ error: (error as Error).message }, 500);
+    }
+});
+
+app.get('/servers/:serverId/reputation', async (c) => {
+    try {
+        const serverId = c.req.param('serverId');
+        
+        // Get recent proofs for the server
+        const recentProofs = await withTransaction(async (tx) => {
+            return await txOperations.getRecentServerProofs(serverId, 30)(tx);
+        });
+
+        // Calculate reputation score using VLayer
+        const mockVerificationResults = recentProofs.map(proof => ({
+            isConsistent: proof.isConsistent,
+            confidenceScore: parseFloat(proof.confidenceScore),
+            proof: {
+                originalExecution: {} as ExecutionContext,
+                aiEvaluation: 'Stored proof',
+                webProof: proof.webProofPresentation ? { presentation: proof.webProofPresentation } : undefined
+            }
+        }));
+
+        const reputationScore = VLayer.calculateServerScore(mockVerificationResults);
+
+        return c.json({
+            serverId,
+            reputationScore,
+            totalProofs: recentProofs.length,
+            consistentProofs: recentProofs.filter(p => p.isConsistent).length,
+            proofsWithWebProof: recentProofs.filter(p => p.webProofPresentation).length,
+            lastProofDate: recentProofs[0]?.createdAt
+        });
+    } catch (error) {
+        console.error('Error calculating server reputation:', error);
+        return c.json({ error: (error as Error).message }, 500);
+    }
+});
+
 // Catch-all for unmatched routes
 app.all('*', (c) => {
     return c.json({
@@ -304,7 +595,16 @@ app.all('*', (c) => {
             'GET /api/servers/:id',
             'POST /api/servers',
             'GET /api/servers/:serverId/tools',
-            'GET /api/analytics/usage'
+            'GET /api/analytics/usage',
+            'POST /api/proofs',
+            'GET /api/proofs/:id',
+            'GET /api/proofs',
+            'GET /api/tools/:toolId/proofs',
+            'GET /api/servers/:serverId/proofs',
+            'GET /api/users/:userId/proofs',
+            'GET /api/proofs/stats',
+            'POST /api/proofs/:id/verify',
+            'GET /api/servers/:serverId/reputation'
         ]
     }, 404);
 });

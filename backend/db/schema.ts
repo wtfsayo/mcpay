@@ -182,3 +182,56 @@ export const apiKeys = pgTable('api_keys', {
   index('api_key_active_idx').on(table.active),
   index('api_key_expires_at_idx').on(table.expiresAt),
 ]);
+
+// VLayer Proofs table for storing verification results and web proofs
+export const proofs = pgTable('proofs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  toolId: uuid('tool_id').references(() => mcpTools.id, { onDelete: 'cascade' }).notNull(),
+  serverId: uuid('server_id').references(() => mcpServers.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+  
+  // Verification results
+  isConsistent: boolean('is_consistent').notNull(),
+  confidenceScore: decimal('confidence_score', { precision: 3, scale: 2 }).notNull(), // 0.00 to 1.00
+  
+  // Execution context
+  executionUrl: text('execution_url'), // URL that was called
+  executionMethod: text('execution_method'), // GET, POST, etc.
+  executionHeaders: jsonb('execution_headers'), // Headers used
+  executionParams: jsonb('execution_params').notNull(), // Tool parameters
+  executionResult: jsonb('execution_result').notNull(), // Tool result
+  executionTimestamp: timestamp('execution_timestamp').notNull(),
+  
+  // Verification metadata
+  aiEvaluation: text('ai_evaluation').notNull(), // AI evaluation text
+  inconsistencies: jsonb('inconsistencies'), // Array of inconsistency objects
+  
+  // Web proof data (from vlayer)
+  webProofPresentation: text('web_proof_presentation'), // The cryptographic proof
+  notaryUrl: text('notary_url'), // Notary used for web proof
+  proofMetadata: jsonb('proof_metadata'), // Additional proof metadata
+  
+  // Replay execution data (if applicable)
+  replayExecutionResult: jsonb('replay_execution_result'),
+  replayExecutionTimestamp: timestamp('replay_execution_timestamp'),
+  
+  // Status and timestamps
+  status: text('status').default('verified').notNull(), // verified, invalid, pending
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  
+  // Verification type
+  verificationType: text('verification_type').default('execution').notNull(), // execution, replay, comparison
+}, (table) => [
+  index('proof_tool_id_idx').on(table.toolId),
+  index('proof_server_id_idx').on(table.serverId),
+  index('proof_user_id_idx').on(table.userId),
+  index('proof_status_idx').on(table.status),
+  index('proof_created_at_idx').on(table.createdAt),
+  index('proof_is_consistent_idx').on(table.isConsistent),
+  index('proof_confidence_score_idx').on(table.confidenceScore),
+  index('proof_verification_type_idx').on(table.verificationType),
+  index('proof_tool_created_idx').on(table.toolId, table.createdAt),
+  index('proof_server_consistent_idx').on(table.serverId, table.isConsistent),
+  check('confidence_score_range_check', sql`"confidence_score" >= 0 AND "confidence_score" <= 1`),
+]);
