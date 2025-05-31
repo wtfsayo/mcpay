@@ -10,14 +10,12 @@
  */
 
 import { type Context, Hono } from "hono";
-// import { config } from "dotenv";
 import { exact } from "x402/schemes";
 import { settleResponseHeader } from 'x402/types';
-// TODO: Import these when payment functionality is ready
-// import { createExactPaymentRequirements, settle, verifyPayment, x402Version } from '../payments';
+import { createExactPaymentRequirements, settle, verifyPayment, x402Version } from "../lib/payments"
+
 // import { withTransaction, txOperations } from '../db/actions';
 
-// config();
 
 export const runtime = 'nodejs'
 
