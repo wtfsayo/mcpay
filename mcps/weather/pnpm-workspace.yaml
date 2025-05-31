@@ -1,0 +1,12 @@
+packages:
+  # Packages in a 'packages' directory
+  - 'packages/*'
+  # Individual packages in the root
+  - 'premium-weather'
+  - 'mcpay-sdk'
+  # Examples or other grouped packages
+  - 'mcp-examples/*'
+  # Add the new pattern here
+  - 'typescript/packages/*'
+  # You can also list direct paths to packages if they are not in a glob pattern
+  # e.g., - 'frontend' if frontend is a package 
