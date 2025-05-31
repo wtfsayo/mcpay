@@ -5,6 +5,7 @@ import { useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Eye, X } from "lucide-react"
+import { useTheme } from "@/context/ThemeContext"
 
 // Define interfaces directly in this file as they are simple and specific to this component
 interface MCPInputPropertySchema {
@@ -41,8 +42,9 @@ export interface MCPServer { // Exporting MCPServer as it's used in the props
 }
 
 
-export function ToolsModal({ server, isDark }: { server: MCPServer; isDark: boolean }) {
+export function ToolsModal({ server }: { server: MCPServer }) {
   const [isOpen, setIsOpen] = useState(false)
+  const { isDark } = useTheme();
 
   return (
     <>

@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -24,6 +24,7 @@ import {
   Sun,
 } from "lucide-react"
 import { ToolsModal, MCPServer } from "@/components/ToolsModal"
+import { useTheme } from "@/context/ThemeContext"
 
 
 const mcpServers: MCPServer[] = [
@@ -528,20 +529,7 @@ const categories = [
 export default function MCPBrowser() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("All")
-  const [isDark, setIsDark] = useState(false)
-
-  // Load theme preference from localStorage on mount
-  useEffect(() => {
-    const savedTheme = localStorage.getItem("mcp-browser-theme")
-    if (savedTheme === "dark") {
-      setIsDark(true)
-    }
-  }, [])
-
-  // Save theme preference to localStorage when changed
-  useEffect(() => {
-    localStorage.setItem("mcp-browser-theme", isDark ? "dark" : "light")
-  }, [isDark])
+  const { isDark, toggleTheme } = useTheme()
 
   const filteredServers = mcpServers.filter((server) => {
     const matchesSearch =
@@ -553,10 +541,6 @@ export default function MCPBrowser() {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
-  }
-
-  const toggleTheme = () => {
-    setIsDark(!isDark)
   }
 
   return (
@@ -687,7 +671,7 @@ export default function MCPBrowser() {
                     <Tool className="h-4 w-4" />
                     Available Tools
                   </label>
-                  <ToolsModal server={server} isDark={isDark} />
+                  <ToolsModal server={server} />
                 </div>
 
                 {/* Quick Actions */}
