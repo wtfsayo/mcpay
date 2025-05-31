@@ -190,7 +190,19 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: { name: string, 
                                     // });
                                     const tools = [] as any[];
                                     
-                                    const toolConfig = tools.find((t: any) => t.name === toolName);
+                                    // TODO: find the tool config
+                                    const toolConfig = {
+                                        id: 'tool_1',
+                                        isMonetized: true,
+                                        payment: {
+                                            maxAmountRequired: 100,
+                                            network: 'base-sepolia',
+                                            resource: 'usdc',
+                                            description: 'Payment for tool call',
+                                            payTo: '0x1234567890123456789012345678901234567890'
+                                        }
+                                    } as any;
+                                    // const toolConfig = tools.find((t: any) => t.name === toolName);
  
                                     console.log(`[${new Date().toISOString()}] ---Tool Config: ${JSON.stringify(toolConfig, null, 2)}`)
                                     

@@ -7,6 +7,8 @@
 
 import { type Context, Hono } from "hono";
 import { cors } from 'hono/cors';
+import registry from '../hardcoded-registry.js';
+import { getMcpTools } from "../lib/inspect-mcp.js";
 
 export const runtime = 'nodejs'
 
@@ -47,79 +49,16 @@ app.get('/version', (c) => {
     });
 });
 
-// User endpoints
-app.get('/users/:walletAddress', async (c) => {
-    const walletAddress = c.req.param('walletAddress');
-    
-    // TODO: Replace with actual DB call
-    // const user = await withTransaction(async (tx) => {
-    //     return await txOperations.getUserByWalletAddress(walletAddress)(tx);
-    // });
-    
-    const user = {
-        id: `user_${walletAddress.substring(0, 8)}`,
-        walletAddress,
-        displayName: `User_${walletAddress.substring(0, 8)}`,
-        createdAt: new Date().toISOString()
-    };
-    
-    if (!user) {
-        return c.json({ error: 'User not found' }, 404);
-    }
-    
-    return c.json(user);
-});
-
-app.post('/users', async (c) => {
-    try {
-        const body = await c.req.json();
-        const { walletAddress, displayName, email } = body;
-        
-        if (!walletAddress) {
-            return c.json({ error: 'walletAddress is required' }, 400);
-        }
-        
-        // TODO: Replace with actual DB call
-        // const user = await withTransaction(async (tx) => {
-        //     return await txOperations.createUser({
-        //         walletAddress,
-        //         displayName: displayName || `User_${walletAddress.substring(0, 8)}`,
-        //         email
-        //     })(tx);
-        // });
-        
-        const user = {
-            id: `user_${walletAddress.substring(0, 8)}`,
-            walletAddress,
-            displayName: displayName || `User_${walletAddress.substring(0, 8)}`,
-            email,
-            createdAt: new Date().toISOString()
-        };
-        
-        return c.json(user, 201);
-    } catch (error) {
-        console.error('Error creating user:', error);
-        return c.json({ error: 'Failed to create user' }, 500);
-    }
-});
-
 // MCP Server endpoints
 app.get('/servers', async (c) => {
-    // TODO: Replace with actual DB call
-    // const servers = await withTransaction(async (tx) => {
-    //     return await txOperations.listMcpServers()(tx);
-    // });
-    
-    const servers = [
-        {
-            id: 'server_1',
-            name: 'Example MCP Server',
-            description: 'A sample MCP server',
-            origin: 'http://localhost:3050',
-            isActive: true,
-            createdAt: new Date().toISOString()
-        }
-    ];
+    // Convert registry to server list format
+    const servers = Object.entries(registry).map(([id, serverInfo]) => ({
+        id,
+        name: serverInfo.name,
+        description: serverInfo.description,
+        isActive: true,
+        createdAt: new Date().toISOString()
+    }));
     
     return c.json(servers);
 });
@@ -127,23 +66,23 @@ app.get('/servers', async (c) => {
 app.get('/servers/:id', async (c) => {
     const id = c.req.param('id');
     
-    // TODO: Replace with actual DB call
-    // const server = await withTransaction(async (tx) => {
-    //     return await txOperations.internal_getMcpServerByServerId(id)(tx);
-    // });
+    // Look up server in registry with proper type checking
+    const serverInfo = registry[id as keyof typeof registry];
+    
+    if (!serverInfo) {
+        return c.json({ error: 'Server not found' }, 404);
+    }
+
+    const tools = await getMcpTools(serverInfo.url);
     
     const server = {
         id,
-        name: 'Example MCP Server',
-        description: 'A sample MCP server',
-        origin: 'http://localhost:3050',
+        name: serverInfo.name,
+        description: serverInfo.description,
         isActive: true,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        tools
     };
-    
-    if (!server) {
-        return c.json({ error: 'Server not found' }, 404);
-    }
     
     return c.json(server);
 });
