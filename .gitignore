@@ -78,3 +78,7 @@ var/
 .env.development.local
 .env.test.local
 .env.production.local
+
+
+.pnpm-store
+.devcontainer/
