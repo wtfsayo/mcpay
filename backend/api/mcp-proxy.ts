@@ -273,7 +273,7 @@ function ensureString(value: string | undefined, fallback: string = 'unknown'): 
 }
 
 verbs.forEach(verb => {
-    app[verb](`/mcp/:id/*`, async (c) => {
+    app[verb](`/:id/*`, async (c) => {
         const id = c.req.param('id');
         console.log(`[${new Date().toISOString()}] Handling ${verb.toUpperCase()} request to ${c.req.url} with ID: ${id}`)
 
