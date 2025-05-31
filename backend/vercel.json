@@ -1,12 +1,19 @@
 {
   "rewrites": [
     {
-      "source": "/(.+)",
+      "source": "/mcp/(.*)",
+      "destination": "/api/mcp-proxy"
+    },
+    {
+      "source": "/api/(.*)",
       "destination": "/api/index"
     }
   ],
   "functions": {
     "api/index.ts": {
+      "maxDuration": 800
+    },
+    "api/mcp-proxy.ts": {
       "maxDuration": 800
     }
   }
