@@ -12,7 +12,7 @@
 import { type Context, Hono } from "hono";
 import { exact } from "x402/schemes";
 import { settleResponseHeader } from 'x402/types';
-import { createExactPaymentRequirements, settle, verifyPayment, x402Version } from "../lib/payments"
+import { createExactPaymentRequirements, settle, verifyPayment, x402Version } from "../lib/payments.js"
 
 // import { withTransaction, txOperations } from '../db/actions';
 
