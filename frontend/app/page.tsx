@@ -7,508 +7,138 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+
 import {
   Search,
-  ExternalLink,
+  // ExternalLink,
   PenToolIcon as Tool,
-  Database,
+  // Database,
   Globe,
-  Zap,
-  FileText,
-  Calculator,
-  Calendar,
-  Mail,
-  Code,
-  ImageIcon,
+  // Zap,
+  // FileText,
+  // Calculator,
+  // Calendar,
+  // Mail,
+  // Code,
+  // ImageIcon,
   Moon,
   Sun,
+  TrendingUp,
 } from "lucide-react"
 import { ToolsModal, MCPServer } from "@/components/ToolsModal"
 import { useTheme } from "@/context/ThemeContext"
 
 
 const mcpServers: MCPServer[] = [
+  // {
+  //   id: "zapier",
+  //   name: "Zapier Actions",
+  //   description: "Connect to 6000+ apps and automate workflows with Zapier's powerful integration platform.",
+  //   url: "https://actions.zapier.com/mcp/•••••••/sse",
+  //   category: "Automation",
+  //   icon: <Zap className="h-6 w-6" />,
+  //   verified: true,
+  //   tools: [
+  //     {
+  //       name: "create_zap",
+  //       description: "Create a new Zap automation",
+  //       inputSchema: {
+  //         type: "object",
+  //         properties: {
+  //           trigger_app: { type: "string", description: "The trigger application" },
+  //           action_app: { type: "string", description: "The action application" },
+  //           name: { type: "string", description: "Name for the Zap" },
+  //         },
+  //       },
+  //       annotations: {
+  //         title: "Create Zap",
+  //         destructiveHint: false,
+  //         idempotentHint: false,
+  //       },
+  //     },
+  //     {
+  //       name: "list_apps",
+  //       description: "List available applications",
+  //       inputSchema: {
+  //         type: "object",
+  //         properties: {
+  //           category: { type: "string", description: "Filter by category" },
+  //         },
+  //       },
+  //       annotations: {
+  //         title: "List Apps",
+  //         readOnlyHint: true,
+  //       },
+  //     },
+  //     {
+  //       name: "trigger_zap",
+  //       description: "Manually trigger an existing Zap",
+  //       inputSchema: {
+  //         type: "object",
+  //         properties: {
+  //           zap_id: { type: "string", description: "The Zap ID to trigger" },
+  //           data: { type: "object", description: "Input data for the trigger" },
+  //         },
+  //       },
+  //       annotations: {
+  //         title: "Trigger Zap",
+  //         destructiveHint: false,
+  //       },
+  //     },
+  //   ],
+  // },
   {
-    id: "zapier",
-    name: "Zapier Actions",
-    description: "Connect to 6000+ apps and automate workflows with Zapier's powerful integration platform.",
-    url: "https://actions.zapier.com/mcp/•••••••/sse",
-    category: "Automation",
-    icon: <Zap className="h-6 w-6" />,
-    verified: true,
+    id: "financialdatasetsai",
+    name: "Financial Datasets AI",
+    description: "Access various financial datasets, market information, and company profiles.",
+    url: "https://financialdatasets.ai/api/server/sse",
+    category: "Finance",
+    icon: <TrendingUp className="h-6 w-6" />,
+    verified: false,
     tools: [
       {
-        name: "create_zap",
-        description: "Create a new Zap automation",
+        name: "get_company_profile",
+        description: "Retrieve detailed profile information for a publicly traded company.",
         inputSchema: {
           type: "object",
           properties: {
-            trigger_app: { type: "string", description: "The trigger application" },
-            action_app: { type: "string", description: "The action application" },
-            name: { type: "string", description: "Name for the Zap" },
+            ticker_symbol: { type: "string", description: "The stock ticker symbol of the company (e.g., AAPL, MSFT)." },
           },
         },
         annotations: {
-          title: "Create Zap",
-          destructiveHint: false,
-          idempotentHint: false,
-        },
-      },
-      {
-        name: "list_apps",
-        description: "List available applications",
-        inputSchema: {
-          type: "object",
-          properties: {
-            category: { type: "string", description: "Filter by category" },
-          },
-        },
-        annotations: {
-          title: "List Apps",
+          title: "Get Company Profile",
           readOnlyHint: true,
         },
       },
       {
-        name: "trigger_zap",
-        description: "Manually trigger an existing Zap",
+        name: "get_stock_quote",
+        description: "Fetch real-time or delayed stock quote for a given ticker symbol.",
         inputSchema: {
           type: "object",
           properties: {
-            zap_id: { type: "string", description: "The Zap ID to trigger" },
-            data: { type: "object", description: "Input data for the trigger" },
+            ticker_symbol: { type: "string", description: "The stock ticker symbol (e.g., AAPL, GOOGL)." },
+            exchange: { type: "string", description: "Optional: The stock exchange (e.g., NASDAQ, NYSE)." },
           },
         },
         annotations: {
-          title: "Trigger Zap",
-          destructiveHint: false,
-        },
-      },
-    ],
-  },
-  {
-    id: "supabase",
-    name: "Supabase",
-    description: "Interact with your Supabase database, authentication, and storage directly through MCP.",
-    url: "https://supabase.com/mcp/•••••••/sse",
-    category: "Database",
-    icon: <Database className="h-6 w-6" />,
-    verified: true,
-    tools: [
-      {
-        name: "query_table",
-        description: "Query data from a table",
-        inputSchema: {
-          type: "object",
-          properties: {
-            table: { type: "string", description: "Table name" },
-            select: { type: "string", description: "Columns to select" },
-            where: { type: "object", description: "Where conditions" },
-            limit: { type: "number", description: "Maximum number of rows" },
-          },
-        },
-        annotations: {
-          title: "Query Table",
+          title: "Get Stock Quote",
           readOnlyHint: true,
         },
       },
       {
-        name: "insert_row",
-        description: "Insert a new row into a table",
+        name: "search_economic_data",
+        description: "Search for economic indicators and datasets (e.g., GDP, inflation rates).",
         inputSchema: {
           type: "object",
           properties: {
-            table: { type: "string", description: "Table name" },
-            data: { type: "object", description: "Row data" },
+            indicator_name: { type: "string", description: "Name or keyword of the economic indicator (e.g., 'GDP', 'inflation rate')." },
+            country_code: { type: "string", description: "ISO country code (e.g., US, DE, JP)." },
+            frequency: { type: "string", description: "Data frequency (e.g., 'annual', 'quarterly', 'monthly')." },
           },
         },
         annotations: {
-          title: "Insert Row",
-          destructiveHint: false,
-        },
-      },
-      {
-        name: "update_row",
-        description: "Update existing rows in a table",
-        inputSchema: {
-          type: "object",
-          properties: {
-            table: { type: "string", description: "Table name" },
-            data: { type: "object", description: "Updated data" },
-            where: { type: "object", description: "Where conditions" },
-          },
-        },
-        annotations: {
-          title: "Update Row",
-          destructiveHint: true,
-        },
-      },
-      {
-        name: "delete_row",
-        description: "Delete rows from a table",
-        inputSchema: {
-          type: "object",
-          properties: {
-            table: { type: "string", description: "Table name" },
-            where: { type: "object", description: "Where conditions" },
-          },
-        },
-        annotations: {
-          title: "Delete Row",
-          destructiveHint: true,
-        },
-      },
-    ],
-  },
-  {
-    id: "github",
-    name: "GitHub",
-    description: "Manage repositories, issues, pull requests, and more on GitHub through MCP integration.",
-    url: "https://api.github.com/mcp/•••••••/sse",
-    category: "Development",
-    icon: <Code className="h-6 w-6" />,
-    verified: true,
-    tools: [
-      {
-        name: "create_issue",
-        description: "Create a new issue in a repository",
-        inputSchema: {
-          type: "object",
-          properties: {
-            repo: { type: "string", description: "Repository name" },
-            title: { type: "string", description: "Issue title" },
-            body: { type: "string", description: "Issue description" },
-            labels: { type: "array", description: "Issue labels" },
-          },
-        },
-        annotations: {
-          title: "Create Issue",
-          destructiveHint: false,
-        },
-      },
-      {
-        name: "list_repos",
-        description: "List user repositories",
-        inputSchema: {
-          type: "object",
-          properties: {
-            type: { type: "string", description: "Repository type (all, owner, member)" },
-            sort: { type: "string", description: "Sort order" },
-          },
-        },
-        annotations: {
-          title: "List Repositories",
+          title: "Search Economic Data",
           readOnlyHint: true,
-        },
-      },
-      {
-        name: "create_pr",
-        description: "Create a new pull request",
-        inputSchema: {
-          type: "object",
-          properties: {
-            repo: { type: "string", description: "Repository name" },
-            title: { type: "string", description: "PR title" },
-            head: { type: "string", description: "Head branch" },
-            base: { type: "string", description: "Base branch" },
-            body: { type: "string", description: "PR description" },
-          },
-        },
-        annotations: {
-          title: "Create Pull Request",
-          destructiveHint: false,
-        },
-      },
-    ],
-  },
-  {
-    id: "notion",
-    name: "Notion",
-    description: "Create, read, and update Notion pages, databases, and blocks through MCP.",
-    url: "https://api.notion.com/mcp/•••••••/sse",
-    category: "Productivity",
-    icon: <FileText className="h-6 w-6" />,
-    tools: [
-      {
-        name: "create_page",
-        description: "Create a new page in Notion",
-        inputSchema: {
-          type: "object",
-          properties: {
-            parent_id: { type: "string", description: "Parent page or database ID" },
-            title: { type: "string", description: "Page title" },
-            content: { type: "array", description: "Page content blocks" },
-          },
-        },
-        annotations: {
-          title: "Create Page",
-          destructiveHint: false,
-        },
-      },
-      {
-        name: "query_database",
-        description: "Query a Notion database",
-        inputSchema: {
-          type: "object",
-          properties: {
-            database_id: { type: "string", description: "Database ID" },
-            filter: { type: "object", description: "Query filter" },
-            sorts: { type: "array", description: "Sort criteria" },
-          },
-        },
-        annotations: {
-          title: "Query Database",
-          readOnlyHint: true,
-        },
-      },
-      {
-        name: "update_page",
-        description: "Update an existing page",
-        inputSchema: {
-          type: "object",
-          properties: {
-            page_id: { type: "string", description: "Page ID" },
-            properties: { type: "object", description: "Page properties to update" },
-          },
-        },
-        annotations: {
-          title: "Update Page",
-          destructiveHint: true,
-        },
-      },
-    ],
-  },
-  {
-    id: "calculator",
-    name: "Calculator",
-    description: "Perform mathematical calculations and solve equations with this computational MCP server.",
-    url: "https://calc.mcp.dev/•••••••/sse",
-    category: "Utilities",
-    icon: <Calculator className="h-6 w-6" />,
-    tools: [
-      {
-        name: "calculate",
-        description: "Perform mathematical calculations",
-        inputSchema: {
-          type: "object",
-          properties: {
-            expression: { type: "string", description: "Mathematical expression to evaluate" },
-          },
-        },
-        annotations: {
-          title: "Calculate",
-          readOnlyHint: true,
-          idempotentHint: true,
-        },
-      },
-      {
-        name: "solve_equation",
-        description: "Solve algebraic equations",
-        inputSchema: {
-          type: "object",
-          properties: {
-            equation: { type: "string", description: "Equation to solve" },
-            variable: { type: "string", description: "Variable to solve for" },
-          },
-        },
-        annotations: {
-          title: "Solve Equation",
-          readOnlyHint: true,
-        },
-      },
-      {
-        name: "plot_function",
-        description: "Generate a plot of a mathematical function",
-        inputSchema: {
-          type: "object",
-          properties: {
-            function: { type: "string", description: "Function to plot" },
-            range: { type: "object", description: "X and Y axis ranges" },
-          },
-        },
-        annotations: {
-          title: "Plot Function",
-          readOnlyHint: true,
-        },
-      },
-    ],
-  },
-  {
-    id: "calendar",
-    name: "Google Calendar",
-    description: "Manage events, schedules, and calendar operations through Google Calendar MCP integration.",
-    url: "https://calendar.google.com/mcp/•••••••/sse",
-    category: "Productivity",
-    icon: <Calendar className="h-6 w-6" />,
-    verified: true,
-    tools: [
-      {
-        name: "create_event",
-        description: "Create a new calendar event",
-        inputSchema: {
-          type: "object",
-          properties: {
-            title: { type: "string", description: "Event title" },
-            start_time: { type: "string", description: "Start time (ISO 8601)" },
-            end_time: { type: "string", description: "End time (ISO 8601)" },
-            description: { type: "string", description: "Event description" },
-            attendees: { type: "array", description: "List of attendee emails" },
-          },
-        },
-        annotations: {
-          title: "Create Event",
-          destructiveHint: false,
-        },
-      },
-      {
-        name: "list_events",
-        description: "List upcoming events",
-        inputSchema: {
-          type: "object",
-          properties: {
-            calendar_id: { type: "string", description: "Calendar ID" },
-            max_results: { type: "number", description: "Maximum number of events" },
-            time_min: { type: "string", description: "Start time filter" },
-          },
-        },
-        annotations: {
-          title: "List Events",
-          readOnlyHint: true,
-        },
-      },
-      {
-        name: "update_event",
-        description: "Update an existing event",
-        inputSchema: {
-          type: "object",
-          properties: {
-            event_id: { type: "string", description: "Event ID" },
-            updates: { type: "object", description: "Event updates" },
-          },
-        },
-        annotations: {
-          title: "Update Event",
-          destructiveHint: true,
-        },
-      },
-    ],
-  },
-  {
-    id: "sendgrid",
-    name: "SendGrid",
-    description: "Send emails, manage templates, and handle email marketing through SendGrid MCP.",
-    url: "https://api.sendgrid.com/mcp/•••••••/sse",
-    category: "Communication",
-    icon: <Mail className="h-6 w-6" />,
-    tools: [
-      {
-        name: "send_email",
-        description: "Send an email",
-        inputSchema: {
-          type: "object",
-          properties: {
-            to: { type: "string", description: "Recipient email address" },
-            subject: { type: "string", description: "Email subject" },
-            content: { type: "string", description: "Email content" },
-            from: { type: "string", description: "Sender email address" },
-          },
-        },
-        annotations: {
-          title: "Send Email",
-          destructiveHint: false,
-          openWorldHint: true,
-        },
-      },
-      {
-        name: "create_template",
-        description: "Create an email template",
-        inputSchema: {
-          type: "object",
-          properties: {
-            name: { type: "string", description: "Template name" },
-            subject: { type: "string", description: "Template subject" },
-            html_content: { type: "string", description: "HTML content" },
-          },
-        },
-        annotations: {
-          title: "Create Template",
-          destructiveHint: false,
-        },
-      },
-      {
-        name: "send_bulk_email",
-        description: "Send bulk emails to multiple recipients",
-        inputSchema: {
-          type: "object",
-          properties: {
-            template_id: { type: "string", description: "Template ID" },
-            recipients: { type: "array", description: "List of recipients" },
-            personalizations: { type: "object", description: "Personalization data" },
-          },
-        },
-        annotations: {
-          title: "Send Bulk Email",
-          destructiveHint: false,
-          openWorldHint: true,
-        },
-      },
-    ],
-  },
-  {
-    id: "dalle",
-    name: "DALL-E Image Generator",
-    description: "Generate images using OpenAI's DALL-E model through MCP integration.",
-    url: "https://api.openai.com/mcp/dalle/•••••••/sse",
-    category: "AI/ML",
-    icon: <ImageIcon className="h-6 w-6" />,
-    tools: [
-      {
-        name: "generate_image",
-        description: "Generate an image from text prompt",
-        inputSchema: {
-          type: "object",
-          properties: {
-            prompt: { type: "string", description: "Image generation prompt" },
-            size: { type: "string", description: "Image size (1024x1024, 512x512, etc.)" },
-            quality: { type: "string", description: "Image quality (standard, hd)" },
-            style: { type: "string", description: "Image style (vivid, natural)" },
-          },
-        },
-        annotations: {
-          title: "Generate Image",
-          destructiveHint: false,
-          openWorldHint: true,
-        },
-      },
-      {
-        name: "edit_image",
-        description: "Edit an existing image",
-        inputSchema: {
-          type: "object",
-          properties: {
-            image_url: { type: "string", description: "URL of the image to edit" },
-            prompt: { type: "string", description: "Edit instruction" },
-            mask_url: { type: "string", description: "Mask image URL (optional)" },
-          },
-        },
-        annotations: {
-          title: "Edit Image",
-          destructiveHint: false,
-        },
-      },
-      {
-        name: "create_variation",
-        description: "Create variations of an existing image",
-        inputSchema: {
-          type: "object",
-          properties: {
-            image_url: { type: "string", description: "URL of the source image" },
-            n: { type: "number", description: "Number of variations to generate" },
-            size: { type: "string", description: "Size of generated variations" },
-          },
-        },
-        annotations: {
-          title: "Create Variation",
-          destructiveHint: false,
         },
       },
     ],
@@ -517,13 +147,14 @@ const mcpServers: MCPServer[] = [
 
 const categories = [
   "All",
-  "Automation",
-  "Database",
-  "Development",
-  "Productivity",
-  "Utilities",
-  "Communication",
-  "AI/ML",
+  // "Automation",
+  // "Database",
+  // "Development",
+  // "Productivity",
+  // "Utilities",
+  // "Communication",
+  // "AI/ML",
+  "Finance",
 ]
 
 export default function MCPBrowser() {
@@ -554,7 +185,7 @@ export default function MCPBrowser() {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold mb-4">MCP Browser</h1>
+          <h1 className="text-4xl font-bold mb-4">All MCPs</h1>
           <p className={`text-lg max-w-3xl mx-auto ${isDark ? "text-gray-300" : "text-gray-600"}`}>
             Discover and explore Model Context Protocol servers. Connect AI models to external tools, data sources, and
             environments through standardized interfaces.
@@ -675,16 +306,16 @@ export default function MCPBrowser() {
                 </div>
 
                 {/* Quick Actions */}
-                <div className="flex gap-2 pt-2">
+                {/* <div className="flex gap-2">
                   <Button
                     size="sm"
                     variant="outline"
                     className={`flex-1 ${isDark ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600" : ""}`}
                   >
                     <ExternalLink className="h-4 w-4 mr-2" />
-                    Connect
+                    Analytics
                   </Button>
-                </div>
+                </div> */}
               </CardContent>
             </Card>
           ))}

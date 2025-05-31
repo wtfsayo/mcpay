@@ -47,7 +47,7 @@ export function ToolsModal({ server }: { server: MCPServer }) {
   const { isDark } = useTheme();
 
   return (
-    <>
+    <div>
       <Button
         variant="outline"
         size="sm"
@@ -184,7 +184,7 @@ export function ToolsModal({ server }: { server: MCPServer }) {
           </div>
         </div>
       )}
-    </>
+    </div>
   )
 }
 
