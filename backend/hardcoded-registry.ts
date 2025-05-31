@@ -14,7 +14,7 @@ const registry = {
                     "id": "getStockPrices",
                     "isMonetized": true,
                     "payment": {
-                        "maxAmountRequired": 100,
+                        "maxAmountRequired": 0.001,
                         "price": 0.001,
                         "network": "base-sepolia",
                         "currency": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
