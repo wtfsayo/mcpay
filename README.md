@@ -41,3 +41,13 @@ You can use it in Cursor and other MCP clients
 
 We have some useful examples that might be interesting to experiment with
 
+
+
+---
+
+
+[1]: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/402?utm_source=chatgpt.com "402 Payment Required - HTTP - MDN Web Docs - Mozilla"
+[2]: https://www.coinbase.com/developer-platform/discover/launches/x402?utm_source=chatgpt.com "Introducing x402: a new standard for internet-native payments"
+[3]: https://www.x402.org/x402-whitepaper.pdf?utm_source=chatgpt.com "[PDF] x402-whitepaper.pdf"
+[4]: https://nftnow.com/news/exclusive-foundation-announces-dynamic-nft-pricing-feature/?utm_source=chatgpt.com "Exclusive: Foundation Announces Dynamic NFT Pricing Feature"
+[5]: https://www.talentprotocol.com/?utm_source=chatgpt.com "Talent Protocol - What's your Builder Score?"
