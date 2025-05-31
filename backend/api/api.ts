@@ -176,6 +176,15 @@ app.get('/analytics/usage', async (c) => {
     return c.json(usage);
 });
 
+app.get('/inspect-mcp-tools', async (c) => {
+    const { url } = c.req.query();
+    if (!url) {
+        return c.json({ error: 'mcpUrl is required' }, 400);
+    }
+    const tools = await getMcpTools(url);
+    return c.json(tools);
+});
+
 // Catch-all for unmatched routes
 app.all('*', (c) => {
     return c.json({ 
