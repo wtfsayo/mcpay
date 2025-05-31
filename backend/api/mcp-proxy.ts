@@ -367,6 +367,14 @@ verbs.forEach(verb => {
                     paymentRequirement
                 );
 
+                const responseHeader = settleResponseHeader(settleResponse);
+                console.log(`[${new Date().toISOString()}] Setting X-PAYMENT-RESPONSE header: ${responseHeader}`)
+                c.header("X-PAYMENT-RESPONSE", responseHeader);
+
+                console.log(`[${new Date().toISOString()}] Forwarding request to upstream with ID: ${id}`)
+                const upstream = await forwardRequest(c, id, body)
+                console.log(`[${new Date().toISOString()}] Received upstream response, mirroring back to client`)
+
                 if (settleResponse.success === false) {
                     c.status(402);
                     return c.json({
@@ -376,8 +384,7 @@ verbs.forEach(verb => {
                     });
                 }
 
-                
-
+                return mirrorRequest(upstream)
             } catch (error) {
                 console.error(`[${new Date().toISOString()}] Error during payment processing:`, error)
                 c.status(500)
