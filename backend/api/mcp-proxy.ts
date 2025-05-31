@@ -13,6 +13,7 @@ import { type Context, Hono } from "hono";
 import { exact } from "x402/schemes";
 import { settleResponseHeader } from 'x402/types';
 import { createExactPaymentRequirements, settle, verifyPayment, x402Version } from "../lib/payments.js"
+import registry from "../hardcoded-registry.js";
 
 // import { withTransaction, txOperations } from '../db/actions';
 
@@ -53,9 +54,9 @@ const forwardRequest = async (c: Context, id?: string) => {
         // const mcpConfig = await withTransaction(async (tx) => {
         //     return await txOperations.internal_getMcpServerByServerId(id)(tx);
         // });
-        const mcpConfig = {} as any;
+        const mcpConfig = (registry as Record<string, any>)[id] || {};
 
-        const mcpOrigin = mcpConfig.origin;
+        const mcpOrigin = mcpConfig.url;
         if(mcpOrigin){
             targetUpstream = new URL(mcpOrigin);
         }
@@ -176,11 +177,11 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: { name: string, 
                                 // const server = await withTransaction(async (tx) => {
                                 //     return await txOperations.internal_getMcpServerByServerId(id)(tx);
                                 // });
-                                const server = { id: id };
+                                const server = (registry as Record<string, any>)[id];
                                 
                                 if (server) {
                                     // Store the internal server ID for later use
-                                    serverId = server.id;
+                                    serverId = id; // Use the registry key as server ID
                                     console.log(`[${new Date().toISOString()}] Found server with internal ID: ${serverId}`);
                                 
                                     // TODO: there can be multiple tools with the same name, we need to find the correct one
@@ -392,14 +393,6 @@ verbs.forEach(verb => {
         // }
         
         return mirrorRequest(upstream)
-    })
-
-    app[verb](`/:id`, async (c) => {
-        const id = c.req.param('id');
-
-        return c.json({
-            message: `Hello, ${id}!`
-        })
     })
 })
 
