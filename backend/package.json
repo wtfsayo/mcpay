@@ -4,17 +4,29 @@
   "description": "MCPay.fun Backend on Vercel",
   "type": "module",
   "private": true,
+  "scripts": {
+    "db:apply-changes": "drizzle-kit push",
+    "db:generate-migrations": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@vercel/ai-sdk-gateway": "^0.1.8",
     "@vercel/mcp-adapter": "0.7.3",
     "ai": "5.0.0-alpha.7",
+    "dotenv": "^16.5.0",
+    "drizzle-orm": "^0.44.1",
     "hono": "^4.7.10",
+    "pg": "^8.16.0",
     "x402": "^0.3.7",
     "zod": "^3.25.42"
   },
   "devDependencies": {
     "@types/node": "^22.15.29",
+    "@types/pg": "^8.15.2",
+    "drizzle-kit": "^0.31.1",
+    "tsx": "^4.19.4",
     "typescript": "^5.8.3"
   },
   "engines": {
