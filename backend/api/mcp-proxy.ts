@@ -49,7 +49,7 @@ const forwardRequest = async (c: Context, id?: string) => {
     let targetUpstream = DEFAULT_UPSTREAM;
     let authHeaders: Record<string, unknown> | undefined = undefined;
 
-    if(id){
+    if (id) {
         // TODO: Replace with actual DB call
         // const mcpConfig = await withTransaction(async (tx) => {
         //     return await txOperations.internal_getMcpServerByServerId(id)(tx);
@@ -57,11 +57,11 @@ const forwardRequest = async (c: Context, id?: string) => {
         const mcpConfig = (registry as Record<string, any>)[id] || {};
 
         const mcpOrigin = mcpConfig.url;
-        if(mcpOrigin){
+        if (mcpOrigin) {
             targetUpstream = new URL(mcpOrigin);
         }
 
-        if(mcpConfig.authHeaders && mcpConfig.requireAuth){
+        if (mcpConfig.authHeaders && mcpConfig.requireAuth) {
             authHeaders = mcpConfig.authHeaders as Record<string, unknown>;
         }
     }
@@ -82,8 +82,8 @@ const forwardRequest = async (c: Context, id?: string) => {
 
     headers.set('host', targetUpstream.host);
 
-    if(authHeaders){
-        for(const [key, value] of Object.entries(authHeaders)){
+    if (authHeaders) {
+        for (const [key, value] of Object.entries(authHeaders)) {
             headers.set(key, value as string);
         }
     }
@@ -118,10 +118,10 @@ const mirrorRequest = (res: Response) => {
 // Helper function to inspect request payload for streamable HTTP requests and identify tool calls
 const inspectRequest = async (c: Context): Promise<{ toolCall?: { name: string, args: any, isPaid: boolean, payment?: any, id?: string, toolId?: string, serverId?: string } }> => {
     const rawRequest = c.req.raw;
-    
+
     let toolCall = undefined;
 
-    if(rawRequest.method === 'POST' && rawRequest.body){
+    if (rawRequest.method === 'POST' && rawRequest.body) {
         try {
             const clonedRequest = rawRequest.clone();
             const contentType = rawRequest.headers.get("content-type") || '';
@@ -132,18 +132,18 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: { name: string, 
 
             const reader = clonedRequest.body?.getReader();
 
-            if(!reader){
+            if (!reader) {
                 throw new Error('No reader found');
             }
 
-            if(reader){
+            if (reader) {
                 let chunks = [];
                 let totalSize = 0;
 
-                while(true){
+                while (true) {
                     const { done, value } = await reader.read();
 
-                    if(done){
+                    if (done) {
                         break;
                     }
 
@@ -178,37 +178,25 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: { name: string, 
                                 //     return await txOperations.internal_getMcpServerByServerId(id)(tx);
                                 // });
                                 const server = (registry as Record<string, any>)[id];
-                                
+
                                 if (server) {
                                     // Store the internal server ID for later use
                                     serverId = id; // Use the registry key as server ID
                                     console.log(`[${new Date().toISOString()}] Found server with internal ID: ${serverId}`);
-                                
+
                                     // TODO: there can be multiple tools with the same name, we need to find the correct one
                                     // const tools = await withTransaction(async (tx) => {
                                     //     return await txOperations.listMcpToolsByServer(server.id)(tx);
                                     // });
-                                    const tools = [] as any[];
-                                    
-                                    // TODO: find the tool config
-                                    const toolConfig = {
-                                        id: 'tool_1',
-                                        isMonetized: true,
-                                        payment: {
-                                            maxAmountRequired: 100,
-                                            network: 'base-sepolia',
-                                            resource: 'usdc',
-                                            description: 'Payment for tool call',
-                                            payTo: '0x1234567890123456789012345678901234567890'
-                                        }
-                                    } as any;
-                                    // const toolConfig = tools.find((t: any) => t.name === toolName);
- 
+                                    const tools = server.pricing?.tools || {};
+
+                                    const toolConfig = tools[toolName];
+
                                     console.log(`[${new Date().toISOString()}] ---Tool Config: ${JSON.stringify(toolConfig, null, 2)}`)
-                                    
+
                                     if (toolConfig) {
                                         toolId = toolConfig.id;
-                                        
+
                                         if (toolConfig.isMonetized && toolConfig.payment) {
                                             isPaid = true;
                                             paymentDetails = toolConfig.payment;
@@ -218,7 +206,7 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: { name: string, 
                                     }
                                 }
                             }
- 
+
                             console.log(`[${new Date().toISOString()}] ---Tool ID: ${toolId}`)
 
                             // Store tool call info to return
@@ -242,7 +230,7 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: { name: string, 
                 }
             }
         }
-        catch(e){
+        catch (e) {
             console.error('\x1b[31m%s\x1b[0m', `[${new Date().toISOString()}] Error logging request payload:`, e);
         }
     }
@@ -253,7 +241,7 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: { name: string, 
 // Helper function to get or create user from wallet address
 async function getOrCreateUser(walletAddress: string): Promise<User | null> {
     if (!walletAddress) return null;
-    
+
     // TODO: Replace with actual DB call
     // return await withTransaction(async (tx) => {
     //     let user = await txOperations.getUserByWalletAddress(walletAddress)(tx);
@@ -271,7 +259,7 @@ async function getOrCreateUser(walletAddress: string): Promise<User | null> {
     //     
     //     return user as User;
     // });
-    
+
     return {
         id: `user_${walletAddress.substring(0, 8)}`,
         walletAddress,
@@ -295,35 +283,33 @@ verbs.forEach(verb => {
 
         // No user yet - will be set from payment verification if available
         let user: User | null = null;
-        
+
         if (toolCall && toolCall.isPaid && toolCall.toolId) {
             console.log(`[${new Date().toISOString()}] Paid tool call detected: ${toolCall.name}`)
             console.log(`[${new Date().toISOString()}] Payment details: ${JSON.stringify(toolCall.payment, null, 2)}`)
 
-            // TODO: Implement payment requirements
-            // const paymentRequirements = [
-            //     createExactPaymentRequirements(
-            //         toolCall.payment.maxAmountRequired,
-            //         toolCall.payment.network,
-            //         toolCall.payment.resource,
-            //         toolCall.payment.description,
-            //         toolCall.payment.payTo
-            //     ),
-            // ];
-            const paymentRequirements: any[] = [];
+            const paymentRequirements = [
+                createExactPaymentRequirements(
+                    toolCall.payment.maxAmountRequired,
+                    toolCall.payment.network,
+                    toolCall.payment.resource,
+                    toolCall.payment.description,
+                    toolCall.payment.payTo
+                ),
+            ];
             console.log(`[${new Date().toISOString()}] Created payment requirements: ${JSON.stringify(paymentRequirements, null, 2)}`)
 
             // Get the payment header before verification to extract payer information
             const paymentHeader = c.req.header("X-PAYMENT");
             let payerAddress = '';
-            
+
             if (paymentHeader) {
                 try {
                     const decodedPayment = exact.evm.decodePayment(paymentHeader);
                     // Extract the payer address from decoded payment
                     payerAddress = decodedPayment.payload.authorization.from;
                     console.log(`[${new Date().toISOString()}] Extracted payer address from payment: ${payerAddress}`);
-                    
+
                     // Get or create user with the payer address
                     if (payerAddress) {
                         user = await getOrCreateUser(payerAddress);
@@ -333,15 +319,17 @@ verbs.forEach(verb => {
                     console.error(`[${new Date().toISOString()}] Error extracting payer from payment:`, e);
                 }
             }
-            
-            // TODO: Implement payment verification
-            // const isPaymentValid = await verifyPayment(c, paymentRequirements)
-            const isPaymentValid = false;
+
+            const isPaymentValid = await verifyPayment(c, paymentRequirements)
             console.log(`[${new Date().toISOString()}] Payment verification result: ${JSON.stringify(isPaymentValid, null, 2)}`)
 
             if (!isPaymentValid) {
                 console.log(`[${new Date().toISOString()}] Payment verification failed, returning early`)
-                
+
+                if (toolCall.toolId && toolCall.serverId) {
+                    // TODO: Record failed payment attempt in analytics
+                }
+
                 // TODO: Record failed payment attempt in analytics
                 // if (toolCall.toolId && toolCall.serverId) {
                 //     await withTransaction(async (tx) => {
@@ -360,7 +348,7 @@ verbs.forEach(verb => {
                 //         })(tx);
                 //     });
                 // }
-                
+
                 c.status(402);
                 return c.json({
                     // x402Version,
@@ -369,8 +357,55 @@ verbs.forEach(verb => {
                 });
             }
 
-            // TODO: Implement payment processing
-            console.log(`[${new Date().toISOString()}] Payment processing not yet implemented`)
+            try {
+                const payment = c.req.header("X-PAYMENT");
+                if (!payment) {
+                    console.log(`[${new Date().toISOString()}] No X-PAYMENT header found, returning early`)
+                    c.status(402);
+                    return c.json({
+                        x402Version,
+                        error: "No payment found in X-PAYMENT header",
+                        accepts: paymentRequirements,
+                    });
+                }
+
+                const decodedPayment = exact.evm.decodePayment(payment);
+                const paymentRequirement = paymentRequirements[0];
+
+                if (!paymentRequirement) {
+                    console.log(`[${new Date().toISOString()}] No payment requirement available for settlement`)
+                    c.status(402);
+                    return c.json({
+                        x402Version,
+                        error: "No payment requirement available for settlement",
+                        accepts: paymentRequirements,
+                    });
+                }
+
+                const settleResponse = await settle(
+                    decodedPayment,
+                    paymentRequirement
+                );
+
+                if (settleResponse.success === false) {
+                    c.status(402);
+                    return c.json({
+                        x402Version,
+                        error: settleResponse.errorReason,
+                        accepts: paymentRequirements,
+                    });
+                }
+
+                
+
+            } catch (error) {
+                console.error(`[${new Date().toISOString()}] Error during payment processing:`, error)
+                c.status(500)
+                return c.json({
+                    error: "Internal server error during payment processing"
+                })
+            }
+
         }
 
         // For non-paid requests, try to get wallet address from header as fallback
@@ -384,7 +419,7 @@ verbs.forEach(verb => {
         console.log(`[${new Date().toISOString()}] Forwarding request to upstream with ID: ${id}`)
         const upstream = await forwardRequest(c, id)
         console.log(`[${new Date().toISOString()}] Received upstream response, mirroring back to client`)
-        
+
         // TODO: Record tool usage if we have tool information
         // if (toolCall && toolCall.toolId && toolCall.serverId) {
         //     await withTransaction(async (tx) => {
@@ -403,7 +438,7 @@ verbs.forEach(verb => {
         //         })(tx);
         //     });
         // }
-        
+
         return mirrorRequest(upstream)
     })
 })
