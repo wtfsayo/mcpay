@@ -70,8 +70,8 @@ const forwardRequest = async (c: Context, id?: string) => {
     url.host = targetUpstream.host;
     url.protocol = targetUpstream.protocol;
 
-    // After Vercel rewrite, remove ID from path when forwarding to upstream
-    const pathWithoutId = url.pathname.replace(/^\/[^\/]+/, '')
+    // Remove /mcp/:id from path when forwarding to upstream, keeping everything after /:id
+    const pathWithoutId = url.pathname.replace(/^\/mcp\/[^\/]+/, '')
     url.pathname = targetUpstream.pathname + (pathWithoutId || '')
 
     const headers = c.req.raw.headers;
@@ -126,8 +126,8 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: { name: string, 
             const clonedRequest = rawRequest.clone();
             const contentType = rawRequest.headers.get("content-type") || '';
 
-            // After Vercel rewrite, path will be like "/:id/*" instead of "/mcp/:id/*"
-            const urlPathMatch = new URL(rawRequest.url).pathname.match(/^\/([^\/]+)/);
+            // Parse /mcp/:id format and extract what comes after /:id
+            const urlPathMatch = new URL(rawRequest.url).pathname.match(/^\/mcp\/([^\/]+)/);
             const id = urlPathMatch ? urlPathMatch[1] : undefined;
 
             const reader = clonedRequest.body?.getReader();
@@ -273,7 +273,7 @@ function ensureString(value: string | undefined, fallback: string = 'unknown'): 
 }
 
 verbs.forEach(verb => {
-    app[verb](`/:id/*`, async (c) => {
+    app[verb](`/mcp/:id/*`, async (c) => {
         const id = c.req.param('id');
         console.log(`[${new Date().toISOString()}] Handling ${verb.toUpperCase()} request to ${c.req.url} with ID: ${id}`)
 
