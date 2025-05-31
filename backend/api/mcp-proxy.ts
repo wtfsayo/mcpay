@@ -45,7 +45,7 @@ const verbs = ["post", "get", "delete"] as const;
  * Copies a client request to the upstream, returning the upstream Response.
  * Works for POST, GET, DELETE – anything the MCP spec allows.
  */
-const forwardRequest = async (c: Context, id?: string) => {
+const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer) => {
     let targetUpstream = DEFAULT_UPSTREAM;
     let authHeaders: Record<string, unknown> | undefined = undefined;
 
@@ -91,7 +91,7 @@ const forwardRequest = async (c: Context, id?: string) => {
     const response = await fetch(url.toString(), {
         method: c.req.raw.method,
         headers,
-        body: c.req.raw.body,
+        body: body || (c.req.raw.method !== 'GET' ? c.req.raw.body : undefined),
         duplex: 'half'
     })
 
@@ -116,10 +116,11 @@ const mirrorRequest = (res: Response) => {
 }
 
 // Helper function to inspect request payload for streamable HTTP requests and identify tool calls
-const inspectRequest = async (c: Context): Promise<{ toolCall?: { name: string, args: any, isPaid: boolean, payment?: any, id?: string, toolId?: string, serverId?: string } }> => {
+const inspectRequest = async (c: Context): Promise<{ toolCall?: { name: string, args: any, isPaid: boolean, payment?: any, id?: string, toolId?: string, serverId?: string }, body?: ArrayBuffer }> => {
     const rawRequest = c.req.raw;
 
     let toolCall = undefined;
+    let body = undefined;
 
     if (rawRequest.method === 'POST' && rawRequest.body) {
         try {
@@ -130,103 +131,82 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: { name: string, 
             const urlPathMatch = new URL(rawRequest.url).pathname.match(/^\/mcp\/([^\/]+)/);
             const id = urlPathMatch ? urlPathMatch[1] : undefined;
 
-            const reader = clonedRequest.body?.getReader();
+            // Read the entire body as ArrayBuffer to avoid stream locking issues
+            body = await clonedRequest.arrayBuffer();
 
-            if (!reader) {
-                throw new Error('No reader found');
-            }
+            if (body && contentType.includes('application/json')) {
+                try {
+                    // Try to parse as JSON for logging
+                    const decoder = new TextDecoder();
+                    const jsonText = decoder.decode(body);
+                    const jsonData = JSON.parse(jsonText);
+                    console.log('\x1b[36m%s\x1b[0m', `[${new Date().toISOString()}] Request JSON:`, JSON.stringify(jsonData, null, 2));
 
-            if (reader) {
-                let chunks = [];
-                let totalSize = 0;
+                    // Extract and log tool call information if present
+                    if (jsonData.method === 'tools/call' && jsonData.params) {
+                        const toolName = jsonData.params.name;
+                        const toolArgs = jsonData.params.arguments;
 
-                while (true) {
-                    const { done, value } = await reader.read();
+                        // Check if this is a paid tool by looking up in DB
+                        let isPaid = false;
+                        let paymentDetails = undefined;
+                        let toolId = undefined;
+                        let serverId = undefined;
 
-                    if (done) {
-                        break;
-                    }
+                        if (id) {
+                            // TODO: Look up tool in database by name and server ID
+                            // const server = await withTransaction(async (tx) => {
+                            //     return await txOperations.internal_getMcpServerByServerId(id)(tx);
+                            // });
+                            const server = (registry as Record<string, any>)[id];
 
-                    totalSize += value.length;
-                    // Only collect a reasonable amount to avoid memory issues
-                    if (chunks.length < 5) {
-                        chunks.push(value);
-                    }
-                }
-                if (chunks.length > 0 && contentType.includes('application/json')) {
-                    try {
-                        // Try to parse the first chunk as JSON for logging
-                        const decoder = new TextDecoder();
-                        const jsonText = decoder.decode(chunks[0]);
-                        const jsonData = JSON.parse(jsonText);
-                        console.log('\x1b[36m%s\x1b[0m', `[${new Date().toISOString()}] First chunk as JSON:`, JSON.stringify(jsonData, null, 2));
+                            if (server) {
+                                // Store the internal server ID for later use
+                                serverId = id; // Use the registry key as server ID
+                                console.log(`[${new Date().toISOString()}] Found server with internal ID: ${serverId}`);
 
-                        // Extract and log tool call information if present
-                        if (jsonData.method === 'tools/call' && jsonData.params) {
-                            const toolName = jsonData.params.name;
-                            const toolArgs = jsonData.params.arguments;
-
-                            // Check if this is a paid tool by looking up in DB
-                            let isPaid = false;
-                            let paymentDetails = undefined;
-                            let toolId = undefined;
-                            let serverId = undefined;
-
-                            if (id) {
-                                // TODO: Look up tool in database by name and server ID
-                                // const server = await withTransaction(async (tx) => {
-                                //     return await txOperations.internal_getMcpServerByServerId(id)(tx);
+                                // TODO: there can be multiple tools with the same name, we need to find the correct one
+                                // const tools = await withTransaction(async (tx) => {
+                                //     return await txOperations.listMcpToolsByServer(server.id)(tx);
                                 // });
-                                const server = (registry as Record<string, any>)[id];
+                                const tools = server.pricing?.tools || {};
 
-                                if (server) {
-                                    // Store the internal server ID for later use
-                                    serverId = id; // Use the registry key as server ID
-                                    console.log(`[${new Date().toISOString()}] Found server with internal ID: ${serverId}`);
+                                const toolConfig = tools[toolName];
 
-                                    // TODO: there can be multiple tools with the same name, we need to find the correct one
-                                    // const tools = await withTransaction(async (tx) => {
-                                    //     return await txOperations.listMcpToolsByServer(server.id)(tx);
-                                    // });
-                                    const tools = server.pricing?.tools || {};
+                                console.log(`[${new Date().toISOString()}] ---Tool Config: ${JSON.stringify(toolConfig, null, 2)}`)
 
-                                    const toolConfig = tools[toolName];
+                                if (toolConfig) {
+                                    toolId = toolConfig.id;
 
-                                    console.log(`[${new Date().toISOString()}] ---Tool Config: ${JSON.stringify(toolConfig, null, 2)}`)
-
-                                    if (toolConfig) {
-                                        toolId = toolConfig.id;
-
-                                        if (toolConfig.isMonetized && toolConfig.payment) {
-                                            isPaid = true;
-                                            paymentDetails = toolConfig.payment;
-                                            console.log('\x1b[33m%s\x1b[0m', `[${new Date().toISOString()}] Paid tool identified:`);
-                                            console.log('\x1b[33m%s\x1b[0m', `  Payment details: ${JSON.stringify(paymentDetails, null, 2)}`);
-                                        }
+                                    if (toolConfig.isMonetized && toolConfig.payment) {
+                                        isPaid = true;
+                                        paymentDetails = toolConfig.payment;
+                                        console.log('\x1b[33m%s\x1b[0m', `[${new Date().toISOString()}] Paid tool identified:`);
+                                        console.log('\x1b[33m%s\x1b[0m', `  Payment details: ${JSON.stringify(paymentDetails, null, 2)}`);
                                     }
                                 }
                             }
-
-                            console.log(`[${new Date().toISOString()}] ---Tool ID: ${toolId}`)
-
-                            // Store tool call info to return
-                            toolCall = {
-                                name: toolName,
-                                args: toolArgs,
-                                isPaid,
-                                ...(paymentDetails && { payment: paymentDetails }),
-                                ...(id && { id: id }),
-                                ...(toolId && { toolId }),
-                                ...(serverId && { serverId })
-                            };
-
-                            if (jsonData.params._meta) {
-                                console.log('\x1b[32m%s\x1b[0m', `  Meta: ${JSON.stringify(jsonData.params._meta, null, 2)}`);
-                            }
                         }
-                    } catch (e) {
-                        console.log('\x1b[33m%s\x1b[0m', `[${new Date().toISOString()}] First chunk couldn't be parsed as JSON`);
+
+                        console.log(`[${new Date().toISOString()}] ---Tool ID: ${toolId}`)
+
+                        // Store tool call info to return
+                        toolCall = {
+                            name: toolName,
+                            args: toolArgs,
+                            isPaid,
+                            ...(paymentDetails && { payment: paymentDetails }),
+                            ...(id && { id: id }),
+                            ...(toolId && { toolId }),
+                            ...(serverId && { serverId })
+                        };
+
+                        if (jsonData.params._meta) {
+                            console.log('\x1b[32m%s\x1b[0m', `  Meta: ${JSON.stringify(jsonData.params._meta, null, 2)}`);
+                        }
                     }
+                } catch (e) {
+                    console.log('\x1b[33m%s\x1b[0m', `[${new Date().toISOString()}] Request body couldn't be parsed as JSON`);
                 }
             }
         }
@@ -235,7 +215,7 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: { name: string, 
         }
     }
 
-    return { toolCall };
+    return { toolCall, body };
 }
 
 // Helper function to get or create user from wallet address
@@ -278,7 +258,7 @@ verbs.forEach(verb => {
         console.log(`[${new Date().toISOString()}] Handling ${verb.toUpperCase()} request to ${c.req.url} with ID: ${id}`)
 
         const startTime = Date.now();
-        const { toolCall } = await inspectRequest(c)
+        const { toolCall, body } = await inspectRequest(c)
         console.log(`[${new Date().toISOString()}] Request payload logged, toolCall: ${toolCall ? 'present' : 'not present'}`)
 
         // No user yet - will be set from payment verification if available
@@ -417,7 +397,7 @@ verbs.forEach(verb => {
         }
 
         console.log(`[${new Date().toISOString()}] Forwarding request to upstream with ID: ${id}`)
-        const upstream = await forwardRequest(c, id)
+        const upstream = await forwardRequest(c, id, body)
         console.log(`[${new Date().toISOString()}] Received upstream response, mirroring back to client`)
 
         // TODO: Record tool usage if we have tool information
