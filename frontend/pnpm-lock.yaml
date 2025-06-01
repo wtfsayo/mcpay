@@ -51,7 +51,7 @@ importers:
         specifier: ^3.3.0
         version: 3.3.0
       viem:
-        specifier: ^2.30.5
+        specifier: ~2.30.5
         version: 2.30.5(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.22.4)
       wagmi:
         specifier: ^2.15.4
