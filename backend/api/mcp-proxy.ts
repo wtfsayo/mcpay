@@ -13,12 +13,8 @@ import { type Context, Hono } from "hono";
 import { exact } from "x402/schemes";
 import { settleResponseHeader } from 'x402/types';
 import { createExactPaymentRequirements, settle, verifyPayment, x402Version } from "../lib/payments.js"
-import registry from "../hardcoded-registry.js";
 import { txOperations } from "../db/actions.js";
 import { withTransaction } from "../db/actions.js";
-
-// import { withTransaction, txOperations } from '../db/actions';
-
 
 export const runtime = 'nodejs'
 
@@ -52,11 +48,9 @@ const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer) => {
     let authHeaders: Record<string, unknown> | undefined = undefined;
 
     if (id) {
-        // TODO: Replace with actual DB call
         const mcpConfig = await withTransaction(async (tx) => {
             return await txOperations.internal_getMcpServerByServerId(id)(tx);
         });
-        // const mcpConfig = (registry as Record<string, any>)[id] || {};
 
         const mcpOrigin = mcpConfig?.mcpOrigin;
         if (mcpOrigin) {
@@ -156,23 +150,20 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: { name: string, 
                         let serverId = undefined;
 
                         if (id) {
-                            // TODO: Look up tool in database by name and server ID
                             const server = await withTransaction(async (tx) => {
                                 return await txOperations.internal_getMcpServerByServerId(id)(tx);
                             });
-                            // const server = (registry as Record<string, any>)[id];
 
                             if (server) {
                                 // Store the internal server ID for later use
-                                serverId = id; // Use the registry key as server ID
+                                serverId = server.id;
                                 console.log(`[${new Date().toISOString()}] Found server with internal ID: ${serverId}`);
 
-                                // TODO: there can be multiple tools with the same name, we need to find the correct one
                                 const tools = await withTransaction(async (tx) => {
                                     return await txOperations.listMcpToolsByServer(server.id)(tx);
                                 });
 
-                                const toolConfig = tools[toolName];
+                                const toolConfig = tools.find((t: any) => t.name === toolName);
 
                                 console.log(`[${new Date().toISOString()}] ---Tool Config: ${JSON.stringify(toolConfig, null, 2)}`)
 
@@ -223,7 +214,6 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: { name: string, 
 async function getOrCreateUser(walletAddress: string): Promise<User | null> {
     if (!walletAddress) return null;
 
-    // TODO: Replace with actual DB call
     return await withTransaction(async (tx) => {
         let user = await txOperations.getUserByWalletAddress(walletAddress)(tx);
         
@@ -301,6 +291,7 @@ verbs.forEach(verb => {
             if (!isPaymentValid) {
                 console.log(`[${new Date().toISOString()}] Payment verification failed, returning early`)
 
+                // Record failed payment attempt in analytics
                 if (toolCall.toolId && toolCall.serverId) {
                     await withTransaction(async (tx) => {
                         // Record tool usage with error status
@@ -316,12 +307,28 @@ verbs.forEach(verb => {
                                 args: toolCall.args
                             }
                         })(tx);
+                        
+                        // Update daily analytics using internal server ID
+                        const today = new Date();
+                        await txOperations.updateOrCreateDailyAnalytics(
+                            ensureString(toolCall.serverId),
+                            today,
+                            {
+                                totalRequests: 1,
+                                errorCount: 1,
+                                userId: user?.id,
+                                avgResponseTime: Date.now() - startTime,
+                                toolUsage: { 
+                                    [ensureString(toolCall.toolId)]: 1 
+                                }
+                            }
+                        )(tx);
                     });
                 }
 
                 c.status(402);
                 return c.json({
-                    // x402Version,
+                    x402Version,
                     error: "Payment verification failed",
                     accepts: paymentRequirements,
                 });
@@ -357,6 +364,38 @@ verbs.forEach(verb => {
                     paymentRequirement
                 );
 
+                if (settleResponse.success === false) {
+                    c.status(402);
+                    return c.json({
+                        x402Version,
+                        error: settleResponse.errorReason,
+                        accepts: paymentRequirements,
+                    });
+                }
+
+                // Record successful payment in database
+                if (toolCall.toolId && toolCall.serverId) {
+                    await withTransaction(async (tx) => {
+                        // Create payment record
+                        const paymentRecord = await txOperations.createPayment({
+                            toolId: ensureString(toolCall.toolId),
+                            userId: user?.id,
+                            amount: (paymentRequirement as any).amount || toolCall.payment.maxAmountRequired,
+                            currency: paymentRequirement.asset,
+                            network: paymentRequirement.network,
+                            transactionHash: settleResponse.transaction || `unknown-${Date.now()}`,
+                            status: 'completed',
+                            signature: payment,
+                            paymentData: {
+                                decodedPayment,
+                                settleResponse
+                            }
+                        })(tx);
+                        
+                        console.log(`[${new Date().toISOString()}] Payment recorded with ID: ${paymentRecord.id}`);
+                    });
+                }
+
                 const responseHeader = settleResponseHeader(settleResponse);
                 console.log(`[${new Date().toISOString()}] Setting X-PAYMENT-RESPONSE header: ${responseHeader}`)
                 c.header("X-PAYMENT-RESPONSE", responseHeader);
@@ -365,12 +404,38 @@ verbs.forEach(verb => {
                 const upstream = await forwardRequest(c, id, body)
                 console.log(`[${new Date().toISOString()}] Received upstream response, mirroring back to client`)
 
-                if (settleResponse.success === false) {
-                    c.status(402);
-                    return c.json({
-                        x402Version,
-                        error: settleResponse.errorReason,
-                        accepts: paymentRequirements,
+                // Record successful tool usage in database
+                if (toolCall.toolId && toolCall.serverId) {
+                    await withTransaction(async (tx) => {
+                        // Record tool usage
+                        await txOperations.recordToolUsage({
+                            toolId: ensureString(toolCall.toolId),
+                            userId: user?.id,
+                            responseStatus: upstream.status.toString(),
+                            executionTimeMs: Date.now() - startTime,
+                            ipAddress: c.req.header('x-forwarded-for') || c.req.header('x-real-ip'),
+                            userAgent: c.req.header('user-agent'),
+                            requestData: {
+                                toolName: toolCall.name,
+                                args: toolCall.args
+                            }
+                        })(tx);
+                        
+                        // Update daily analytics using internal server ID
+                        const today = new Date();
+                        await txOperations.updateOrCreateDailyAnalytics(
+                            ensureString(toolCall.serverId),
+                            today,
+                            {
+                                totalRequests: 1,
+                                totalRevenue: parseFloat((paymentRequirement as any).amount || toolCall.payment.maxAmountRequired),
+                                userId: user?.id,
+                                avgResponseTime: Date.now() - startTime,
+                                toolUsage: { 
+                                    [ensureString(toolCall.toolId)]: 1 
+                                }
+                            }
+                        )(tx);
                     });
                 }
 
@@ -397,7 +462,7 @@ verbs.forEach(verb => {
         const upstream = await forwardRequest(c, id, body)
         console.log(`[${new Date().toISOString()}] Received upstream response, mirroring back to client`)
 
-        // TODO: Record tool usage if we have tool information
+        // Record tool usage if we have tool information
         if (toolCall && toolCall.toolId && toolCall.serverId) {
             await withTransaction(async (tx) => {
                 // Record tool usage
@@ -413,6 +478,21 @@ verbs.forEach(verb => {
                         args: toolCall.args
                     }
                 })(tx);
+                
+                // Update daily analytics using internal server ID
+                const today = new Date();
+                await txOperations.updateOrCreateDailyAnalytics(
+                    ensureString(toolCall.serverId),
+                    today,
+                    {
+                        totalRequests: 1,
+                        userId: user?.id,
+                        avgResponseTime: Date.now() - startTime,
+                        toolUsage: { 
+                            [ensureString(toolCall.toolId)]: 1 
+                        }
+                    }
+                )(tx);
             });
         }
 
