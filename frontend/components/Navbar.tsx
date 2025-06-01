@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import {
   // Moon, 
@@ -11,6 +12,7 @@ import {
 import { useTheme } from "@/context/ThemeContext"
 import { useConnect, useConnectors } from 'wagmi'
 import { ConnectButton } from "./connect-button"
+
 
 
 interface NavbarProps {
@@ -27,8 +29,8 @@ export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
   const { isDark } = useTheme()
 
   const tabs = [
-    { id: "mcps", label: "MCPs" },
-    { id: "register", label: "Register" },
+    { id: "mcps", label: "MCPs", href: "/" },
+    { id: "register", label: "Register", href: "/register" },
   ]
 
   const handleTabChange = (tabId: string) => {
@@ -58,7 +60,8 @@ export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
                 <Button
                   key={tab.id}
                   variant="ghost"
-                  onClick={() => handleTabChange(tab.id)}
+                  asChild
+                  onClick={() => tab.id !== "register" && tab.id !== "mcps" && handleTabChange(tab.id)}
                   className={`px-3 py-2 text-sm font-medium transition-colors duration-200 ${activeTab === tab.id
                     ? isDark
                       ? "bg-gray-800 text-white"
@@ -68,7 +71,7 @@ export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
                       : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                     }`}
                 >
-                  {tab.label}
+                  <Link href={tab.href || "#"}>{tab.label}</Link>
                 </Button>
               ))}
             </div>
@@ -111,8 +114,11 @@ export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
                 <Button
                   key={tab.id}
                   variant="ghost"
+                  asChild
                   onClick={() => {
-                    handleTabChange(tab.id)
+                    if (tab.id !== "register" && tab.id !== "mcps") {
+                      handleTabChange(tab.id)
+                    }
                     setIsMobileMenuOpen(false)
                   }}
                   className={`w-full justify-start px-3 py-2 text-sm font-medium transition-colors duration-200 ${activeTab === tab.id
@@ -124,7 +130,7 @@ export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
                       : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                     }`}
                 >
-                  {tab.label}
+                  <Link href={tab.href || "#"}>{tab.label}</Link>
                 </Button>
               ))}
 
