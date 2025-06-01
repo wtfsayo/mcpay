@@ -1,26 +1,55 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MCPay.fun Frontend
+
+This directory contains the frontend application for MCPay.fun, built with [Next.js](https://nextjs.org).
+
+## Overview
+
+The frontend provides the user interface for [TODO: Briefly describe the main features of the frontend, e.g., interacting with MCPay services, viewing payment history, managing account settings, etc.].
 
 ## Getting Started
 
-First, run the development server:
+First, ensure you are in the `frontend` directory:
+
+```sh
+cd frontend
+```
+
+Then, run the development server:
 
 ```bash
+pnpm dev
+# or
 npm run dev
 # or
 yarn dev
 # or
-pnpm dev
-# or
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the application.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+You can start editing the main page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a font family from Vercel.
 
-## Learn More
+## Key Technologies
+
+- [Next.js](https://nextjs.org/docs)
+- [React](https://react.dev/)
+- [TypeScript](https://www.typescriptlang.org/)
+- [Tailwind CSS](https://tailwindcss.com/) (if used, check `postcss.config.mjs` and `tailwind.config.js`)
+- [Shadcn/ui](https://ui.shadcn.com/) (if used, check `components.json`)
+
+## Environment Variables
+
+If your frontend requires environment variables (e.g., API endpoints), create a `.env.local` file in the `frontend` directory:
+
+```env
+NEXT_PUBLIC_API_BASE_URL="http://localhost:8000/api" # Example
+```
+[TODO: List any relevant frontend-specific environment variables and their purpose.]
+
+## Learn More about Next.js
 
 To learn more about Next.js, take a look at the following resources:
 
