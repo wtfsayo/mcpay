@@ -5,6 +5,7 @@ import { useParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import Image from "next/image"
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -566,6 +567,9 @@ export default function ServerDashboard() {
               <CardTitle className="flex items-center gap-2">
                 <Shield className="h-5 w-5" />
                 Recent Proofs
+                <Badge variant="outline" className={`ml-2 text-xs ${isDark ? "border-gray-500 text-gray-300" : ""}`}>
+                  Powered by <Image src="/vlayer-logo.svg" alt="vLayer" width={60} height={20} className="inline ml-1" />
+                </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
