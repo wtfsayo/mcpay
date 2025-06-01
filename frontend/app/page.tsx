@@ -49,7 +49,7 @@ interface APITool {
   name: string;
   description: string;
   isMonetized: boolean;
-  payment: any;
+  payment: Record<string, unknown> | null;
   createdAt: string;
 }
 
@@ -60,7 +60,7 @@ const transformServerData = (apiServer: APIServer, tools: APITool[] = []): MCPSe
     name: apiServer.name || 'Unknown Server',
     description: apiServer.description || 'No description available',
     url: `${apiServer.receiverAddress}`, // Using receiverAddress as URL for now
-    category: (apiServer.metadata as any)?.category || 'General',
+    category: (apiServer.metadata as Record<string, unknown>)?.category as string || 'General',
     icon: <TrendingUp className="h-6 w-6" />,
     verified: apiServer.status === 'active',
     tools: tools.map(tool => ({

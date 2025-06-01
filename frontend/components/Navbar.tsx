@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import {
   // Moon, 
@@ -49,7 +50,7 @@ export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
           {/* Logo/Brand */}
           <div className="flex items-center">
             <div className="flex-shrink-0 flex items-center gap-2">
-              <img src="/mcpay-logo.svg" alt="MCPay Logo" className="h-18 w-18" />
+              <Image src="/mcpay-logo.svg" alt="MCPay Logo" width={72} height={72} />
             </div>
           </div>
 

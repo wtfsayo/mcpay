@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textArea"
 import { Badge } from "@/components/ui/badge"
 import { Plus, Server, Globe, CheckCircle, Trash2, DollarSign } from "lucide-react"
+import { useTheme } from "@/context/ThemeContext"
 
 interface Tool {
   id: string
@@ -17,11 +18,9 @@ interface Tool {
   price: string
 }
 
-interface RegisterTabProps {
-  isDark: boolean
-}
-
-export default function RegisterTab({ isDark }: RegisterTabProps) {
+export default function RegisterTab() {
+  const { isDark } = useTheme()
+  
   const [formData, setFormData] = useState({
     name: "",
     description: "",

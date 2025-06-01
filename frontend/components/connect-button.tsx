@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useConnect, useAccount, useDisconnect } from "wagmi"
+import { useConnect, useAccount, useDisconnect, type Connector } from "wagmi"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Loader2, ChevronDown, LogOut, Wallet } from "lucide-react"
@@ -12,7 +12,7 @@ export function ConnectButton() {
   const { address, isConnected } = useAccount()
   const { disconnect } = useDisconnect()
 
-  const handleConnect = async (connector: any) => {
+  const handleConnect = async (connector: Connector) => {
     try {
       setIsLoading(true)
       connect({ connector })
