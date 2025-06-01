@@ -263,7 +263,12 @@ export const mcpToolsRelations = relations(mcpTools, ({ one, many }) => ({
 
 export const usersRelations = relations(users, ({ many }) => ({
   createdServers: many(mcpServers),
-  serverOwnerships: many(serverOwnership),
+  serverOwnerships: many(serverOwnership, {
+    relationName: "userOwnerships"
+  }),
+  grantedOwnerships: many(serverOwnership, {
+    relationName: "grantedOwnerships"
+  }),
   payments: many(payments),
   toolUsage: many(toolUsage),
   apiKeys: many(apiKeys),
@@ -307,10 +312,12 @@ export const serverOwnershipRelations = relations(serverOwnership, ({ one }) => 
   user: one(users, {
     fields: [serverOwnership.userId],
     references: [users.id],
+    relationName: "userOwnerships"
   }),
   grantedByUser: one(users, {
     fields: [serverOwnership.grantedBy],
     references: [users.id],
+    relationName: "grantedOwnerships"
   }),
 }));
 
