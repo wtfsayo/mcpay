@@ -334,12 +334,12 @@ export default function MCPBrowser() {
                         isDark ? "bg-gray-700 border-gray-600 text-gray-300" : "bg-gray-100 border-gray-200"
                       }`}
                     >
-                      {server.url}
+                      {`https://api.mcpay.fun/mcp/${server.id}`}
                     </code>
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => copyToClipboard(server.url)}
+                      onClick={() => copyToClipboard(`https://api.mcpay.fun/mcp/${server.id}`)}
                       className={`shrink-0 ${isDark ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600" : ""}`}
                     >
                       Copy
