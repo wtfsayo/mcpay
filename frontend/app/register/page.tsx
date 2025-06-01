@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textArea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Server, Globe, CheckCircle, Loader2, Wallet, RefreshCw, AlertCircle, Lock } from "lucide-react"
+import { useAccount, useConnect, useDisconnect } from "wagmi"
 
 interface MCPTool {
   name: string
@@ -28,6 +29,31 @@ interface RegisterTabProps {
   isDark: boolean
 }
 
+// Helper function to extract a display name from a URL
+const generateDisplayNameFromUrl = (urlStr: string): string => {
+  try {
+    const url = new URL(urlStr)
+    let path = url.pathname
+    if (path.startsWith("/")) path = path.substring(1)
+    if (path.endsWith("/")) path = path.substring(0, path.length - 1)
+    
+    // Replace common repository hosting prefixes or suffixes if any
+    path = path.replace(/^github\.com\//i, '').replace(/^gitlab\.com\//i, '').replace(/^bitbucket\.org\//i, '')
+    path = path.replace(/\.git$/i, '')
+
+    if (!path && url.hostname) { // If path is empty, use hostname
+        path = url.hostname;
+    }
+    
+    return path
+      .split(/[\/\-_]/)
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ") || "Unknown Source"
+  } catch {
+    return "Unknown Source"
+  }
+}
+
 export default function RegisterTab({ isDark }: RegisterTabProps) {
   const [formData, setFormData] = useState({
     name: "",
@@ -39,10 +65,12 @@ export default function RegisterTab({ isDark }: RegisterTabProps) {
   const [tools, setTools] = useState<MCPTool[]>([])
   const [isLoadingTools, setIsLoadingTools] = useState(false)
   const [toolsError, setToolsError] = useState("")
-  const [walletAddress, setWalletAddress] = useState("")
-  const [isConnectingWallet, setIsConnectingWallet] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [showAuthHeaders, setShowAuthHeaders] = useState(false)
+
+  const { address: walletAddress, isConnected: isWalletConnected, isConnecting: isAccountConnecting } = useAccount()
+  const { connect, connectors, isPending: isConnectingWallet, error: connectError } = useConnect()
+  const { disconnect, isPending: isDisconnectingWallet } = useDisconnect()
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -69,7 +97,6 @@ export default function RegisterTab({ isDark }: RegisterTabProps) {
         headers: "",
       })
       setTools([])
-      setWalletAddress("")
       setToolsError("")
       setShowAuthHeaders(false)
     }, 3000)
@@ -90,122 +117,77 @@ export default function RegisterTab({ isDark }: RegisterTabProps) {
     setToolsError("")
 
     try {
-      // Simulate API call to MCP inspect endpoint
-      // In real implementation, this would call: ${url}/inspect or similar
-      await new Promise((resolve) => setTimeout(resolve, 2000)) // Simulate network delay
+      const apiUrl = `https://api.mcpay.fun/api/inspect-mcp-tools?url=${encodeURIComponent(url)}`
+      const response = await fetch(apiUrl)
 
-      // Mock response based on the provided sample
-      const mockTools: MCPTool[] = [
-        {
-          name: "fetch_docs_documentation",
-          description:
-            "Fetch entire documentation file from GitHub repository: saucerswaplabs/docs. Useful for general questions. Always call this tool first if asked about saucerswaplabs/docs.",
-          inputSchema: {
-            jsonSchema: {
-              type: "object",
-              properties: {},
-              additionalProperties: false,
-            },
-          },
-          price: "0.05",
-        },
-        {
-          name: "search_docs_documentation",
-          description:
-            "Semantically search within the fetched documentation from GitHub repository: saucerswaplabs/docs. Useful for specific queries.",
-          inputSchema: {
-            jsonSchema: {
-              type: "object",
-              properties: {
-                query: {
-                  type: "string",
-                  description: "The search query to find relevant documentation",
-                },
-              },
-              required: ["query"],
-              additionalProperties: false,
-            },
-          },
-          price: "0.10",
-        },
-        {
-          name: "search_docs_code",
-          description:
-            'Search for code within the GitHub repository: "saucerswaplabs/docs" using the GitHub Search API (exact match). Returns matching files for you to query further if relevant.',
-          inputSchema: {
-            jsonSchema: {
-              type: "object",
-              properties: {
-                query: {
-                  type: "string",
-                  description: "The search query to find relevant code files",
-                },
-                page: {
-                  type: "number",
-                  description: "Page number to retrieve (starting from 1). Each page contains 30 results.",
-                },
-              },
-              required: ["query"],
-              additionalProperties: false,
-            },
-          },
-          price: "0.15",
-        },
-        {
-          name: "fetch_generic_url_content",
-          description:
-            "Generic tool to fetch content from any absolute URL, respecting robots.txt rules. Use this to retrieve referenced urls (absolute urls) that were mentioned in previously fetched documentation.",
-          inputSchema: {
-            jsonSchema: {
-              type: "object",
-              properties: {
-                url: {
-                  type: "string",
-                  description: "The URL of the document or page to fetch",
-                },
-              },
-              required: ["url"],
-              additionalProperties: false,
-            },
-          },
-          price: "0.08",
-        },
-      ]
-
-      setTools(mockTools)
-
-      // Auto-fill server name and description based on tools
-      if (!formData.name) {
-        handleInputChange("name", "SaucerSwap Documentation Server")
+      if (!response.ok) {
+        let errorDetails = ""
+        try {
+          const errorData = await response.json()
+          errorDetails = errorData.message || JSON.stringify(errorData)
+        } catch (e) {
+          // Failed to parse error JSON
+          errorDetails = response.statusText
+        }
+        throw new Error(`HTTP error! status: ${response.status} - ${errorDetails}`)
       }
-      if (!formData.description) {
-        handleInputChange(
-          "description",
-          "Access and search SaucerSwap documentation with semantic search capabilities and code exploration tools.",
-        )
+
+      const fetchedTools: MCPTool[] = await response.json()
+
+      if (!Array.isArray(fetchedTools)) {
+        console.error("Fetched data is not an array:", fetchedTools)
+        throw new Error("Invalid data format received from server.")
       }
-    } catch {
-      setToolsError("Failed to fetch tools from MCP server. Please check the URL and try again.")
+      
+      // Tools are fetched without price; UI will default it or user can set it.
+      setTools(fetchedTools)
+
+      // Auto-fill server name and description if not already set by user
+      // and if tools were successfully fetched.
+      if (fetchedTools.length > 0) {
+        const displayName = generateDisplayNameFromUrl(url)
+        
+        if (!formData.name) {
+          handleInputChange("name", `${displayName} MCP Server`)
+        }
+        if (!formData.description) {
+          const toolNames = fetchedTools.map(t => t.name).slice(0, 3).join(", ")
+          const toolCount = fetchedTools.length
+          let description = `MCP Server for ${displayName}, providing ${toolCount} tool${toolCount > 1 ? 's' : ''}.`
+          if (toolCount > 0) {
+            description += ` Includes: ${toolNames}${toolCount > 3 ? ' and more' : ''}.`
+          }
+          handleInputChange("description", description)
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch MCP tools:", error)
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      setToolsError(`Failed to fetch tools: ${errorMessage}. Please check the URL and try again.`)
       setTools([])
     } finally {
       setIsLoadingTools(false)
     }
   }
 
-  const connectWallet = async () => {
-    setIsConnectingWallet(true)
-
-    try {
-      // Simulate wallet connection
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-
-      // Mock wallet address
-      setWalletAddress("0x742d35Cc6634C0532925a3b8D4C9db96590e4CAF")
-    } catch (error) {
-      console.error("Failed to connect wallet:", error)
-    } finally {
-      setIsConnectingWallet(false)
+  const handleConnectWallet = () => {
+    // Attempt to connect with the first available connector (likely Porto from config)
+    if (connectors.length > 0) {
+      const connectorToUse = connectors.find(c => c.name === 'Porto') || connectors.find(c => c.name === 'MetaMask') || connectors[0];
+      if (connectorToUse) {
+        connect({ connector: connectorToUse })
+      } else {
+        console.error("No suitable connector found.")
+        // Optionally, set an error message for the user here
+      }
+    } else {
+      console.error("No connectors available.")
+      // Optionally, set an error message for the user here
     }
+  }
+
+  const handleDisconnectWallet = () => {
+    disconnect()
   }
 
   const updateToolPrice = (toolName: string, price: string) => {
@@ -223,7 +205,14 @@ export default function RegisterTab({ isDark }: RegisterTabProps) {
     return () => clearTimeout(timer)
   }, [formData.url])
 
-  const isFormValid = formData.name && formData.description && formData.url && walletAddress && tools.length > 0
+  // Update toolsError display if Wagmi connectError exists
+  useEffect(() => {
+    if (connectError) {
+      setToolsError(`Wallet Connection Error: ${connectError.message}`);
+    }
+  }, [connectError]);
+
+  const isFormValid = formData.name && formData.description && formData.url && isWalletConnected && tools.length > 0
 
   if (isSubmitted) {
     return (
@@ -277,15 +266,15 @@ export default function RegisterTab({ isDark }: RegisterTabProps) {
               </label>
 
               {/* Connect Wallet Button */}
-              {!walletAddress && (
+              {!isWalletConnected && (
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={connectWallet}
-                  disabled={isConnectingWallet}
+                  onClick={handleConnectWallet}
+                  disabled={isConnectingWallet || isAccountConnecting}
                   className={`w-full ${isDark ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600" : ""}`}
                 >
-                  {isConnectingWallet ? (
+                  {isConnectingWallet || isAccountConnecting ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       Connecting...
@@ -300,7 +289,7 @@ export default function RegisterTab({ isDark }: RegisterTabProps) {
               )}
 
               {/* Wallet Address Display */}
-              {walletAddress && (
+              {isWalletConnected && walletAddress && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -311,9 +300,13 @@ export default function RegisterTab({ isDark }: RegisterTabProps) {
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() => setWalletAddress("")}
+                      onClick={handleDisconnectWallet}
+                      disabled={isDisconnectingWallet}
                       className={isDark ? "text-gray-400 hover:text-white" : ""}
                     >
+                      {isDisconnectingWallet ? (
+                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      ) : null}
                       Disconnect
                     </Button>
                   </div>
