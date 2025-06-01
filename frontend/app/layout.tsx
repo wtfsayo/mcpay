@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { WagmiProvider } from 'wagmi'
-import { wagmiConfig } from './config'
+import { wagmiConfig } from '../lib/config'
 import { AppReactQueryProvider } from './providers'
 
 
