@@ -14,6 +14,8 @@ import { exact } from "x402/schemes";
 import { settleResponseHeader } from 'x402/types';
 import { createExactPaymentRequirements, settle, verifyPayment, x402Version } from "../lib/payments.js"
 import registry from "../hardcoded-registry.js";
+import { txOperations } from "../db/actions.js";
+import { withTransaction } from "../db/actions.js";
 
 // import { withTransaction, txOperations } from '../db/actions';
 
@@ -51,17 +53,17 @@ const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer) => {
 
     if (id) {
         // TODO: Replace with actual DB call
-        // const mcpConfig = await withTransaction(async (tx) => {
-        //     return await txOperations.internal_getMcpServerByServerId(id)(tx);
-        // });
-        const mcpConfig = (registry as Record<string, any>)[id] || {};
+        const mcpConfig = await withTransaction(async (tx) => {
+            return await txOperations.internal_getMcpServerByServerId(id)(tx);
+        });
+        // const mcpConfig = (registry as Record<string, any>)[id] || {};
 
-        const mcpOrigin = mcpConfig.url;
+        const mcpOrigin = mcpConfig?.mcpOrigin;
         if (mcpOrigin) {
             targetUpstream = new URL(mcpOrigin);
         }
 
-        if (mcpConfig.authHeaders && mcpConfig.requireAuth) {
+        if (mcpConfig?.authHeaders && mcpConfig?.requireAuth) {
             authHeaders = mcpConfig.authHeaders as Record<string, unknown>;
         }
     }
@@ -155,10 +157,10 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: { name: string, 
 
                         if (id) {
                             // TODO: Look up tool in database by name and server ID
-                            // const server = await withTransaction(async (tx) => {
-                            //     return await txOperations.internal_getMcpServerByServerId(id)(tx);
-                            // });
-                            const server = (registry as Record<string, any>)[id];
+                            const server = await withTransaction(async (tx) => {
+                                return await txOperations.internal_getMcpServerByServerId(id)(tx);
+                            });
+                            // const server = (registry as Record<string, any>)[id];
 
                             if (server) {
                                 // Store the internal server ID for later use
@@ -166,10 +168,9 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: { name: string, 
                                 console.log(`[${new Date().toISOString()}] Found server with internal ID: ${serverId}`);
 
                                 // TODO: there can be multiple tools with the same name, we need to find the correct one
-                                // const tools = await withTransaction(async (tx) => {
-                                //     return await txOperations.listMcpToolsByServer(server.id)(tx);
-                                // });
-                                const tools = server.pricing?.tools || {};
+                                const tools = await withTransaction(async (tx) => {
+                                    return await txOperations.listMcpToolsByServer(server.id)(tx);
+                                });
 
                                 const toolConfig = tools[toolName];
 
@@ -223,28 +224,22 @@ async function getOrCreateUser(walletAddress: string): Promise<User | null> {
     if (!walletAddress) return null;
 
     // TODO: Replace with actual DB call
-    // return await withTransaction(async (tx) => {
-    //     let user = await txOperations.getUserByWalletAddress(walletAddress)(tx);
-    //     
-    //     if (!user) {
-    //         console.log(`[${new Date().toISOString()}] Creating new user with wallet ${walletAddress}`);
-    //         user = await txOperations.createUser({
-    //             walletAddress,
-    //             displayName: `User_${walletAddress.substring(0, 8)}`
-    //         })(tx);
-    //     } else {
-    //         // Update last login
-    //         await txOperations.updateUserLastLogin(user.id)(tx);
-    //     }
-    //     
-    //     return user as User;
-    // });
-
-    return {
-        id: `user_${walletAddress.substring(0, 8)}`,
-        walletAddress,
-        displayName: `User_${walletAddress.substring(0, 8)}`
-    };
+    return await withTransaction(async (tx) => {
+        let user = await txOperations.getUserByWalletAddress(walletAddress)(tx);
+        
+        if (!user) {
+            console.log(`[${new Date().toISOString()}] Creating new user with wallet ${walletAddress}`);
+            user = await txOperations.createUser({
+                walletAddress,
+                displayName: `User_${walletAddress.substring(0, 8)}`
+            })(tx);
+        } else {
+            // Update last login
+            await txOperations.updateUserLastLogin(user.id)(tx);
+        }
+        
+        return user as User;
+    });
 }
 
 // Helper function to ensure non-undefined values for database operations
@@ -307,27 +302,22 @@ verbs.forEach(verb => {
                 console.log(`[${new Date().toISOString()}] Payment verification failed, returning early`)
 
                 if (toolCall.toolId && toolCall.serverId) {
-                    // TODO: Record failed payment attempt in analytics
+                    await withTransaction(async (tx) => {
+                        // Record tool usage with error status
+                        await txOperations.recordToolUsage({
+                            toolId: ensureString(toolCall.toolId),
+                            userId: user?.id,
+                            responseStatus: 'payment_failed',
+                            executionTimeMs: Date.now() - startTime,
+                            ipAddress: c.req.header('x-forwarded-for') || c.req.header('x-real-ip'),
+                            userAgent: c.req.header('user-agent'),
+                            requestData: {
+                                toolName: toolCall.name,
+                                args: toolCall.args
+                            }
+                        })(tx);
+                    });
                 }
-
-                // TODO: Record failed payment attempt in analytics
-                // if (toolCall.toolId && toolCall.serverId) {
-                //     await withTransaction(async (tx) => {
-                //         // Record tool usage with error status
-                //         await txOperations.recordToolUsage({
-                //             toolId: ensureString(toolCall.toolId),
-                //             userId: user?.id,
-                //             responseStatus: 'payment_failed',
-                //             executionTimeMs: Date.now() - startTime,
-                //             ipAddress: c.req.header('x-forwarded-for') || c.req.header('x-real-ip'),
-                //             userAgent: c.req.header('user-agent'),
-                //             requestData: {
-                //                 toolName: toolCall.name,
-                //                 args: toolCall.args
-                //             }
-                //         })(tx);
-                //     });
-                // }
 
                 c.status(402);
                 return c.json({
@@ -408,23 +398,23 @@ verbs.forEach(verb => {
         console.log(`[${new Date().toISOString()}] Received upstream response, mirroring back to client`)
 
         // TODO: Record tool usage if we have tool information
-        // if (toolCall && toolCall.toolId && toolCall.serverId) {
-        //     await withTransaction(async (tx) => {
-        //         // Record tool usage
-        //         await txOperations.recordToolUsage({
-        //             toolId: ensureString(toolCall.toolId),
-        //             userId: user?.id,
-        //             responseStatus: upstream.status.toString(),
-        //             executionTimeMs: Date.now() - startTime,
-        //             ipAddress: c.req.header('x-forwarded-for') || c.req.header('x-real-ip'),
-        //             userAgent: c.req.header('user-agent'),
-        //             requestData: {
-        //                 toolName: toolCall.name,
-        //                 args: toolCall.args
-        //             }
-        //         })(tx);
-        //     });
-        // }
+        if (toolCall && toolCall.toolId && toolCall.serverId) {
+            await withTransaction(async (tx) => {
+                // Record tool usage
+                await txOperations.recordToolUsage({
+                    toolId: ensureString(toolCall.toolId),
+                    userId: user?.id,
+                    responseStatus: upstream.status.toString(),
+                    executionTimeMs: Date.now() - startTime,
+                    ipAddress: c.req.header('x-forwarded-for') || c.req.header('x-real-ip'),
+                    userAgent: c.req.header('user-agent'),
+                    requestData: {
+                        toolName: toolCall.name,
+                        args: toolCall.args
+                    }
+                })(tx);
+            });
+        }
 
         return mirrorRequest(upstream)
     })
