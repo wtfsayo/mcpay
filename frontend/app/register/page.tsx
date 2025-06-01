@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textArea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Server, Globe, CheckCircle, Loader2, Wallet, RefreshCw, AlertCircle, Lock } from "lucide-react"
 import { useAccount, useConnect, useDisconnect } from "wagmi"
+import { api } from "@/lib/utils"
 
 interface MCPTool {
   name: string
@@ -78,40 +79,108 @@ export default function RegisterPage() {
   const [isLoadingTools, setIsLoadingTools] = useState(false)
   const [toolsError, setToolsError] = useState("")
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState("")
+  const [registeredServer, setRegisteredServer] = useState<any>(null)
   const [showAuthHeaders, setShowAuthHeaders] = useState(false)
 
   const { address: walletAddress, isConnected: isWalletConnected, isConnecting: isAccountConnecting } = useAccount()
   const { connect, connectors, isPending: isConnectingWallet, error: connectError } = useConnect()
   const { disconnect, isPending: isDisconnectingWallet } = useDisconnect()
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    const submissionData = {
-      ...formData,
-      walletAddress,
-      tools: tools.map((tool) => ({
-        ...tool,
-        price: tool.price || "0.10", // Default price if not set
-      })),
+    if (!walletAddress) {
+      setSubmitError("Please connect your wallet first")
+      return
     }
 
-    console.log("Submitting MCP server:", submissionData)
-    setIsSubmitted(true)
+    setIsSubmitting(true)
+    setSubmitError("")
 
-    // Reset form after 3 seconds
-    setTimeout(() => {
-      setIsSubmitted(false)
-      setFormData({
-        name: "",
-        description: "",
-        url: "",
-        headers: "",
-      })
-      setTools([])
-      setToolsError("")
-      setShowAuthHeaders(false)
-    }, 3000)
+    try {
+      // Parse authentication headers if provided
+      let authHeaders: Record<string, unknown> | undefined
+      if (showAuthHeaders && formData.headers.trim()) {
+        authHeaders = {}
+        const lines = formData.headers.split('\n')
+        for (const line of lines) {
+          const trimmedLine = line.trim()
+          if (trimmedLine && trimmedLine.includes(':')) {
+            const [key, ...valueParts] = trimmedLine.split(':')
+            const value = valueParts.join(':').trim()
+            if (key && value) {
+              authHeaders[key.trim()] = value
+            }
+          }
+        }
+      }
+
+      // Prepare tools data with payment information
+      const toolsWithPayment = tools
+        .filter(tool => tool.price && parseFloat(tool.price) > 0)
+        .map(tool => ({
+          name: tool.name,
+          payment: {
+            maxAmountRequired: parseFloat(tool.price || "0"),
+            asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // USDC on Base Sepolia
+            network: "base-sepolia",
+            resource: `tool://${tool.name}`,
+            description: `Payment for ${tool.name} tool usage`,
+            payTo: walletAddress,
+          }
+        }))
+
+      // Prepare API request payload
+      const payload = {
+        mcpOrigin: formData.url,
+        receiverAddress: walletAddress,
+        name: formData.name,
+        description: formData.description,
+        requireAuth: showAuthHeaders && authHeaders && Object.keys(authHeaders).length > 0,
+        ...(authHeaders && Object.keys(authHeaders).length > 0 && { authHeaders }),
+        ...(toolsWithPayment.length > 0 && { tools: toolsWithPayment }),
+        metadata: {
+          registeredFromUI: true,
+          timestamp: new Date().toISOString(),
+          toolsCount: tools.length,
+          monetizedToolsCount: toolsWithPayment.length
+        }
+      }
+
+      console.log("Submitting server registration:", payload)
+
+      // Make API call to register the server
+      const result = await api.registerServer(payload)
+      console.log("Server registration successful:", result)
+
+      setRegisteredServer(result)
+      setIsSubmitted(true)
+
+      // Reset form after 5 seconds
+      setTimeout(() => {
+        setIsSubmitted(false)
+        setRegisteredServer(null)
+        setFormData({
+          name: "",
+          description: "",
+          url: "",
+          headers: "",
+        })
+        setTools([])
+        setToolsError("")
+        setSubmitError("")
+        setShowAuthHeaders(false)
+      }, 5000)
+
+    } catch (error) {
+      console.error("Server registration failed:", error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+      setSubmitError(`Registration failed: ${errorMessage}`)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleInputChange = (field: string, value: string) => {
@@ -129,30 +198,19 @@ export default function RegisterPage() {
     setToolsError("")
 
     try {
-      const apiUrl = `https://api.mcpay.fun/api/inspect-mcp-tools?url=${encodeURIComponent(url)}`
-      const response = await fetch(apiUrl)
-
-      if (!response.ok) {
-        let errorDetails = ""
-        try {
-          const errorData = await response.json()
-          errorDetails = errorData.message || JSON.stringify(errorData)
-        } catch (e) {
-          // Failed to parse error JSON
-          errorDetails = response.statusText
-        }
-        throw new Error(`HTTP error! status: ${response.status} - ${errorDetails}`)
-      }
-
-      const fetchedTools: MCPTool[] = await response.json()
+      const fetchedTools: MCPTool[] = await api.getMcpTools(url)
 
       if (!Array.isArray(fetchedTools)) {
         console.error("Fetched data is not an array:", fetchedTools)
         throw new Error("Invalid data format received from server.")
       }
       
-      // Tools are fetched without price; UI will default it or user can set it.
-      setTools(fetchedTools)
+      // Set default price for all tools
+      const toolsWithDefaultPrice = fetchedTools.map(tool => ({
+        ...tool,
+        price: tool.price || "0.10"
+      }))
+      setTools(toolsWithDefaultPrice)
 
       // Auto-fill server name and description if not already set by user
       // and if tools were successfully fetched.
@@ -231,13 +289,62 @@ export default function RegisterPage() {
       <div className="max-w-2xl mx-auto">
         <Card className={`${isDark ? "bg-gray-800 border-gray-700" : ""}`}>
           <CardContent className="pt-6">
-            <div className="text-center space-y-4">
+            <div className="text-center space-y-6">
               <CheckCircle className={`h-16 w-16 mx-auto ${isDark ? "text-green-400" : "text-green-600"}`} />
-              <h3 className="text-xl font-semibold">MCP Server Registered!</h3>
-              <p className={`${isDark ? "text-gray-300" : "text-gray-600"}`}>
-                Your server with {tools.length} tools has been registered successfully. Payment processing is now active
-                for your wallet address.
-              </p>
+              <div className="space-y-2">
+                <h3 className="text-xl font-semibold">MCP Server Registered!</h3>
+                <p className={`${isDark ? "text-gray-300" : "text-gray-600"}`}>
+                  Your server has been registered successfully and is now available on the platform.
+                </p>
+              </div>
+
+              {registeredServer && (
+                <div className="space-y-4">
+                  <div className={`text-left p-4 rounded-lg ${isDark ? "bg-gray-700" : "bg-gray-50"}`}>
+                    <h4 className="font-semibold mb-3">Server Details</h4>
+                    <div className="space-y-2 text-sm">
+                      <div>
+                        <span className={`font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>Name: </span>
+                        <span className={isDark ? "text-gray-400" : "text-gray-600"}>{registeredServer.server?.name}</span>
+                      </div>
+                      <div>
+                        <span className={`font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>Server ID: </span>
+                        <span className={`font-mono text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>{registeredServer.server?.serverId}</span>
+                      </div>
+                      <div>
+                        <span className={`font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>Status: </span>
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${isDark ? "bg-green-900 text-green-300" : "bg-green-100 text-green-800"}`}>
+                          {registeredServer.server?.status || 'Active'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {registeredServer.summary && (
+                    <div className={`text-left p-4 rounded-lg ${isDark ? "bg-gray-700" : "bg-gray-50"}`}>
+                      <h4 className="font-semibold mb-3">Tools Summary</h4>
+                      <div className="grid grid-cols-3 gap-4 text-center">
+                        <div>
+                          <div className="text-2xl font-bold">{registeredServer.summary.totalTools}</div>
+                          <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>Total Tools</div>
+                        </div>
+                        <div>
+                          <div className="text-2xl font-bold text-green-600">{registeredServer.summary.monetizedTools}</div>
+                          <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>Monetized</div>
+                        </div>
+                        <div>
+                          <div className="text-2xl font-bold text-blue-600">{registeredServer.summary.freeTools}</div>
+                          <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>Free</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                    Payment processing is now active for your wallet address. Users can discover and pay to use your tools.
+                  </p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -492,11 +599,28 @@ export default function RegisterPage() {
               className={`w-full ${
                 isDark ? "bg-gray-700 text-white hover:bg-gray-600" : "bg-gray-900 text-white hover:bg-gray-800"
               }`}
-              disabled={!isFormValid}
+              disabled={!isFormValid || isSubmitting}
             >
-              <Globe className="h-4 w-4 mr-2" />
-              Register MCP Server
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Registering Server...
+                </>
+              ) : (
+                <>
+                  <Globe className="h-4 w-4 mr-2" />
+                  Register MCP Server
+                </>
+              )}
             </Button>
+
+            {/* Submit Error Display */}
+            {submitError && (
+              <div className="flex items-center gap-2 text-red-500 text-sm bg-red-50 dark:bg-red-900/20 p-3 rounded-lg">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{submitError}</span>
+              </div>
+            )}
           </form>
         </CardContent>
       </Card>
