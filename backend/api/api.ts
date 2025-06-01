@@ -5,18 +5,17 @@
  * It provides endpoints for user management, server configuration, and other core functionality.
  */
 
-import { type Context, Hono } from "hono";
+import { gateway } from "@vercel/ai-sdk-gateway";
+import { generateObject } from "ai";
+import { Hono } from "hono";
 import { cors } from 'hono/cors';
-import registry from '../hardcoded-registry.js';
-import { getMcpTools } from "../lib/inspect-mcp.js";
-import { txOperations, withTransaction } from "../db/actions.js";
+import { randomUUID } from "node:crypto";
 import { PaymentRequirementsSchema } from "x402/types";
 import { z } from "zod";
-import { randomUUID } from "node:crypto";
-import { generateObject } from "ai";
-import { gateway } from "@vercel/ai-sdk-gateway";
+import { txOperations, withTransaction } from "../db/actions.js";
 import db from "../db/index.js";
-import { VLayer, type ExecutionContext, type VerificationResult } from "../lib/3rd-parties/vlayer.js";
+import { VLayer, type ExecutionContext } from "../lib/3rd-parties/vlayer.js";
+import { getMcpTools } from "../lib/inspect-mcp.js";
 
 export const runtime = 'nodejs'
 
@@ -235,22 +234,9 @@ app.post('/servers', async (c) => {
 app.get('/servers/:serverId/tools', async (c) => {
     const serverId = c.req.param('serverId');
 
-    // TODO: Replace with actual DB call
-    // const tools = await withTransaction(async (tx) => {
-    //     return await txOperations.listMcpToolsByServer(serverId)(tx);
-    // });
-
-    const tools = [
-        {
-            id: 'tool_1',
-            serverId,
-            name: 'example_tool',
-            description: 'An example tool',
-            isMonetized: false,
-            payment: null,
-            createdAt: new Date().toISOString()
-        }
-    ];
+    const tools = await withTransaction(async (tx) => {
+        return await txOperations.listMcpToolsByServer(serverId)(tx);
+    });
 
     return c.json(tools);
 });
