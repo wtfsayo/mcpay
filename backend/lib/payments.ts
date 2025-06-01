@@ -6,6 +6,8 @@ import { exact } from "x402/schemes";
 
 export const facilitatorUrl = process.env.FACILITATOR_URL as Resource || "https://x402.org/facilitator";
 
+console.log(`[PAYMENTS] Using facilitator URL: ${facilitatorUrl}`);
+
 export const { verify, settle } = useFacilitator({ url: facilitatorUrl });
 export const x402Version = 1;
 

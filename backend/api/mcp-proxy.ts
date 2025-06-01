@@ -253,13 +253,16 @@ verbs.forEach(verb => {
             console.log(`[${new Date().toISOString()}] Paid tool call detected: ${toolCall.name}`)
             console.log(`[${new Date().toISOString()}] Payment details: ${JSON.stringify(toolCall.payment, null, 2)}`)
 
+            // Ensure payTo field exists, default to asset address if missing
+            const payTo = toolCall.payment.payTo || toolCall.payment.asset;
+            
             const paymentRequirements = [
                 createExactPaymentRequirements(
                     toolCall.payment.maxAmountRequired,
                     toolCall.payment.network,
                     toolCall.payment.resource,
                     toolCall.payment.description,
-                    toolCall.payment.payTo
+                    payTo
                 ),
             ];
             console.log(`[${new Date().toISOString()}] Created payment requirements: ${JSON.stringify(paymentRequirements, null, 2)}`)
@@ -359,12 +362,28 @@ verbs.forEach(verb => {
                     });
                 }
 
-                const settleResponse = await settle(
-                    decodedPayment,
-                    paymentRequirement
-                );
+                console.log(`[${new Date().toISOString()}] About to settle payment with:`)
+                console.log(`[${new Date().toISOString()}] - Decoded payment: ${JSON.stringify(decodedPayment, null, 2)}`)
+                console.log(`[${new Date().toISOString()}] - Payment requirement: ${JSON.stringify(paymentRequirement, null, 2)}`)
+
+                let settleResponse;
+                try {
+                    settleResponse = await settle(
+                        decodedPayment,
+                        paymentRequirement
+                    );
+                    console.log(`[${new Date().toISOString()}] Settlement successful: ${JSON.stringify(settleResponse, null, 2)}`)
+                } catch (settleError) {
+                    console.error(`[${new Date().toISOString()}] Settlement failed:`, settleError)
+                    console.error(`[${new Date().toISOString()}] Settlement error details:`, {
+                        message: settleError instanceof Error ? settleError.message : String(settleError),
+                        stack: settleError instanceof Error ? settleError.stack : undefined
+                    })
+                    throw settleError; // Re-throw to be caught by the outer try-catch
+                }
 
                 if (settleResponse.success === false) {
+                    console.log(`[${new Date().toISOString()}] Settlement returned success=false: ${settleResponse.errorReason}`)
                     c.status(402);
                     return c.json({
                         x402Version,
