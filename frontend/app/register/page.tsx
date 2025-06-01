@@ -8,11 +8,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textArea"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Server, Globe, CheckCircle, Loader2, Wallet, RefreshCw, AlertCircle, Lock, ChevronDown, ChevronRight, Info } from "lucide-react"
+import { Server, Globe, CheckCircle, Loader2, Wallet, RefreshCw, AlertCircle, Lock, ChevronDown, ChevronRight, Info, ExternalLink } from "lucide-react"
 import { useAccount, useConnect, useDisconnect } from "wagmi"
 import { api } from "@/lib/utils"
 import { useTheme } from "@/context/ThemeContext"
 import { ConnectButton } from "@/components/connect-button"
+import { openBlockscout } from "@/lib/blockscout"
 
 interface MCPTool {
   name: string
@@ -307,6 +308,23 @@ export default function RegisterPage() {
                             {registeredServer.server?.status || 'Active'}
                           </span>
                         </div>
+                        <div className="flex flex-col sm:flex-row sm:justify-between">
+                          <span className={`font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>Receiver Address:</span>
+                          <div className="flex items-center gap-2 mt-1 sm:mt-0">
+                            <span className={`font-mono text-xs ${isDark ? "text-gray-400" : "text-gray-600"} break-all`}>
+                              {registeredServer.server?.receiverAddress}
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openBlockscout(registeredServer.server?.receiverAddress)}
+                              className={`p-1 h-auto ${isDark ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-gray-900"}`}
+                              title="View on Blockscout"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
@@ -331,9 +349,20 @@ export default function RegisterPage() {
                     )}
 
                     <div className={`p-4 rounded-lg ${isDark ? "bg-blue-900/20 border border-blue-800" : "bg-blue-50 border border-blue-200"}`}>
-                      <p className={`text-sm ${isDark ? "text-blue-200" : "text-blue-800"} text-center`}>
-                        Payment processing is now active for your wallet address. Users can discover and pay to use your tools.
-                      </p>
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                        <p className={`text-sm ${isDark ? "text-blue-200" : "text-blue-800"} text-center sm:text-left`}>
+                          Payment processing is now active for your wallet address.
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openBlockscout(walletAddress || "")}
+                          className={`flex items-center gap-2 ${isDark ? "border-blue-700 text-blue-200 hover:bg-blue-800/50" : "border-blue-300 text-blue-800 hover:bg-blue-100"}`}
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                          View Address
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -514,11 +543,23 @@ export default function RegisterPage() {
                       </Button>
                     </div>
 
-                    <Input
-                      value={walletAddress}
-                      readOnly
-                      className={`font-mono text-sm h-12 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-gray-50 border-gray-300 text-gray-900"}`}
-                    />
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={walletAddress}
+                        readOnly
+                        className={`flex-1 font-mono text-sm h-12 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-gray-50 border-gray-300 text-gray-900"}`}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openBlockscout(walletAddress)}
+                        className={`px-3 h-12 ${isDark ? "border-gray-600 text-gray-400 hover:text-white hover:bg-gray-700" : "border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100"}`}
+                        title="View on Blockscout"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 )}
 

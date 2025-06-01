@@ -4,7 +4,8 @@ import { useState } from "react"
 import { useConnect, useAccount, useDisconnect, type Connector } from "wagmi"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Loader2, ChevronDown, LogOut, Wallet } from "lucide-react"
+import { Loader2, ChevronDown, LogOut, Wallet, ExternalLink } from "lucide-react"
+import { openBlockscout } from "@/lib/blockscout"
 
 export function ConnectButton() {
   const [isLoading, setIsLoading] = useState(false)
@@ -51,6 +52,13 @@ export function ConnectButton() {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuItem 
+            onClick={() => openBlockscout(address)} 
+            className="cursor-pointer"
+          >
+            <ExternalLink className="mr-2 h-4 w-4" />
+            View on Explorer
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={handleDisconnect} className="cursor-pointer">
             <LogOut className="mr-2 h-4 w-4" />
             Disconnect

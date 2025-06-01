@@ -28,6 +28,7 @@ import {
 } from "lucide-react"
 import { useTheme } from "@/context/ThemeContext"
 import { api } from "@/lib/utils"
+import { openBlockscout } from "@/lib/blockscout"
 
 // Types based on the API response structure
 interface ServerData {
@@ -406,6 +407,15 @@ export default function ServerDashboard() {
                   >
                     <Copy className="h-4 w-4" />
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openBlockscout(serverData.receiverAddress)}
+                    className={isDark ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600" : ""}
+                    title="View on Blockscout"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
             </CardContent>
@@ -445,7 +455,7 @@ export default function ServerDashboard() {
                   size="sm"
                   variant="outline"
                   className={`w-full ${isDark ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600" : ""}`}
-                  onClick={() => window.open(`https://base-sepolia.blockscout.com/address/${serverData.creator.walletAddress}`, '_blank')}
+                  onClick={() => openBlockscout(serverData.creator.walletAddress)}
                 >
                   <ExternalLink className="h-4 w-4 mr-2" />
                   View on Explorer
@@ -571,7 +581,14 @@ export default function ServerDashboard() {
                       <div>
                         <p className="text-sm font-medium">{proof.tool.name}</p>
                         <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                          {proof.user.displayName} • {formatDate(proof.createdAt)}
+                          <button
+                            onClick={() => openBlockscout(proof.user.walletAddress)}
+                            className={`hover:underline ${isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-700"}`}
+                          >
+                            {proof.user.displayName}
+                          </button>
+                          {" • "}
+                          {formatDate(proof.createdAt)}
                         </p>
                       </div>
                     </div>
@@ -617,7 +634,14 @@ export default function ServerDashboard() {
                     <div>
                       <p className="font-medium">{formatCurrency(payment.amount, payment.currency)}</p>
                       <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                        {payment.user.displayName} • {formatDate(payment.createdAt)}
+                        <button
+                          onClick={() => openBlockscout(payment.user.walletAddress)}
+                          className={`hover:underline ${isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-700"}`}
+                        >
+                          {payment.user.displayName}
+                        </button>
+                        {" • "}
+                        {formatDate(payment.createdAt)}
                       </p>
                     </div>
                   </div>
