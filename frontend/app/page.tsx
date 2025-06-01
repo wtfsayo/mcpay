@@ -19,6 +19,18 @@ import { ToolsModal, MCPServer } from "@/components/ToolsModal"
 import { useTheme } from "@/context/ThemeContext"
 
 // API response types
+interface APITool {
+  id: string;
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  isMonetized: boolean;
+  payment: Record<string, unknown> | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface APIServer {
   id: string;
   serverId: string;
@@ -29,19 +41,10 @@ interface APIServer {
   status: string;
   createdAt: string;
   updatedAt: string;
+  tools: APITool[];
 }
 
-interface APITool {
-  id: string;
-  serverId: string;
-  name: string;
-  description: string;
-  isMonetized: boolean;
-  payment: Record<string, unknown> | null;
-  createdAt: string;
-}
-
-const transformServerData = (apiServer: APIServer, tools: APITool[] = []): MCPServer => ({
+const transformServerData = (apiServer: APIServer): MCPServer => ({
   id: apiServer.serverId,
   name: apiServer.name || 'Unknown Server',
   description: apiServer.description || 'No description available',
@@ -49,10 +52,13 @@ const transformServerData = (apiServer: APIServer, tools: APITool[] = []): MCPSe
   category: (apiServer.metadata as Record<string, unknown>)?.category as string || 'General',
   icon: <TrendingUp className="h-6 w-6" />,
   verified: apiServer.status === 'active',
-  tools: tools.map(tool => ({
+  tools: apiServer.tools.map(tool => ({
     name: tool.name,
     description: tool.description,
-    inputSchema: { type: "object", properties: {} },
+    inputSchema: {
+      type: (tool.inputSchema as any)?.type || "object",
+      properties: (tool.inputSchema as any)?.properties || {}
+    },
     annotations: {
       title: tool.name,
       readOnlyHint: !tool.isMonetized,
@@ -110,20 +116,9 @@ export default function MCPBrowser() {
         }
         
         const servers: APIServer[] = await serversResponse.json()
+        const transformedServers = servers.map(server => transformServerData(server))
         
-        const serversWithTools = await Promise.all(
-          servers.map(async (server) => {
-            try {
-              const toolsResponse = await fetch(`https://api.mcpay.fun/api/servers/${server.serverId}/tools`)
-              const tools: APITool[] = toolsResponse.ok ? await toolsResponse.json() : []
-              return transformServerData(server, tools)
-            } catch {
-              return transformServerData(server, [])
-            }
-          })
-        )
-        
-        setMcpServers(serversWithTools)
+        setMcpServers(transformedServers)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch servers')
       } finally {

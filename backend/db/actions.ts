@@ -310,6 +310,22 @@ export const txOperations = {
                 status: true,
                 createdAt: true,
                 updatedAt: true
+            },
+            with: {
+                tools: {
+                    columns: {
+                        id: true,
+                        name: true,
+                        description: true,
+                        inputSchema: true,
+                        isMonetized: true,
+                        payment: true,
+                        status: true,
+                        createdAt: true,
+                        updatedAt: true
+                    },
+                    orderBy: [mcpTools.name]
+                }
             }
         });
     },

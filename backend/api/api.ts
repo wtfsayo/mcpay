@@ -195,7 +195,7 @@ app.post('/servers', async (c) => {
                         serverId: server.id,
                         name: tool.name,
                         description: tool.description || `Access to ${tool.name}`,
-                        inputSchema: {},
+                        inputSchema: tool.inputSchema ? JSON.parse(JSON.stringify(tool.inputSchema)) : {},
                         isMonetized: monetizedTool?.payment ? true : false,
                         payment: monetizedTool?.payment
                     })(tx)
