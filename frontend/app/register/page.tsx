@@ -12,6 +12,7 @@ import { Server, Globe, CheckCircle, Loader2, Wallet, RefreshCw, AlertCircle, Lo
 import { useAccount, useConnect, useDisconnect } from "wagmi"
 import { api } from "@/lib/utils"
 import { useTheme } from "@/context/ThemeContext"
+import { ConnectButton } from "@/components/connect-button"
 
 interface MCPTool {
   name: string
@@ -487,25 +488,7 @@ export default function RegisterPage() {
 
                 {/* Connect Wallet Button */}
                 {!isWalletConnected && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleConnectWallet}
-                    disabled={isConnectingWallet || isAccountConnecting}
-                    className={`w-full h-12 text-base ${isDark ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600" : "bg-white border-gray-300 text-gray-900 hover:bg-gray-50"}`}
-                  >
-                    {isConnectingWallet || isAccountConnecting ? (
-                      <>
-                        <Loader2 className="h-5 w-5 mr-3 animate-spin" />
-                        Connecting...
-                      </>
-                    ) : (
-                      <>
-                        <Wallet className="h-5 w-5 mr-3" />
-                        Connect Wallet
-                      </>
-                    )}
-                  </Button>
+                  <ConnectButton />
                 )}
 
                 {/* Wallet Address Display */}
