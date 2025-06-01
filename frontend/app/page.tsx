@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+import Link from "next/link"
 
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,7 +11,7 @@ import { Input } from "@/components/ui/input"
 
 import {
   Search,
-  // ExternalLink,
+  ExternalLink,
   PenToolIcon as Tool,
   // Database,
   Globe,
@@ -359,16 +360,19 @@ export default function MCPBrowser() {
                 </div>
 
                 {/* Quick Actions */}
-                {/* <div className="flex gap-2">
+                <div className="flex gap-2">
                   <Button
                     size="sm"
                     variant="outline"
+                    asChild
                     className={`flex-1 ${isDark ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600" : ""}`}
                   >
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    Analytics
+                    <Link href={`/servers/${server.id}`}>
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      View Dashboard
+                    </Link>
                   </Button>
-                </div> */}
+                </div>
               </CardContent>
             </Card>
           ))}
