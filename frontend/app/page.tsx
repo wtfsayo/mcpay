@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -24,143 +24,127 @@ import {
   Moon,
   Sun,
   TrendingUp,
+  AlertCircle,
+  Loader2,
 } from "lucide-react"
 import { ToolsModal, MCPServer } from "@/components/ToolsModal"
 import { useTheme } from "@/context/ThemeContext"
 
+// API response types based on actions.ts
+interface APIServer {
+  id: string;
+  serverId: string;
+  name: string;
+  receiverAddress: string;
+  description: string;
+  metadata?: Record<string, unknown>;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
-const mcpServers: MCPServer[] = [
-  // {
-  //   id: "zapier",
-  //   name: "Zapier Actions",
-  //   description: "Connect to 6000+ apps and automate workflows with Zapier's powerful integration platform.",
-  //   url: "https://actions.zapier.com/mcp/•••••••/sse",
-  //   category: "Automation",
-  //   icon: <Zap className="h-6 w-6" />,
-  //   verified: true,
-  //   tools: [
-  //     {
-  //       name: "create_zap",
-  //       description: "Create a new Zap automation",
-  //       inputSchema: {
-  //         type: "object",
-  //         properties: {
-  //           trigger_app: { type: "string", description: "The trigger application" },
-  //           action_app: { type: "string", description: "The action application" },
-  //           name: { type: "string", description: "Name for the Zap" },
-  //         },
-  //       },
-  //       annotations: {
-  //         title: "Create Zap",
-  //         destructiveHint: false,
-  //         idempotentHint: false,
-  //       },
-  //     },
-  //     {
-  //       name: "list_apps",
-  //       description: "List available applications",
-  //       inputSchema: {
-  //         type: "object",
-  //         properties: {
-  //           category: { type: "string", description: "Filter by category" },
-  //         },
-  //       },
-  //       annotations: {
-  //         title: "List Apps",
-  //         readOnlyHint: true,
-  //       },
-  //     },
-  //     {
-  //       name: "trigger_zap",
-  //       description: "Manually trigger an existing Zap",
-  //       inputSchema: {
-  //         type: "object",
-  //         properties: {
-  //           zap_id: { type: "string", description: "The Zap ID to trigger" },
-  //           data: { type: "object", description: "Input data for the trigger" },
-  //         },
-  //       },
-  //       annotations: {
-  //         title: "Trigger Zap",
-  //         destructiveHint: false,
-  //       },
-  //     },
-  //   ],
-  // },
-  {
-    id: "financialdatasetsai",
-    name: "Financial Datasets AI",
-    description: "Access various financial datasets, market information, and company profiles.",
-    url: "https://financialdatasets.ai/api/server/sse",
-    category: "Finance",
+interface APITool {
+  id: string;
+  serverId: string;
+  name: string;
+  description: string;
+  isMonetized: boolean;
+  payment: any;
+  createdAt: string;
+}
+
+// Transform API data to frontend format
+const transformServerData = (apiServer: APIServer, tools: APITool[] = []): MCPServer => {
+  return {
+    id: apiServer.serverId,
+    name: apiServer.name || 'Unknown Server',
+    description: apiServer.description || 'No description available',
+    url: `${apiServer.receiverAddress}`, // Using receiverAddress as URL for now
+    category: (apiServer.metadata as any)?.category || 'General',
     icon: <TrendingUp className="h-6 w-6" />,
-    verified: false,
-    tools: [
-      {
-        name: "get_company_profile",
-        description: "Retrieve detailed profile information for a publicly traded company.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            ticker_symbol: { type: "string", description: "The stock ticker symbol of the company (e.g., AAPL, MSFT)." },
-          },
-        },
-        annotations: {
-          title: "Get Company Profile",
-          readOnlyHint: true,
-        },
+    verified: apiServer.status === 'active',
+    tools: tools.map(tool => ({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: {
+        type: "object",
+        properties: {},
       },
-      {
-        name: "get_stock_quote",
-        description: "Fetch real-time or delayed stock quote for a given ticker symbol.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            ticker_symbol: { type: "string", description: "The stock ticker symbol (e.g., AAPL, GOOGL)." },
-            exchange: { type: "string", description: "Optional: The stock exchange (e.g., NASDAQ, NYSE)." },
-          },
-        },
-        annotations: {
-          title: "Get Stock Quote",
-          readOnlyHint: true,
-        },
+      annotations: {
+        title: tool.name,
+        readOnlyHint: !tool.isMonetized,
+        destructiveHint: false,
       },
-      {
-        name: "search_economic_data",
-        description: "Search for economic indicators and datasets (e.g., GDP, inflation rates).",
-        inputSchema: {
-          type: "object",
-          properties: {
-            indicator_name: { type: "string", description: "Name or keyword of the economic indicator (e.g., 'GDP', 'inflation rate')." },
-            country_code: { type: "string", description: "ISO country code (e.g., US, DE, JP)." },
-            frequency: { type: "string", description: "Data frequency (e.g., 'annual', 'quarterly', 'monthly')." },
-          },
-        },
-        annotations: {
-          title: "Search Economic Data",
-          readOnlyHint: true,
-        },
-      },
-    ],
-  },
-]
+    })),
+  };
+};
 
 const categories = [
   "All",
-  // "Automation",
-  // "Database",
-  // "Development",
-  // "Productivity",
-  // "Utilities",
-  // "Communication",
-  // "AI/ML",
+  "General",
   "Finance",
+  "Automation",
+  "Database",
+  "Development",
+  "Productivity",
+  "Utilities",
+  "Communication",
+  "AI/ML",
 ]
 
 export default function MCPBrowser() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("All")
+  const [mcpServers, setMcpServers] = useState<MCPServer[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const { isDark, toggleTheme } = useTheme()
+
+  // Fetch servers from API
+  useEffect(() => {
+    const fetchServers = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        
+        // Fetch servers
+        const serversResponse = await fetch('https://api.mcpay.fun/api/servers?limit=50')
+        if (!serversResponse.ok) {
+          throw new Error(`Failed to fetch servers: ${serversResponse.status}`)
+        }
+        
+        const servers: APIServer[] = await serversResponse.json()
+        
+        // Fetch tools for each server
+        const serversWithTools = await Promise.all(
+          servers.map(async (server) => {
+            try {
+              const toolsResponse = await fetch(`https://api.mcpay.fun/api/servers/${server.serverId}/tools`)
+              let tools: APITool[] = []
+              
+              if (toolsResponse.ok) {
+                tools = await toolsResponse.json()
+              }
+              
+              return transformServerData(server, tools)
+            } catch (toolError) {
+              console.warn(`Failed to fetch tools for server ${server.serverId}:`, toolError)
+              return transformServerData(server, [])
+            }
+          })
+        )
+        
+        setMcpServers(serversWithTools)
+      } catch (err) {
+        console.error('Error fetching servers:', err)
+        setError(err instanceof Error ? err.message : 'Failed to fetch servers')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchServers()
+  }, [])
 
   const filteredServers = mcpServers.filter((server) => {
     const matchesSearch =
@@ -172,6 +156,75 @@ export default function MCPBrowser() {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
+  }
+
+  // Loading state
+  if (loading) {
+    return (
+      <div
+        className={`min-h-screen p-6 transition-colors duration-200 ${
+          isDark
+            ? "bg-gradient-to-br from-black to-gray-900 text-white"
+            : "bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900"
+        }`}
+      >
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-8">
+            <h1 className="text-4xl font-bold mb-4">All MCPs</h1>
+            <p className={`text-lg max-w-3xl mx-auto ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+              Discover and explore Model Context Protocol servers. Connect AI models to external tools, data sources, and
+              environments through standardized interfaces.
+            </p>
+          </div>
+          
+          <div className="flex items-center justify-center py-12">
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-6 w-6 animate-spin" />
+              <p className={isDark ? "text-gray-300" : "text-gray-600"}>Loading MCP servers...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div
+        className={`min-h-screen p-6 transition-colors duration-200 ${
+          isDark
+            ? "bg-gradient-to-br from-black to-gray-900 text-white"
+            : "bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900"
+        }`}
+      >
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-8">
+            <h1 className="text-4xl font-bold mb-4">All MCPs</h1>
+            <p className={`text-lg max-w-3xl mx-auto ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+              Discover and explore Model Context Protocol servers. Connect AI models to external tools, data sources, and
+              environments through standardized interfaces.
+            </p>
+          </div>
+          
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <AlertCircle className={`h-12 w-12 mx-auto mb-4 ${isDark ? "text-red-400" : "text-red-500"}`} />
+              <h3 className="text-lg font-medium mb-2">Failed to load MCP servers</h3>
+              <p className={`mb-4 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                {error}
+              </p>
+              <Button 
+                onClick={() => window.location.reload()}
+                className={isDark ? "bg-gray-700 text-white hover:bg-gray-600" : ""}
+              >
+                Try Again
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -300,7 +353,7 @@ export default function MCPBrowser() {
                     className={`text-sm font-medium flex items-center gap-2 ${isDark ? "text-gray-300" : "text-gray-700"}`}
                   >
                     <Tool className="h-4 w-4" />
-                    Available Tools
+                    Available Tools ({server.tools.length})
                   </label>
                   <ToolsModal server={server} />
                 </div>
@@ -322,12 +375,15 @@ export default function MCPBrowser() {
         </div>
 
         {/* Empty State */}
-        {filteredServers.length === 0 && (
+        {filteredServers.length === 0 && !loading && !error && (
           <div className="text-center py-12">
             <Globe className={`h-12 w-12 mx-auto mb-4 ${isDark ? "text-gray-500" : "text-gray-400"}`} />
             <h3 className="text-lg font-medium mb-2">No MCP servers found</h3>
             <p className={isDark ? "text-gray-400" : "text-gray-600"}>
-              Try adjusting your search terms or category filter.
+              {mcpServers.length === 0 
+                ? "No servers are currently registered." 
+                : "Try adjusting your search terms or category filter."
+              }
             </p>
           </div>
         )}
