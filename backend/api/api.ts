@@ -75,13 +75,19 @@ app.get('/servers', async (c) => {
 
 app.get('/servers/:id', async (c) => {
     const serverId = c.req.param('id')
-    const server = await withTransaction(txOperations.getMcpServerByServerId(serverId))
+    
+    try {
+        const server = await withTransaction(txOperations.getMcpServerWithStats(serverId))
 
-    if (!server) {
-        return c.json({ error: 'Server not found' }, 404)
+        if (!server) {
+            return c.json({ error: 'Server not found' }, 404)
+        }
+
+        return c.json(server)
+    } catch (error) {
+        console.error('Error fetching server:', error)
+        return c.json({ error: 'Internal server error' }, 500)
     }
-
-    return c.json(server)
 })
 
 app.post('/servers', async (c) => {

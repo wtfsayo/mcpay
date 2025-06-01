@@ -7,15 +7,31 @@ The web has had a placeholder for exactly that since 1997: HTTP **402 Payment Re
 #### 3. Architecture
 
 ```
-┌──────────────┐        ┌──────────────┐
-│  Client      │───────▶│  MCP Proxy   │───────────▶  Your Tool / API
-│(app/agent)   │◀───────│(MCPay Edge)  │◀───────────│  (any runtime)
-└──────────────┘   ①402 └──────────────┘
-       ▲              │
-       │              │② x402 Payment (on-chain in USDC)
-       │              ▼
-   Analytics &                             
-   Usage events  ◀─────────────────────────┘
+                            ┌──────────────┐
+                            │    Client    │
+                            │ (app/agent)  │
+                            └──────┬───────┘
+                ①  unauthenticated │ HTTP request
+                                   ▼
+        ┌─────────────────────────────────────────────┐
+        │              MCP Proxy (Edge)               │
+        │  • replies 402 + price metadata             │
+        │  • signs & broadcasts payment               │
+        │  • retries request once payment confirmed   │
+        └──────┬──────────────┬───────────────────────┘
+               │              │
+               │② on-chain    │③ original request
+               │   payment    │   (after pay)
+               ▼              ▼
+        ┌──────────────┐  ┌──────────────┐
+        │  Blockchain   │  │   Your API   │
+        │ (USDC/EUROe)  │  │ (any stack)  │
+        └──────┬────────┘  └──────────────┘
+               │
+               │④ streamed usage & revenue events
+               ▼
+           (dashboard / analytics)
+
 ```
 
 

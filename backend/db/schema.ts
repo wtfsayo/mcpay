@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { boolean, check, decimal, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 
 // Merged MCP Servers table (combines mcps and mcpServers)
 export const mcpServers = pgTable('mcp_servers', {
@@ -235,3 +236,116 @@ export const proofs = pgTable('proofs', {
   index('proof_server_consistent_idx').on(table.serverId, table.isConsistent),
   check('confidence_score_range_check', sql`"confidence_score" >= 0 AND "confidence_score" <= 1`),
 ]);
+
+// Relations
+export const mcpServersRelations = relations(mcpServers, ({ one, many }) => ({
+  creator: one(users, {
+    fields: [mcpServers.creatorId],
+    references: [users.id],
+  }),
+  tools: many(mcpTools),
+  analytics: many(analytics),
+  ownership: many(serverOwnership),
+  webhooks: many(webhooks),
+  proofs: many(proofs),
+}));
+
+export const mcpToolsRelations = relations(mcpTools, ({ one, many }) => ({
+  server: one(mcpServers, {
+    fields: [mcpTools.serverId],
+    references: [mcpServers.id],
+  }),
+  pricing: many(toolPricing),
+  usage: many(toolUsage),
+  payments: many(payments),
+  proofs: many(proofs),
+}));
+
+export const usersRelations = relations(users, ({ many }) => ({
+  createdServers: many(mcpServers),
+  serverOwnerships: many(serverOwnership),
+  payments: many(payments),
+  toolUsage: many(toolUsage),
+  apiKeys: many(apiKeys),
+  proofs: many(proofs),
+}));
+
+export const toolPricingRelations = relations(toolPricing, ({ one }) => ({
+  tool: one(mcpTools, {
+    fields: [toolPricing.toolId],
+    references: [mcpTools.id],
+  }),
+}));
+
+export const toolUsageRelations = relations(toolUsage, ({ one }) => ({
+  tool: one(mcpTools, {
+    fields: [toolUsage.toolId],
+    references: [mcpTools.id],
+  }),
+  user: one(users, {
+    fields: [toolUsage.userId],
+    references: [users.id],
+  }),
+}));
+
+export const paymentsRelations = relations(payments, ({ one }) => ({
+  tool: one(mcpTools, {
+    fields: [payments.toolId],
+    references: [mcpTools.id],
+  }),
+  user: one(users, {
+    fields: [payments.userId],
+    references: [users.id],
+  }),
+}));
+
+export const serverOwnershipRelations = relations(serverOwnership, ({ one }) => ({
+  server: one(mcpServers, {
+    fields: [serverOwnership.serverId],
+    references: [mcpServers.id],
+  }),
+  user: one(users, {
+    fields: [serverOwnership.userId],
+    references: [users.id],
+  }),
+  grantedByUser: one(users, {
+    fields: [serverOwnership.grantedBy],
+    references: [users.id],
+  }),
+}));
+
+export const webhooksRelations = relations(webhooks, ({ one }) => ({
+  server: one(mcpServers, {
+    fields: [webhooks.serverId],
+    references: [mcpServers.id],
+  }),
+}));
+
+export const analyticsRelations = relations(analytics, ({ one }) => ({
+  server: one(mcpServers, {
+    fields: [analytics.serverId],
+    references: [mcpServers.id],
+  }),
+}));
+
+export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
+  user: one(users, {
+    fields: [apiKeys.userId],
+    references: [users.id],
+  }),
+}));
+
+export const proofsRelations = relations(proofs, ({ one }) => ({
+  tool: one(mcpTools, {
+    fields: [proofs.toolId],
+    references: [mcpTools.id],
+  }),
+  server: one(mcpServers, {
+    fields: [proofs.serverId],
+    references: [mcpServers.id],
+  }),
+  user: one(users, {
+    fields: [proofs.userId],
+    references: [users.id],
+  }),
+}));

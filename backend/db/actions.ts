@@ -101,12 +101,196 @@ export const txOperations = {
                 id: true,
                 serverId: true,
                 name: true,
+                mcpOrigin: false,
                 receiverAddress: true,
                 description: true,
                 metadata: true,
                 status: true,
                 createdAt: true,
                 updatedAt: true
+            },
+            with: {
+                creator: {
+                    columns: {
+                        id: true,
+                        walletAddress: true,
+                        displayName: true,
+                        avatarUrl: true
+                    }
+                },
+                tools: {
+                    columns: {
+                        id: true,
+                        name: true,
+                        description: true,
+                        inputSchema: true,
+                        isMonetized: true,
+                        payment: true,
+                        status: true,
+                        metadata: true,
+                        createdAt: true,
+                        updatedAt: true
+                    },
+                    with: {
+                        pricing: {
+                            where: eq(toolPricing.active, true),
+                            columns: {
+                                id: true,
+                                price: true,
+                                currency: true,
+                                network: true,
+                                assetAddress: true,
+                                active: true,
+                                createdAt: true
+                            }
+                        },
+                        payments: {
+                            columns: {
+                                id: true,
+                                amount: true,
+                                currency: true,
+                                network: true,
+                                status: true,
+                                createdAt: true,
+                                settledAt: true
+                            },
+                            with: {
+                                user: {
+                                    columns: {
+                                        id: true,
+                                        walletAddress: true,
+                                        displayName: true
+                                    }
+                                }
+                            },
+                            orderBy: [desc(payments.createdAt)],
+                            limit: 10
+                        },
+                        usage: {
+                            columns: {
+                                id: true,
+                                timestamp: true,
+                                responseStatus: true,
+                                executionTimeMs: true
+                            },
+                            with: {
+                                user: {
+                                    columns: {
+                                        id: true,
+                                        walletAddress: true,
+                                        displayName: true
+                                    }
+                                }
+                            },
+                            orderBy: [desc(toolUsage.timestamp)],
+                            limit: 10
+                        },
+                        proofs: {
+                            columns: {
+                                id: true,
+                                isConsistent: true,
+                                confidenceScore: true,
+                                status: true,
+                                verificationType: true,
+                                createdAt: true,
+                                webProofPresentation: true
+                            },
+                            with: {
+                                user: {
+                                    columns: {
+                                        id: true,
+                                        walletAddress: true,
+                                        displayName: true
+                                    }
+                                }
+                            },
+                            orderBy: [desc(proofs.createdAt)],
+                            limit: 10
+                        }
+                    },
+                    orderBy: [mcpTools.name]
+                },
+                analytics: {
+                    columns: {
+                        id: true,
+                        date: true,
+                        totalRequests: true,
+                        totalRevenue: true,
+                        uniqueUsers: true,
+                        avgResponseTime: true,
+                        toolUsage: true,
+                        errorCount: true
+                    },
+                    orderBy: [desc(analytics.date)],
+                    limit: 30 // Last 30 days
+                },
+                ownership: {
+                    where: eq(serverOwnership.active, true),
+                    columns: {
+                        id: true,
+                        role: true,
+                        createdAt: true,
+                        active: true
+                    },
+                    with: {
+                        user: {
+                            columns: {
+                                id: true,
+                                walletAddress: true,
+                                displayName: true,
+                                avatarUrl: true
+                            }
+                        },
+                        grantedByUser: {
+                            columns: {
+                                id: true,
+                                walletAddress: true,
+                                displayName: true
+                            }
+                        }
+                    }
+                },
+                webhooks: {
+                    where: eq(webhooks.active, true),
+                    columns: {
+                        id: true,
+                        url: true,
+                        events: true,
+                        active: true,
+                        lastTriggeredAt: true,
+                        failureCount: true,
+                        createdAt: true,
+                        updatedAt: true
+                    }
+                },
+                proofs: {
+                    columns: {
+                        id: true,
+                        isConsistent: true,
+                        confidenceScore: true,
+                        status: true,
+                        verificationType: true,
+                        createdAt: true,
+                        webProofPresentation: true
+                    },
+                    with: {
+                        tool: {
+                            columns: {
+                                id: true,
+                                name: true
+                            }
+                        },
+                        user: {
+                            columns: {
+                                id: true,
+                                walletAddress: true,
+                                displayName: true
+                            }
+                        }
+                    },
+                    orderBy: [desc(proofs.createdAt)],
+                    limit: 20
+                }
             }
         });
     },
@@ -991,6 +1175,257 @@ export const txOperations = {
             },
             orderBy: [desc(proofs.createdAt)]
         });
+    },
+
+    getMcpServerWithStats: (serverId: string) => async (tx: TransactionType) => {
+        const server = await tx.query.mcpServers.findFirst({
+            where: eq(mcpServers.serverId, serverId),
+            columns: {
+                id: true,
+                serverId: true,
+                name: true,
+                mcpOrigin: true,
+                receiverAddress: true,
+                description: true,
+                metadata: true,
+                status: true,
+                createdAt: true,
+                updatedAt: true
+            },
+            with: {
+                creator: {
+                    columns: {
+                        id: true,
+                        walletAddress: true,
+                        displayName: true,
+                        avatarUrl: true
+                    }
+                },
+                tools: {
+                    columns: {
+                        id: true,
+                        name: true,
+                        description: true,
+                        inputSchema: true,
+                        isMonetized: true,
+                        payment: true,
+                        status: true,
+                        metadata: true,
+                        createdAt: true,
+                        updatedAt: true
+                    },
+                    with: {
+                        pricing: {
+                            where: eq(toolPricing.active, true),
+                            columns: {
+                                id: true,
+                                price: true,
+                                currency: true,
+                                network: true,
+                                assetAddress: true,
+                                active: true,
+                                createdAt: true
+                            }
+                        },
+                        payments: {
+                            columns: {
+                                id: true,
+                                amount: true,
+                                currency: true,
+                                network: true,
+                                status: true,
+                                createdAt: true,
+                                settledAt: true
+                            },
+                            with: {
+                                user: {
+                                    columns: {
+                                        id: true,
+                                        walletAddress: true,
+                                        displayName: true
+                                    }
+                                }
+                            },
+                            orderBy: [desc(payments.createdAt)],
+                            limit: 50
+                        },
+                        usage: {
+                            columns: {
+                                id: true,
+                                timestamp: true,
+                                responseStatus: true,
+                                executionTimeMs: true
+                            },
+                            with: {
+                                user: {
+                                    columns: {
+                                        id: true,
+                                        walletAddress: true,
+                                        displayName: true
+                                    }
+                                }
+                            },
+                            orderBy: [desc(toolUsage.timestamp)],
+                            limit: 100
+                        },
+                        proofs: {
+                            columns: {
+                                id: true,
+                                isConsistent: true,
+                                confidenceScore: true,
+                                status: true,
+                                verificationType: true,
+                                createdAt: true,
+                                webProofPresentation: true
+                            },
+                            with: {
+                                user: {
+                                    columns: {
+                                        id: true,
+                                        walletAddress: true,
+                                        displayName: true
+                                    }
+                                }
+                            },
+                            orderBy: [desc(proofs.createdAt)],
+                            limit: 50
+                        }
+                    },
+                    orderBy: [mcpTools.name]
+                },
+                analytics: {
+                    columns: {
+                        id: true,
+                        date: true,
+                        totalRequests: true,
+                        totalRevenue: true,
+                        uniqueUsers: true,
+                        avgResponseTime: true,
+                        toolUsage: true,
+                        errorCount: true
+                    },
+                    orderBy: [desc(analytics.date)],
+                    limit: 30
+                },
+                ownership: {
+                    where: eq(serverOwnership.active, true),
+                    columns: {
+                        id: true,
+                        role: true,
+                        createdAt: true,
+                        active: true
+                    },
+                    with: {
+                        user: {
+                            columns: {
+                                id: true,
+                                walletAddress: true,
+                                displayName: true,
+                                avatarUrl: true
+                            }
+                        },
+                        grantedByUser: {
+                            columns: {
+                                id: true,
+                                walletAddress: true,
+                                displayName: true
+                            }
+                        }
+                    }
+                },
+                webhooks: {
+                    where: eq(webhooks.active, true),
+                    columns: {
+                        id: true,
+                        url: true,
+                        events: true,
+                        active: true,
+                        lastTriggeredAt: true,
+                        failureCount: true,
+                        createdAt: true,
+                        updatedAt: true
+                    }
+                },
+                proofs: {
+                    columns: {
+                        id: true,
+                        isConsistent: true,
+                        confidenceScore: true,
+                        status: true,
+                        verificationType: true,
+                        createdAt: true,
+                        webProofPresentation: true
+                    },
+                    with: {
+                        tool: {
+                            columns: {
+                                id: true,
+                                name: true
+                            }
+                        },
+                        user: {
+                            columns: {
+                                id: true,
+                                walletAddress: true,
+                                displayName: true
+                            }
+                        }
+                    },
+                    orderBy: [desc(proofs.createdAt)],
+                    limit: 50
+                }
+            }
+        });
+
+        if (!server) return null;
+
+        // Calculate aggregate statistics
+        const stats = {
+            totalTools: server.tools.length,
+            monetizedTools: server.tools.filter(t => t.isMonetized).length,
+            totalPayments: server.tools.reduce((sum, tool) => sum + tool.payments.length, 0),
+            totalRevenue: server.tools.reduce((sum, tool) => 
+                sum + tool.payments
+                    .filter(p => p.status === 'completed')
+                    .reduce((toolSum, payment) => toolSum + parseFloat(payment.amount), 0), 0
+            ),
+            totalUsage: server.tools.reduce((sum, tool) => sum + tool.usage.length, 0),
+            totalProofs: server.proofs.length,
+            consistentProofs: server.proofs.filter(p => p.isConsistent).length,
+            proofsWithWebProof: server.proofs.filter(p => p.webProofPresentation).length,
+            uniqueUsers: new Set([
+                ...server.tools.flatMap(t => t.payments.map(p => p.user?.id).filter(Boolean)),
+                ...server.tools.flatMap(t => t.usage.map(u => u.user?.id).filter(Boolean)),
+                ...server.proofs.map(p => p.user?.id).filter(Boolean)
+            ]).size,
+            avgResponseTime: (() => {
+                const allUsage = server.tools.flatMap(t => t.usage);
+                const timesWithExecution = allUsage.filter(u => u.executionTimeMs !== null);
+                return timesWithExecution.length > 0 
+                    ? timesWithExecution.reduce((sum, u) => sum + (u.executionTimeMs || 0), 0) / timesWithExecution.length
+                    : 0;
+            })(),
+            reputationScore: (() => {
+                if (server.proofs.length === 0) return 0;
+                const consistencyRate = server.proofs.filter(p => p.isConsistent).length / server.proofs.length;
+                const avgConfidence = server.proofs.reduce((sum, p) => sum + parseFloat(p.confidenceScore), 0) / server.proofs.length;
+                const webProofBonus = server.proofs.filter(p => p.webProofPresentation).length / server.proofs.length * 0.2;
+                return Math.min(1, consistencyRate * 0.6 + avgConfidence * 0.3 + webProofBonus);
+            })(),
+            lastActivity: (() => {
+                const dates = [
+                    ...server.tools.flatMap(t => t.payments.map(p => p.createdAt)),
+                    ...server.tools.flatMap(t => t.usage.map(u => u.timestamp)),
+                    ...server.proofs.map(p => p.createdAt)
+                ];
+                return dates.length > 0 ? new Date(Math.max(...dates.map(d => d.getTime()))) : null;
+            })()
+        };
+
+        return {
+            ...server,
+            stats
+        };
     }
 };
 
