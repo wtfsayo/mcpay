@@ -81,12 +81,12 @@ const PageLayout = ({ isDark, children }: { isDark: boolean; children: React.Rea
     <div className="max-w-7xl mx-auto">
       <div className="text-center mb-12">
         <div className="space-y-4 max-w-3xl mx-auto">
-          <p className={`text-lg leading-relaxed ${isDark ? "text-gray-300" : "text-gray-600"}`}>
-            Discover and connect with Model Context Protocol servers that extend AI capabilities through standardized interfaces.
-            Access external tools, data sources, and specialized environments seamlessly.
-          </p>
-          <p className={`text-lg leading-relaxed ${isDark ? "text-gray-300" : "text-gray-600"}`}>
-            Create value with your MCP server by monetizing access through the x402 protocol.
+          <h1 className={`text-4xl font-bold mb-6 ${isDark ? "text-white" : "text-gray-900"}`}>
+            The easiest way to monetize and use MCP servers
+          </h1>
+          <p className={`text-base ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+            Connect with MCP servers to extend AI capabilities with external tools and data sources.
+            Monetize your own server through the x402 protocol.
           </p>
         </div>
       </div>
