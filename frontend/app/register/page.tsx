@@ -25,10 +25,6 @@ interface MCPTool {
   price?: string
 }
 
-interface RegisterTabProps {
-  isDark: boolean
-}
-
 // Helper function to extract a display name from a URL
 const generateDisplayNameFromUrl = (urlStr: string): string => {
   try {
@@ -54,7 +50,23 @@ const generateDisplayNameFromUrl = (urlStr: string): string => {
   }
 }
 
-export default function RegisterTab({ isDark }: RegisterTabProps) {
+export default function RegisterPage() {
+  // Dark mode state - you can replace this with your theme provider logic
+  const [isDark, setIsDark] = useState(false)
+  
+  // Check for system dark mode preference on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+      setIsDark(mediaQuery.matches)
+      
+      const handleChange = (e: MediaQueryListEvent) => setIsDark(e.matches)
+      mediaQuery.addEventListener('change', handleChange)
+      
+      return () => mediaQuery.removeEventListener('change', handleChange)
+    }
+  }, [])
+
   const [formData, setFormData] = useState({
     name: "",
     description: "",
