@@ -69,18 +69,24 @@ const categories = [
 // Shared layout wrapper component
 const PageLayout = ({ isDark, children }: { isDark: boolean; children: React.ReactNode }) => (
   <div className={`min-h-screen p-6 transition-colors duration-200 ${
-    isDark ? "bg-gradient-to-br from-black to-gray-900 text-white"
+    isDark ? "bg-gradient-to-br from-black to-gray-900 text-white" 
            : "bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900"
   }`}>
     <div className="max-w-7xl mx-auto">
-      <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold mb-4">All MCPs</h1>
-        <p className={`text-lg max-w-3xl mx-auto ${isDark ? "text-gray-300" : "text-gray-600"}`}>
-          Discover and explore Model Context Protocol servers. Connect AI models to external tools, data sources, and
-          environments through standardized interfaces.
-        </p>
+      <div className="text-center mb-12">
+        <div className="space-y-4 max-w-3xl mx-auto">
+          <p className={`text-lg leading-relaxed ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+            Discover and connect with Model Context Protocol servers that extend AI capabilities through standardized interfaces.
+            Access external tools, data sources, and specialized environments seamlessly.
+          </p>
+          <p className={`text-lg leading-relaxed ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+            Create value with your MCP server by monetizing access through the x402 protocol.
+          </p>
+        </div>
       </div>
-      {children}
+      <div className={`rounded-xl p-8 ${isDark ? "bg-gray-900/50" : "bg-white/50"} backdrop-blur-sm`}>
+        {children}
+      </div>
     </div>
   </div>
 );
