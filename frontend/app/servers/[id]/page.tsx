@@ -445,7 +445,7 @@ export default function ServerDashboard() {
                   size="sm"
                   variant="outline"
                   className={`w-full ${isDark ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600" : ""}`}
-                  onClick={() => window.open(`https://basescan.org/address/${serverData.creator.walletAddress}`, '_blank')}
+                  onClick={() => window.open(`https://base-sepolia.blockscout.com/address/${serverData.creator.walletAddress}`, '_blank')}
                 >
                   <ExternalLink className="h-4 w-4 mr-2" />
                   View on Explorer
