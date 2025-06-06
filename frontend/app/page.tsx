@@ -198,7 +198,7 @@ export default function MCPBrowser() {
                     <Badge variant="outline" className="text-xs mt-1">{server.category}</Badge>
                   </div>
                 </div>
-                <CardDescription className="text-sm leading-relaxed">
+                <CardDescription className="text-sm leading-relaxed h-12 line-clamp-2">
                   {server.description}
                 </CardDescription>
               </CardHeader>
