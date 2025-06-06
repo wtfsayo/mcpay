@@ -330,6 +330,135 @@ export const txOperations = {
         });
     },
 
+    listMcpServersByActivity: (limit = 10, offset = 0) => async (tx: TransactionType) => {
+        // Get all servers with their related activity data
+        const servers = await tx.query.mcpServers.findMany({
+            columns: {
+                id: true,
+                serverId: true,
+                name: true,
+                receiverAddress: true,
+                description: true,
+                metadata: true,
+                status: true,
+                createdAt: true,
+                updatedAt: true
+            },
+            with: {
+                creator: {
+                    columns: {
+                        id: true,
+                        walletAddress: true,
+                        displayName: true,
+                        avatarUrl: true
+                    }
+                },
+                tools: {
+                    columns: {
+                        id: true,
+                        name: true,
+                        description: true,
+                        inputSchema: true,
+                        isMonetized: true,
+                        payment: true,
+                        status: true,
+                        createdAt: true,
+                        updatedAt: true
+                    },
+                    with: {
+                        payments: {
+                            where: eq(payments.status, 'completed'),
+                            columns: {
+                                id: true,
+                                amount: true,
+                                currency: true,
+                                userId: true,
+                                createdAt: true
+                            }
+                        },
+                        usage: {
+                            columns: {
+                                id: true,
+                                userId: true,
+                                timestamp: true,
+                                responseStatus: true
+                            }
+                        }
+                    },
+                    orderBy: [mcpTools.name]
+                }
+            }
+        });
+
+        // Calculate activity metrics for each server
+        const serversWithActivity = servers.map(server => {
+            const allPayments = server.tools.flatMap(tool => tool.payments);
+            const allUsage = server.tools.flatMap(tool => tool.usage);
+            
+            // Calculate metrics
+            const totalPayments = allPayments.length;
+            const totalRevenue = allPayments.reduce((sum, payment) => 
+                sum + parseFloat(payment.amount), 0
+            );
+            const totalUsage = allUsage.length;
+            const successfulUsage = allUsage.filter(usage => 
+                usage.responseStatus === 'success' || usage.responseStatus === '200'
+            ).length;
+            
+            // Get unique users from both payments and usage
+            const paymentUserIds = allPayments
+                .map(p => p.userId)
+                .filter(Boolean);
+            const usageUserIds = allUsage
+                .map(u => u.userId)
+                .filter(Boolean);
+            const uniqueUsers = new Set([...paymentUserIds, ...usageUserIds]).size;
+            
+            // Calculate recent activity (last 30 days)
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            
+            const recentPayments = allPayments.filter(p => 
+                new Date(p.createdAt) > thirtyDaysAgo
+            ).length;
+            const recentUsage = allUsage.filter(u => 
+                new Date(u.timestamp) > thirtyDaysAgo
+            ).length;
+            
+            // Calculate activity score (weighted combination of metrics)
+            const activityScore = (
+                totalPayments * 10 +        // High weight for payments
+                totalRevenue * 0.1 +        // Revenue impact (assuming small amounts)
+                totalUsage * 2 +            // Medium weight for usage
+                uniqueUsers * 15 +          // High weight for unique users
+                recentPayments * 20 +       // Higher weight for recent payments
+                recentUsage * 5 +           // Medium weight for recent usage
+                successfulUsage * 1         // Small bonus for successful usage
+            );
+
+            return {
+                ...server,
+                activityMetrics: {
+                    totalPayments,
+                    totalRevenue,
+                    totalUsage,
+                    uniqueUsers,
+                    recentPayments,
+                    recentUsage,
+                    successfulUsage,
+                    activityScore
+                }
+            };
+        });
+
+        // Sort by activity score (descending) and apply pagination
+        const sortedServers = serversWithActivity
+            .sort((a, b) => b.activityMetrics.activityScore - a.activityMetrics.activityScore)
+            .slice(offset, offset + limit);
+
+        return sortedServers;
+    },
+
     updateMcpServer: (id: string, data: {
         url?: string;
         mcpOrigin?: string;

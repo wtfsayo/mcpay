@@ -74,8 +74,8 @@ export default function RegisterPage() {
   const [registeredServer, setRegisteredServer] = useState<any>(null)
   const [showAuthHeaders, setShowAuthHeaders] = useState(false)
 
-  const { address: walletAddress, isConnected: isWalletConnected, isConnecting: isAccountConnecting } = useAccount()
-  const { connect, connectors, isPending: isConnectingWallet, error: connectError } = useConnect()
+  const { address: walletAddress, isConnected: isWalletConnected } = useAccount()
+  const { error: connectError } = useConnect()
   const { disconnect, isPending: isDisconnectingWallet } = useDisconnect()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -227,22 +227,6 @@ export default function RegisterPage() {
       setTools([])
     } finally {
       setIsLoadingTools(false)
-    }
-  }
-
-  const handleConnectWallet = () => {
-    // Attempt to connect with the first available connector (likely Porto from config)
-    if (connectors.length > 0) {
-      const connectorToUse = connectors.find(c => c.name === 'Porto') || connectors.find(c => c.name === 'MetaMask') || connectors[0];
-      if (connectorToUse) {
-        connect({ connector: connectorToUse })
-      } else {
-        console.error("No suitable connector found.")
-        // Optionally, set an error message for the user here
-      }
-    } else {
-      console.error("No connectors available.")
-      // Optionally, set an error message for the user here
     }
   }
 

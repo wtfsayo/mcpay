@@ -61,10 +61,20 @@ app.get('/version', (c) => {
 app.get('/servers', async (c) => {
     const limit = c.req.query('limit') ? parseInt(c.req.query('limit') as string) : 10
     const offset = c.req.query('offset') ? parseInt(c.req.query('offset') as string) : 0
+    const type = c.req.query('type') ? c.req.query('type') as string : "trending"
 
-    const servers = await withTransaction(async (tx) => {
-        return await txOperations.listMcpServers(limit, offset)(tx);
-    })
+    let servers: any[] = []
+
+    if (type === "trending") {
+        servers = await withTransaction(async (tx) => {
+            return await txOperations.listMcpServersByActivity(limit, offset)(tx);
+        })
+
+    } else {
+        servers = await withTransaction(async (tx) => {
+            return await txOperations.listMcpServers(limit, offset)(tx);
+        })
+    }
 
     if (servers.length === 0) {
         return c.json({ error: 'No servers found' }, 404)
