@@ -150,7 +150,7 @@ export default function MCPBrowser() {
         {/* Header */}
         <div className="text-center mb-12">
           <h1 className={`text-4xl font-bold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
-            The easiest way to monetize and use MCP servers
+            Add a payment layer to your MCP servers
           </h1>
           <p className={`text-lg max-w-3xl mx-auto ${isDark ? "text-gray-300" : "text-gray-600"}`}>
             Connect with MCP servers to extend AI capabilities with external tools and data sources.
