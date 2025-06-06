@@ -366,27 +366,6 @@ export default function ServerDashboard() {
             <CardContent className="space-y-4">
               <div>
                 <label className={`text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                  MCP Origin URL
-                </label>
-                <div className="flex items-center gap-2 mt-1">
-                  <code className={`flex-1 text-xs p-2 rounded border font-mono ${
-                    isDark ? "bg-gray-700 border-gray-600 text-gray-300" : "bg-gray-100 border-gray-200"
-                  }`}>
-                    {serverData.mcpOrigin}
-                  </code>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => copyToClipboard(serverData.mcpOrigin)}
-                    className={isDark ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600" : ""}
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-              
-              <div>
-                <label className={`text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>
                   Receiver Address
                 </label>
                 <div className="flex items-center gap-2 mt-1">

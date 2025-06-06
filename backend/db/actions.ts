@@ -1200,7 +1200,7 @@ export const txOperations = {
                 id: true,
                 serverId: true,
                 name: true,
-                mcpOrigin: true,
+                mcpOrigin: false,
                 receiverAddress: true,
                 description: true,
                 metadata: true,
