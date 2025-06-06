@@ -1,35 +1,30 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useParams } from "next/navigation"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import Image from "next/image"
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  DollarSign, 
-  Users, 
-  Activity, 
-  Shield, 
-  ExternalLink, 
-  Clock, 
-  CheckCircle, 
-  XCircle, 
-  AlertCircle,
-  Loader2,
-  Copy,
-  Globe,
-  Wrench,
-  Database,
-  Calendar,
-  BarChart3,
-  Zap
-} from "lucide-react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useTheme } from "@/context/ThemeContext"
-import { api } from "@/lib/utils"
 import { openBlockscout } from "@/lib/blockscout"
+import { api } from "@/lib/utils"
+import {
+  Activity,
+  AlertCircle,
+  BarChart3,
+  CheckCircle,
+  Clock,
+  Copy,
+  DollarSign,
+  ExternalLink,
+  Globe,
+  Loader2,
+  Shield,
+  Users,
+  Wrench,
+  XCircle
+} from "lucide-react"
+import Image from "next/image"
+import { useParams } from "next/navigation"
+import { useEffect, useState } from "react"
 
 // Types based on the API response structure
 interface ServerData {
