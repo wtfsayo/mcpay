@@ -70,6 +70,15 @@ const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer) => {
     const pathWithoutId = url.pathname.replace(/^\/mcp\/[^\/]+/, '')
     url.pathname = targetUpstream.pathname + (pathWithoutId || '')
 
+    // Preserve all query parameters from the original mcpOrigin
+    if (targetUpstream.search) {
+        // Copy all query parameters from the target upstream (mcpOrigin)
+        const targetParams = new URLSearchParams(targetUpstream.search);
+        targetParams.forEach((value, key) => {
+            url.searchParams.set(key, value);
+        });
+    }
+
     const headers = c.req.raw.headers;
 
     headers.forEach((v, k) => {
