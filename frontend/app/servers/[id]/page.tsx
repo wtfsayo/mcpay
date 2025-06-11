@@ -6,6 +6,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useTheme } from "@/context/ThemeContext"
 import { openBlockscout } from "@/lib/blockscout"
+import {
+  getTokenInfo,
+  formatTokenAmount,
+  getTokenVerification,
+  isNativeToken,
+  type Network
+} from "@/lib/tokens"
 import { api } from "@/lib/utils"
 import {
   Activity,
@@ -21,7 +28,8 @@ import {
   Shield,
   Users,
   Wrench,
-  XCircle
+  XCircle,
+  Coins
 } from "lucide-react"
 import Image from "next/image"
 import { useParams } from "next/navigation"
@@ -180,7 +188,7 @@ export default function ServerDashboard() {
       try {
         setLoading(true)
         setError(null)
-        
+
         const data = await api.getServer(serverId)
         setServerData(data)
       } catch (err) {
@@ -200,9 +208,104 @@ export default function ServerDashboard() {
     navigator.clipboard.writeText(text)
   }
 
-  const formatCurrency = (amount: string | number, currency: string) => {
+  // Enhanced formatCurrency function using token registry
+  const formatCurrency = (amount: string | number, currency: string, network?: string) => {
     const num = typeof amount === 'string' ? parseFloat(amount) : amount
+
+    // If we have network info, try to get token info from registry
+    if (network) {
+      const tokenInfo = getTokenInfo(currency, network as Network)
+      if (tokenInfo) {
+        // Use our awesome token registry formatting
+        return formatTokenAmount(num, currency, network as Network, {
+          showSymbol: true,
+          precision: tokenInfo.isStablecoin ? 2 : 4,
+          compact: num >= 1000
+        })
+      }
+    }
+
+    // Fallback: check if it's a token address and show abbreviated
+    if (currency.startsWith('0x') && currency.length === 42) {
+      return `${num.toFixed(6)} ${currency.slice(0, 6)}...${currency.slice(-4)}`
+    }
+
+    // Simple currency display
     return `${num.toFixed(6)} ${currency}`
+  }
+
+  // Enhanced token display with verification badge
+  const TokenDisplay = ({
+    currency,
+    network,
+    amount,
+    showVerification = false
+  }: {
+    currency: string
+    network: string
+    amount?: string | number
+    showVerification?: boolean
+  }) => {
+    const tokenInfo = getTokenInfo(currency, network as Network)
+    const verification = getTokenVerification(currency, network as Network)
+
+    return (
+      <div className="flex items-center gap-2">
+        {/* Token Logo */}
+        {tokenInfo?.logoUri && (
+          <div className="w-5 h-5 rounded-full overflow-hidden">
+            <Image
+              src={tokenInfo.logoUri}
+              alt={tokenInfo.symbol}
+              width={20}
+              height={20}
+              className="w-full h-full object-cover"
+            />
+          </div>
+        )}
+
+        {/* Amount and Symbol */}
+        <div className="flex items-center gap-1">
+          {amount && (
+            <span className="font-medium">
+              {formatCurrency(amount, currency, network)}
+            </span>
+          )}
+          {!amount && tokenInfo && (
+            <span className="font-medium">{tokenInfo.symbol}</span>
+          )}
+          {!amount && !tokenInfo && (
+            <span className="font-mono text-xs">
+              {currency.startsWith('0x') ? `${currency.slice(0, 6)}...` : currency}
+            </span>
+          )}
+        </div>
+
+        {/* Verification Badge */}
+        {showVerification && verification.verified && (
+          <Badge
+            variant="outline"
+            className={`text-xs flex items-center gap-1 ${isDark ? "border-green-500 text-green-400" : "border-green-600 text-green-600"
+              }`}
+            title={`Verified by ${verification.source}`}
+          >
+            <Shield className="h-3 w-3" />
+            Verified
+          </Badge>
+        )}
+
+        {/* Stablecoin Badge */}
+        {tokenInfo?.isStablecoin && (
+          <Badge
+            variant="outline"
+            className={`text-xs ${isDark ? "border-blue-500 text-blue-400" : "border-blue-600 text-blue-600"
+              }`}
+          >
+            Stable
+          </Badge>
+        )}
+      </div>
+    )
   }
 
   const formatDate = (dateString: string) => {
@@ -223,9 +326,8 @@ export default function ServerDashboard() {
 
   if (loading) {
     return (
-      <div className={`min-h-screen p-6 transition-colors duration-200 ${
-        isDark ? "bg-gradient-to-br from-black to-gray-900 text-white" : "bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900"
-      }`}>
+      <div className={`min-h-screen p-6 transition-colors duration-200 ${isDark ? "bg-gradient-to-br from-black to-gray-900 text-white" : "bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900"
+        }`}>
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-center py-12">
             <div className="flex items-center gap-3">
@@ -240,16 +342,15 @@ export default function ServerDashboard() {
 
   if (error) {
     return (
-      <div className={`min-h-screen p-6 transition-colors duration-200 ${
-        isDark ? "bg-gradient-to-br from-black to-gray-900 text-white" : "bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900"
-      }`}>
+      <div className={`min-h-screen p-6 transition-colors duration-200 ${isDark ? "bg-gradient-to-br from-black to-gray-900 text-white" : "bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900"
+        }`}>
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
               <AlertCircle className={`h-12 w-12 mx-auto mb-4 ${isDark ? "text-red-400" : "text-red-500"}`} />
               <h3 className="text-lg font-medium mb-2">Failed to load server</h3>
               <p className={`mb-4 ${isDark ? "text-gray-400" : "text-gray-600"}`}>{error}</p>
-              <Button 
+              <Button
                 onClick={() => window.location.reload()}
                 className={isDark ? "bg-gray-700 text-white hover:bg-gray-600" : ""}
               >
@@ -265,9 +366,8 @@ export default function ServerDashboard() {
   if (!serverData) return null
 
   return (
-    <div className={`min-h-screen p-6 transition-colors duration-200 ${
-      isDark ? "bg-gradient-to-br from-black to-gray-900 text-white" : "bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900"
-    }`}>
+    <div className={`min-h-screen p-6 transition-colors duration-200 ${isDark ? "bg-gradient-to-br from-black to-gray-900 text-white" : "bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900"
+      }`}>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -278,14 +378,14 @@ export default function ServerDashboard() {
                 {serverData.description}
               </p>
             </div>
-            <Badge 
-              variant={serverData.status === 'active' ? 'default' : 'secondary'} 
+            <Badge
+              variant={serverData.status === 'active' ? 'default' : 'secondary'}
               className={`text-sm ${isDark ? "bg-gray-600 text-gray-200" : ""}`}
             >
               {serverData.status}
             </Badge>
           </div>
-          
+
           <div className="flex items-center gap-4 text-sm">
             <span className={isDark ? "text-gray-400" : "text-gray-500"}>
               Created: {formatDate(serverData.createdAt)}
@@ -369,9 +469,8 @@ export default function ServerDashboard() {
                 MCP Connection URL
               </label>
               <div className="flex items-center gap-2">
-                <code className={`flex-1 text-sm p-3 rounded-md font-mono ${
-                  isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-800"
-                }`}>
+                <code className={`flex-1 text-sm p-3 rounded-md font-mono ${isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-800"
+                  }`}>
                   https://api.mcpay.fun/mcp/{serverData.serverId}
                 </code>
                 <Button
@@ -391,9 +490,8 @@ export default function ServerDashboard() {
                 Payment Address
               </label>
               <div className="flex items-center gap-2">
-                <code className={`flex-1 text-sm p-3 rounded-md font-mono ${
-                  isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-800"
-                }`}>
+                <code className={`flex-1 text-sm p-3 rounded-md font-mono ${isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-800"
+                  }`}>
                   {serverData.receiverAddress}
                 </code>
                 <Button
@@ -422,12 +520,11 @@ export default function ServerDashboard() {
                   Server Owner
                 </label>
                 <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                    isDark ? "bg-gray-700" : "bg-gray-100"
-                  }`}>
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isDark ? "bg-gray-700" : "bg-gray-100"
+                    }`}>
                     {serverData.creator.avatarUrl ? (
-                      <img 
-                        src={serverData.creator.avatarUrl} 
+                      <img
+                        src={serverData.creator.avatarUrl}
                         alt={serverData.creator.displayName}
                         className="w-10 h-10 rounded-full"
                       />
@@ -451,9 +548,8 @@ export default function ServerDashboard() {
                 <label className={`text-sm font-medium block mb-3 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
                   Server ID
                 </label>
-                <code className={`text-sm font-mono block p-3 rounded-md ${
-                  isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-800"
-                }`}>
+                <code className={`text-sm font-mono block p-3 rounded-md ${isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-800"
+                  }`}>
                   {serverData.serverId}
                 </code>
               </div>
@@ -508,7 +604,12 @@ export default function ServerDashboard() {
                       </TableCell>
                       <TableCell>
                         {tool.pricing.length > 0 ? (
-                          formatCurrency(tool.pricing[0].price, tool.pricing[0].currency)
+                          <TokenDisplay
+                            currency={tool.pricing[0].currency}
+                            network={tool.pricing[0].network}
+                            amount={tool.pricing[0].price}
+                            showVerification={true}
+                          />
                         ) : (
                           <span className={isDark ? "text-gray-400" : "text-gray-500"}>Free</span>
                         )}
@@ -524,9 +625,8 @@ export default function ServerDashboard() {
                       <TableCell className="text-right">
                         {tool.proofs.length > 0 ? (
                           <div className="flex items-center justify-end gap-2 text-xs">
-                            <div className={`flex items-center gap-1 ${
-                              tool.proofs.filter(p => p.isConsistent).length > 0 ? "text-green-500" : "text-red-500"
-                            }`}>
+                            <div className={`flex items-center gap-1 ${tool.proofs.filter(p => p.isConsistent).length > 0 ? "text-green-500" : "text-red-500"
+                              }`}>
                               {tool.proofs.filter(p => p.isConsistent).length > 0 ? (
                                 <CheckCircle className="h-3 w-3" />
                               ) : (
@@ -582,50 +682,64 @@ export default function ServerDashboard() {
           {/* Recent Proofs */}
           <Card className={isDark ? "bg-gray-800 border-gray-700" : ""}>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5" />
-                Recent Proofs
-                <Badge variant="outline" className={`ml-2 text-xs ${isDark ? "border-gray-500 text-gray-300" : ""}`}>
-                  Powered by <Image src="/vlayer-logo.svg" alt="vLayer" width={60} height={20} className="inline ml-1" />
-                </Badge>
+              <CardTitle className="flex justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  Recent Proofs
+                </div>
+                <div>
+                  <Badge variant="outline" className={`ml-6 text-xs ${isDark ? "border-gray-500 text-gray-300" : ""}`}>
+                    Powered by <a href="https://www.vlayer.xyz/" target="_blank" rel="noopener noreferrer" className="inline-block ml-1 hover:opacity-80 transition-opacity">
+                      <Image src="/vlayer-logo.svg" alt="vLayer" width={60} height={20} className="inline" />
+                    </a>
+                  </Badge>
+                </div>
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {serverData.proofs.slice(0, 5).map((proof) => (
-                  <div key={proof.id} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {proof.isConsistent ? (
-                        <CheckCircle className="h-4 w-4 text-green-500" />
-                      ) : (
-                        <XCircle className="h-4 w-4 text-red-500" />
-                      )}
-                      <div>
-                        <p className="text-sm font-medium">{proof.tool.name}</p>
-                        <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                          <button
-                            onClick={() => openBlockscout(proof.user.walletAddress)}
-                            className={`hover:underline ${isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-700"}`}
-                          >
-                            {proof.user.displayName}
-                          </button>
-                          {" • "}
-                          {formatDate(proof.createdAt)}
+                {serverData.proofs.length > 0 ? (
+                  serverData.proofs.slice(0, 5).map((proof) => (
+                    <div key={proof.id} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {proof.isConsistent ? (
+                          <CheckCircle className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <XCircle className="h-4 w-4 text-red-500" />
+                        )}
+                        <div>
+                          <p className="text-sm font-medium">{proof.tool.name}</p>
+                          <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                            <button
+                              onClick={() => openBlockscout(proof.user.walletAddress)}
+                              className={`hover:underline ${isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-700"}`}
+                            >
+                              {proof.user.displayName}
+                            </button>
+                            {" • "}
+                            {formatDate(proof.createdAt)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-medium">
+                          {(parseFloat(proof.confidenceScore) * 100).toFixed(1)}%
                         </p>
+                        {proof.webProofPresentation && (
+                          <Badge variant="outline" className={`text-xs ${isDark ? "border-gray-500 text-gray-300" : ""}`}>
+                            Web Proof
+                          </Badge>
+                        )}
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium">
-                        {(parseFloat(proof.confidenceScore) * 100).toFixed(1)}%
-                      </p>
-                      {proof.webProofPresentation && (
-                        <Badge variant="outline" className={`text-xs ${isDark ? "border-gray-500 text-gray-300" : ""}`}>
-                          Web Proof
-                        </Badge>
-                      )}
-                    </div>
+                  ))
+                ) : (
+                  <div className={`text-center py-6 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                    <Shield className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No proofs yet</p>
+                    <p className="text-xs mt-1">Proofs will appear here when users verify this server's tools</p>
                   </div>
-                ))}
+                )}
               </div>
             </CardContent>
           </Card>
@@ -635,11 +749,11 @@ export default function ServerDashboard() {
         <Card className={isDark ? "bg-gray-800 border-gray-700" : ""}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5" />
+              <Coins className="h-5 w-5" />
               Recent Payments
             </CardTitle>
             <CardDescription>
-              Latest payment transactions from tool usage
+              Latest payment transactions from tool usage with verified token information
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -648,7 +762,7 @@ export default function ServerDashboard() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Status</TableHead>
-                    <TableHead>Amount</TableHead>
+                    <TableHead>Amount & Token</TableHead>
                     <TableHead>User</TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead>Network</TableHead>
@@ -660,11 +774,10 @@ export default function ServerDashboard() {
                     <TableRow key={payment.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                            payment.status === 'completed' 
-                              ? 'bg-green-100 text-green-600 dark:bg-green-900 dark:text-green-400' 
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center ${payment.status === 'completed'
+                              ? 'bg-green-100 text-green-600 dark:bg-green-900 dark:text-green-400'
                               : 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900 dark:text-yellow-400'
-                          }`}>
+                            }`}>
                             {payment.status === 'completed' ? (
                               <CheckCircle className="h-3 w-3" />
                             ) : (
@@ -677,7 +790,12 @@ export default function ServerDashboard() {
                         </div>
                       </TableCell>
                       <TableCell className="font-medium">
-                        {formatCurrency(payment.amount, payment.currency)}
+                        <TokenDisplay
+                          currency={payment.currency}
+                          network={payment.network}
+                          amount={payment.amount}
+                          showVerification={true}
+                        />
                       </TableCell>
                       <TableCell>
                         <button
@@ -698,9 +816,20 @@ export default function ServerDashboard() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="text-xs">
-                          {payment.network}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs">
+                            {payment.network}
+                          </Badge>
+                          {/* Network verification indicator */}
+                          {(payment.network === 'base' || payment.network === 'base-sepolia') && (
+                            <Badge
+                              variant="outline"
+                              className={`text-xs ${isDark ? "border-blue-500 text-blue-400" : "border-blue-600 text-blue-600"}`}
+                            >
+                              MCPay Native
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-right">
                         {payment.transactionHash ? (
