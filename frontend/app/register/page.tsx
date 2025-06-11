@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textArea"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Server, Globe, CheckCircle, Loader2, Wallet, RefreshCw, AlertCircle, Lock, ChevronDown, ChevronRight, Info, ExternalLink } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Server, Globe, CheckCircle, Loader2, Wallet, RefreshCw, AlertCircle, Lock, Info, ExternalLink, BookOpen } from "lucide-react"
 import { useAccount, useConnect, useDisconnect } from "wagmi"
 import { api } from "@/lib/utils"
 import { useTheme } from "@/context/ThemeContext"
@@ -58,7 +59,6 @@ const generateDisplayNameFromUrl = (urlStr: string): string => {
 export default function RegisterPage() {
   const { isDark } = useTheme()
   const router = useRouter()
-  const [isInfoExpanded, setIsInfoExpanded] = useState(false)
   
   const [formData, setFormData] = useState({
     name: "",
@@ -246,135 +246,124 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen p-6 md:p-8 lg:p-12">
       <div className="max-w-2xl mx-auto space-y-8">
-        {/* Collapsible Info Card */}
-        <Card className={`${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"} shadow-lg transition-all duration-200 hover:shadow-xl`}>
-          <CardHeader className="pb-4 px-6 md:px-8 pt-6">
-            <button
-              onClick={() => setIsInfoExpanded(!isInfoExpanded)}
-              className={`flex items-center justify-between w-full text-left group p-4 -m-4 rounded-lg transition-all duration-200 hover:${isDark ? "bg-gray-700/50" : "bg-gray-50"} focus:outline-none focus:ring-2 focus:ring-blue-500/20`}
-            >
-              <div className="flex items-center gap-4">
-                <div className={`p-3 rounded-lg ${isDark ? "bg-blue-500/10" : "bg-blue-50"} transition-colors duration-200`}>
-                  <Info className="h-6 w-6 text-blue-500" />
-                </div>
-                <div>
-                  <CardTitle className={`text-xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>Getting Started Guide</CardTitle>
-                  <p className={`text-sm mt-1 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                    Everything you need to know about MCP server registration
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className={`text-sm font-medium ${isDark ? "text-gray-400" : "text-gray-500"} group-hover:${isDark ? "text-gray-300" : "text-gray-700"} transition-colors duration-200`}>
-                  {isInfoExpanded ? "Hide" : "Learn more"}
-                </span>
-                <div className={`p-2 rounded-full transition-all duration-200 group-hover:${isDark ? "bg-gray-600" : "bg-gray-100"}`}>
-                  {isInfoExpanded ? (
-                    <ChevronDown className={`h-4 w-4 transition-all duration-300 ${isDark ? "text-gray-400" : "text-gray-500"}`} />
-                  ) : (
-                    <ChevronRight className={`h-4 w-4 transition-all duration-300 ${isDark ? "text-gray-400" : "text-gray-500"}`} />
-                  )}
-                </div>
-              </div>
-            </button>
-          </CardHeader>
-          
-          <div className={`overflow-hidden transition-all duration-500 ease-out ${
-            isInfoExpanded ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0"
-          }`}>
-            <div className={`px-6 md:px-8 pb-8 transition-all duration-300 ${isInfoExpanded ? "translate-y-0" : "-translate-y-2"}`}>
-              <div className="space-y-6">
-                {/* Quick Start Section */}
-                <div className={`rounded-xl p-6 border-l-4 border-blue-500 ${isDark ? "bg-blue-500/5 bg-gradient-to-r from-blue-500/10 to-transparent" : "bg-gradient-to-r from-blue-50 to-blue-25"}`}>
-                  <div className="flex items-start gap-4">
-                    <div className={`p-3 rounded-lg ${isDark ? "bg-blue-500/20" : "bg-blue-100"} mt-0.5`}>
-                      <Server className="h-5 w-5 text-blue-600" />
-                    </div>
-                    <div className="flex-1">
-                      <h5 className={`font-semibold mb-3 text-lg ${isDark ? "text-blue-200" : "text-blue-900"}`}>Need to build an MCP server?</h5>
-                      <p className={`text-sm leading-relaxed ${isDark ? "text-blue-200" : "text-blue-800"}`}>
-                        Try{" "}
-                        <a 
-                          href="https://github.com/punkpeye/fastmcp" 
-                          className={`font-semibold underline decoration-2 underline-offset-2 transition-colors ${isDark ? "hover:text-blue-100" : "hover:text-blue-900"}`}
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                        >
-                          fastmcp
-                        </a>
-                        {" "}to create a compliant server quickly with minimal configuration.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Requirements Section */}
-                <div className={`rounded-xl p-6 border-l-4 border-amber-500 ${isDark ? "bg-amber-500/5 bg-gradient-to-r from-amber-500/10 to-transparent" : "bg-gradient-to-r from-amber-50 to-amber-25"}`}>
-                  <div className="flex items-start gap-4">
-                    <div className={`p-3 rounded-lg ${isDark ? "bg-amber-500/20" : "bg-amber-100"} mt-0.5`}>
-                      <AlertCircle className="h-5 w-5 text-amber-600" />
-                    </div>
-                    <div className="flex-1">
-                      <h5 className={`font-semibold mb-3 text-lg ${isDark ? "text-amber-200" : "text-amber-900"}`}>Technical Requirements</h5>
-                      <p className={`text-sm leading-relaxed ${isDark ? "text-amber-200" : "text-amber-800"}`}>
-                        MCP servers must implement the{" "}
-                        <a 
-                          href="https://modelcontextprotocol.io/specification/draft/basic/transports#streamable-http" 
-                          className={`font-semibold underline decoration-2 underline-offset-2 transition-colors ${isDark ? "hover:text-amber-100" : "hover:text-amber-900"}`}
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                        >
-                          Streamable HTTP transport
-                        </a>
-                        {" "}as defined in the MCP specification.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* How it Works Section */}
-                <div className={`rounded-xl border p-6 ${isDark ? "border-gray-600 bg-gradient-to-br from-gray-800/50 to-gray-800/20" : "border-gray-200 bg-gradient-to-br from-gray-50 to-white"}`}>
-                  <div className="flex items-center gap-4 mb-6">
-                    <div className={`p-3 rounded-lg ${isDark ? "bg-gray-700" : "bg-gray-100"}`}>
-                      <CheckCircle className="h-6 w-6 text-green-600" />
-                    </div>
-                    <h4 className={`font-semibold text-xl ${isDark ? "text-white" : "text-gray-900"}`}>How it works</h4>
-                  </div>
-                  <div className="grid gap-4">
-                    {[
-                      "Connect your wallet for payment processing",
-                      "Enter your MCP server URL to auto-detect available tools", 
-                      "Enable authentication if your server requires it",
-                      "Set individual pricing for each tool",
-                      "Server details are auto-filled from tool inspection",
-                      "Your MCP server must use the Streamable HTTP transport"
-                    ].map((step, index) => (
-                      <div key={index} className="flex items-start gap-4 group p-3 rounded-lg transition-colors hover:bg-opacity-50">
-                        <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold mt-0.5 transition-colors ${isDark ? "bg-blue-500/20 text-blue-400 group-hover:bg-blue-500/30" : "bg-blue-100 text-blue-600 group-hover:bg-blue-200"}`}>
-                          {index + 1}
-                        </div>
-                        <p className={`text-sm leading-relaxed ${isDark ? "text-gray-300" : "text-gray-600"} group-hover:${isDark ? "text-gray-200" : "text-gray-700"} transition-colors`}>
-                          {step}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </Card>
-
         {/* Registration Form */}
         <Card className={`${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"} shadow-lg`}>
           <CardHeader className="px-6 md:px-8 pt-8 pb-6">
-            <CardTitle className={`flex items-center gap-3 text-xl ${isDark ? "text-white" : "text-gray-900"}`}>
-              <Server className="h-6 w-6" />
-              Server Configuration
-            </CardTitle>
-            <CardDescription className={`text-base mt-2 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-              Connect your wallet and enter your MCP server URL to automatically detect tools.
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className={`flex items-center gap-3 text-xl ${isDark ? "text-white" : "text-gray-900"}`}>
+                  <Server className="h-6 w-6" />
+                  Server Configuration
+                </CardTitle>
+                <CardDescription className={`text-base mt-2 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                  Connect your wallet and enter your MCP server URL to automatically detect tools.
+                </CardDescription>
+              </div>
+              
+              {/* Getting Started Guide Modal */}
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className={`px-4 py-2 ${isDark ? "border-gray-600 text-gray-400 hover:text-white hover:bg-gray-700" : "border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-50"}`}
+                  >
+                    <BookOpen className="h-4 w-4 mr-2" />
+                    Getting Started
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className={`max-w-4xl max-h-[90vh] overflow-y-auto ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
+                  <DialogHeader>
+                    <DialogTitle className={`flex items-center gap-3 text-2xl ${isDark ? "text-white" : "text-gray-900"}`}>
+                      <Info className="h-6 w-6 text-blue-500" />
+                      Getting Started Guide
+                    </DialogTitle>
+                    <p className={`text-base mt-2 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                      Everything you need to know about MCP server registration
+                    </p>
+                  </DialogHeader>
+                  
+                  <div className="space-y-6 mt-6">
+                    {/* Quick Start Section */}
+                    <div className={`rounded-xl p-6 border-l-4 border-blue-500 ${isDark ? "bg-blue-500/5 bg-gradient-to-r from-blue-500/10 to-transparent" : "bg-gradient-to-r from-blue-50 to-blue-25"}`}>
+                      <div className="flex items-start gap-4">
+                        <div className={`p-3 rounded-lg ${isDark ? "bg-blue-500/20" : "bg-blue-100"} mt-0.5`}>
+                          <Server className="h-5 w-5 text-blue-600" />
+                        </div>
+                        <div className="flex-1">
+                          <h5 className={`font-semibold mb-3 text-lg ${isDark ? "text-blue-200" : "text-blue-900"}`}>Need to build an MCP server?</h5>
+                          <p className={`text-sm leading-relaxed ${isDark ? "text-blue-200" : "text-blue-800"}`}>
+                            Try{" "}
+                            <a 
+                              href="https://github.com/punkpeye/fastmcp" 
+                              className={`font-semibold underline decoration-2 underline-offset-2 transition-colors ${isDark ? "hover:text-blue-100" : "hover:text-blue-900"}`}
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                            >
+                              fastmcp
+                            </a>
+                            {" "}to create a compliant server quickly with minimal configuration.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Requirements Section */}
+                    <div className={`rounded-xl p-6 border-l-4 border-amber-500 ${isDark ? "bg-amber-500/5 bg-gradient-to-r from-amber-500/10 to-transparent" : "bg-gradient-to-r from-amber-50 to-amber-25"}`}>
+                      <div className="flex items-start gap-4">
+                        <div className={`p-3 rounded-lg ${isDark ? "bg-amber-500/20" : "bg-amber-100"} mt-0.5`}>
+                          <AlertCircle className="h-5 w-5 text-amber-600" />
+                        </div>
+                        <div className="flex-1">
+                          <h5 className={`font-semibold mb-3 text-lg ${isDark ? "text-amber-200" : "text-amber-900"}`}>Technical Requirements</h5>
+                          <p className={`text-sm leading-relaxed ${isDark ? "text-amber-200" : "text-amber-800"}`}>
+                            MCP servers must implement the{" "}
+                            <a 
+                              href="https://modelcontextprotocol.io/specification/draft/basic/transports#streamable-http" 
+                              className={`font-semibold underline decoration-2 underline-offset-2 transition-colors ${isDark ? "hover:text-amber-100" : "hover:text-amber-900"}`}
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                            >
+                              Streamable HTTP transport
+                            </a>
+                            {" "}as defined in the MCP specification.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* How it Works Section */}
+                    <div className={`rounded-xl border p-6 ${isDark ? "border-gray-600 bg-gradient-to-br from-gray-800/50 to-gray-800/20" : "border-gray-200 bg-gradient-to-br from-gray-50 to-white"}`}>
+                      <div className="flex items-center gap-4 mb-6">
+                        <div className={`p-3 rounded-lg ${isDark ? "bg-gray-700" : "bg-gray-100"}`}>
+                          <CheckCircle className="h-6 w-6 text-green-600" />
+                        </div>
+                        <h4 className={`font-semibold text-xl ${isDark ? "text-white" : "text-gray-900"}`}>How it works</h4>
+                      </div>
+                      <div className="grid gap-4">
+                        {[
+                          "Connect your wallet for payment processing",
+                          "Enter your MCP server URL to auto-detect available tools", 
+                          "Enable authentication if your server requires it",
+                          "Set individual pricing for each tool",
+                          "Server details are auto-filled from tool inspection",
+                          "Your MCP server must use the Streamable HTTP transport"
+                        ].map((step, index) => (
+                          <div key={index} className="flex items-start gap-4 group p-3 rounded-lg transition-colors hover:bg-opacity-50">
+                            <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold mt-0.5 transition-colors ${isDark ? "bg-blue-500/20 text-blue-400 group-hover:bg-blue-500/30" : "bg-blue-100 text-blue-600 group-hover:bg-blue-200"}`}>
+                              {index + 1}
+                            </div>
+                            <p className={`text-sm leading-relaxed ${isDark ? "text-gray-300" : "text-gray-600"} group-hover:${isDark ? "text-gray-200" : "text-gray-700"} transition-colors`}>
+                              {step}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
           </CardHeader>
           <CardContent className="px-6 md:px-8 pb-8">
             <form onSubmit={handleSubmit} className="space-y-8">
