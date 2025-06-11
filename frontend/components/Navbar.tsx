@@ -3,6 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
+import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   // Moon, 
@@ -23,16 +24,14 @@ interface NavbarProps {
 
 export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const pathname = usePathname()
 
   const connect = useConnect()
   const connectors = useConnectors()
 
   const { isDark } = useTheme()
 
-  const tabs = [
-    { id: "mcps", label: "MCPs", href: "/" },
-    { id: "register", label: "Register", href: "/register" },
-  ]
+
 
   const handleTabChange = (tabId: string) => {
     if (onTabChange) {
@@ -49,33 +48,36 @@ export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
         <div className="flex items-center justify-between h-16">
           {/* Logo/Brand */}
           <div className="flex items-center">
-            <div className="flex-shrink-0 flex items-center gap-2">
+            <Link href="/" className="flex-shrink-0 flex items-center gap-2">
               <Image src="/mcpay-logo.svg" alt="MCPay Logo" width={72} height={72} />
-            </div>
+            </Link>
           </div>
 
           {/* Desktop Navigation */}
           <div className="hidden md:block">
             <div className="ml-10 flex items-baseline space-x-4">
-              {tabs.map((tab) => (
-                <Button
-                  key={tab.id}
-                  variant="ghost"
-                  asChild
-                  onClick={() => tab.id !== "register" && tab.id !== "mcps" && handleTabChange(tab.id)}
-                  className={`px-3 py-2 text-sm font-medium transition-colors duration-200 ${activeTab === tab.id
-                    ? isDark
-                      ? "bg-gray-800 text-white"
-                      : "bg-gray-100 text-gray-900"
-                    : isDark
-                      ? "text-gray-300 hover:bg-gray-800 hover:text-white"
-                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                    }`}
-                >
-                  <Link href={tab.href || "#"}>{tab.label}</Link>
-                </Button>
-              ))}
+              {/* Navigation items can be added here if needed */}
             </div>
+          </div>
+
+          {/* Right side items */}
+          <div className="hidden md:flex items-center space-x-4">
+            <Button
+              variant="ghost"
+              asChild
+              className={`px-3 py-2 text-sm font-medium transition-colors duration-200 ${
+                pathname === "/register"
+                  ? isDark
+                    ? "bg-gray-800 text-white"
+                    : "bg-gray-100 text-gray-900"
+                  : isDark
+                    ? "text-gray-300 hover:bg-gray-800 hover:text-white"
+                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              }`}
+            >
+              <Link href="/register">Register</Link>
+            </Button>
+            <ConnectButton />
           </div>
 
           {/* Desktop Theme Toggle */}
@@ -92,7 +94,6 @@ export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
               <span className="hidden lg:inline">{isDark ? "Light" : "Dark"}</span>
             </Button>
           </div> */}
-          <ConnectButton /> 
 
           {/* Mobile menu button */}
           <div className="md:hidden">
@@ -111,53 +112,36 @@ export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
         {isMobileMenuOpen && (
           <div className="md:hidden">
             <div className="px-2 pt-2 pb-3 space-y-1 border-t border-gray-200 dark:border-gray-700">
-              {tabs.map((tab) => (
-                <Button
-                  key={tab.id}
-                  variant="ghost"
-                  asChild
-                  onClick={() => {
-                    if (tab.id !== "register" && tab.id !== "mcps") {
-                      handleTabChange(tab.id)
-                    }
-                    setIsMobileMenuOpen(false)
-                  }}
-                  className={`w-full justify-start px-3 py-2 text-sm font-medium transition-colors duration-200 ${activeTab === tab.id
+              {/* Register button for mobile */}
+              <Button
+                variant="ghost"
+                asChild
+                onClick={() => setIsMobileMenuOpen(false)}
+                className={`w-full justify-start px-3 py-2 text-sm font-medium transition-colors duration-200 ${
+                  pathname === "/register"
                     ? isDark
                       ? "bg-gray-800 text-white"
                       : "bg-gray-100 text-gray-900"
                     : isDark
                       ? "text-gray-300 hover:bg-gray-800 hover:text-white"
                       : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                    }`}
-                >
-                  <Link href={tab.href || "#"}>{tab.label}</Link>
-                </Button>
-              ))}
-
-              {/* Mobile Theme Toggle */}
-              {/* <Button
-                variant="ghost"
-                onClick={() => {
-                  toggleTheme()
-                  setIsMobileMenuOpen(false)
-                }}
-                className={`w-full justify-start px-3 py-2 text-sm font-medium flex items-center gap-2 ${
-                  isDark ? "text-gray-300 hover:bg-gray-800" : "text-gray-600 hover:bg-gray-100"
                 }`}
               >
-                {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-                {isDark ? "Light Mode" : "Dark Mode"}
-              </Button> */}
-              <div>
+                <Link href="/register">Register</Link>
+              </Button>
+
+              {/* Mobile Connect Button */}
+              <div className="px-3 py-2">
                 {
                   connectors?.filter((connector) => connector.name == "MetaMask").map((connector) => (
-
-
                     <button
-
                       key={connector.uid}
                       onClick={() => connect.connect({ connector })}
+                      className={`w-full text-left px-3 py-2 text-sm font-medium transition-colors duration-200 ${
+                        isDark
+                          ? "text-gray-300 hover:bg-gray-800 hover:text-white"
+                          : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                      }`}
                     >
                       {connector.name == "MetaMask" ? 'Connected' : 'Connect'}
                     </button>
