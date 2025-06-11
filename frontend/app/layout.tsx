@@ -5,8 +5,6 @@ import { ThemeProvider } from "@/context/ThemeContext";
 import { WagmiProvider } from 'wagmi'
 import { wagmiConfig } from '../lib/config'
 import { AppReactQueryProvider } from '../context/providers'
-
-
 import Navbar from "@/components/Navbar"
 
 const geistSans = Geist({
@@ -46,12 +44,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-
-
-
   return (
     <html lang="en">
-
       <ThemeProvider>
         <WagmiProvider config={wagmiConfig}>
           <AppReactQueryProvider>

@@ -363,6 +363,28 @@ export default function ServerDashboard() {
             <CardDescription>Essential information for connecting to and trusting this server</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* MCP Connection URL */}
+            <div>
+              <label className={`text-sm font-medium block mb-2 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                MCP Connection URL
+              </label>
+              <div className="flex items-center gap-2">
+                <code className={`flex-1 text-sm p-3 rounded-md font-mono ${
+                  isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-800"
+                }`}>
+                  https://api.mcpay.fun/mcp/{serverData.serverId}
+                </code>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => copyToClipboard(`https://api.mcpay.fun/mcp/${serverData.serverId}`)}
+                  title="Copy MCP URL"
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
             {/* Payment Address */}
             <div>
               <label className={`text-sm font-medium block mb-2 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
@@ -616,40 +638,103 @@ export default function ServerDashboard() {
               <DollarSign className="h-5 w-5" />
               Recent Payments
             </CardTitle>
+            <CardDescription>
+              Latest payment transactions from tool usage
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {serverData.tools.flatMap(tool => tool.payments).slice(0, 10).map((payment) => (
-                <div key={payment.id} className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                      payment.status === 'completed' ? 'bg-green-100 text-green-600' : 'bg-yellow-100 text-yellow-600'
-                    }`}>
-                      {payment.status === 'completed' ? (
-                        <CheckCircle className="h-4 w-4" />
-                      ) : (
-                        <Clock className="h-4 w-4" />
-                      )}
-                    </div>
-                    <div>
-                      <p className="font-medium">{formatCurrency(payment.amount, payment.currency)}</p>
-                      <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>User</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Network</TableHead>
+                    <TableHead className="text-right">Transaction</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {serverData.tools.flatMap(tool => tool.payments).slice(0, 10).map((payment) => (
+                    <TableRow key={payment.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                            payment.status === 'completed' 
+                              ? 'bg-green-100 text-green-600 dark:bg-green-900 dark:text-green-400' 
+                              : 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900 dark:text-yellow-400'
+                          }`}>
+                            {payment.status === 'completed' ? (
+                              <CheckCircle className="h-3 w-3" />
+                            ) : (
+                              <Clock className="h-3 w-3" />
+                            )}
+                          </div>
+                          <Badge variant={payment.status === 'completed' ? 'default' : 'secondary'} className="text-xs">
+                            {payment.status}
+                          </Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {formatCurrency(payment.amount, payment.currency)}
+                      </TableCell>
+                      <TableCell>
                         <button
                           onClick={() => openBlockscout(payment.user.walletAddress)}
                           className={`hover:underline ${isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-700"}`}
                         >
                           {payment.user.displayName}
                         </button>
-                        {" • "}
-                        {formatDate(payment.createdAt)}
-                      </p>
-                    </div>
-                  </div>
-                  <Badge variant={payment.status === 'completed' ? 'default' : 'secondary'}>
-                    {payment.status}
-                  </Badge>
-                </div>
-              ))}
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <div className="text-sm">{formatDate(payment.createdAt)}</div>
+                          {payment.settledAt && (
+                            <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                              Settled: {formatDate(payment.settledAt)}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs">
+                          {payment.network}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {payment.transactionHash ? (
+                          <div className="flex items-center justify-end gap-2">
+                            <code className={`text-xs font-mono ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+                              {payment.transactionHash.slice(0, 6)}...{payment.transactionHash.slice(-4)}
+                            </code>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => copyToClipboard(payment.transactionHash!)}
+                              title="Copy transaction hash"
+                            >
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openBlockscout(payment.transactionHash!)}
+                              title="View transaction"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                            Pending
+                          </span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           </CardContent>
         </Card>
