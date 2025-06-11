@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { CheckCircle, Server, Calendar, User, Globe, ExternalLink, ChevronDown, ChevronRight, Shield, Database, Hash, AlertCircle } from "lucide-react"
@@ -31,7 +31,7 @@ const mockRegistrationResult = {
   }
 }
 
-export default function RegisterSuccessPage() {
+function RegisterSuccessContent() {
   const { isDark } = useTheme()
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
   const [registrationData, setRegistrationData] = useState<any>(null)
@@ -402,5 +402,28 @@ export default function RegisterSuccessPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen p-6 md:p-8 lg:p-12 flex items-center justify-center">
+      <Card className="bg-white border-gray-200 shadow-lg">
+        <CardContent className="pt-8 pb-8 px-6 md:px-8">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading...</p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+export default function RegisterSuccessPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <RegisterSuccessContent />
+    </Suspense>
   )
 }

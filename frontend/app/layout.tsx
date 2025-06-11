@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "../globals.css";
 import { ThemeProvider } from "@/context/ThemeContext";
@@ -35,9 +35,11 @@ export const metadata: Metadata = {
     ],
   },
   manifest: '/site.webmanifest',
-  themeColor: '#ffffff',
 };
 
+export const viewport: Viewport = {
+  themeColor: '#ffffff',
+};
 
 export default function RootLayout({
   children,
