@@ -14,6 +14,7 @@ import { api } from "@/lib/utils"
 import { useTheme } from "@/context/ThemeContext"
 import { ConnectButton } from "@/components/connect-button"
 import { openBlockscout } from "@/lib/blockscout"
+import { useRouter } from "next/navigation"
 
 interface MCPTool {
   name: string
@@ -56,6 +57,7 @@ const generateDisplayNameFromUrl = (urlStr: string): string => {
 
 export default function RegisterPage() {
   const { isDark } = useTheme()
+  const router = useRouter()
   const [isInfoExpanded, setIsInfoExpanded] = useState(false)
   
   const [formData, setFormData] = useState({
@@ -68,10 +70,8 @@ export default function RegisterPage() {
   const [tools, setTools] = useState<MCPTool[]>([])
   const [isLoadingTools, setIsLoadingTools] = useState(false)
   const [toolsError, setToolsError] = useState("")
-  const [isSubmitted, setIsSubmitted] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState("")
-  const [registeredServer, setRegisteredServer] = useState<any>(null)
   const [showAuthHeaders, setShowAuthHeaders] = useState(false)
 
   const { address: walletAddress, isConnected: isWalletConnected } = useAccount()
@@ -145,24 +145,9 @@ export default function RegisterPage() {
       const result = await api.registerServer(payload)
       console.log("Server registration successful:", result)
 
-      setRegisteredServer(result)
-      setIsSubmitted(true)
-
-      // Reset form after 5 seconds
-      setTimeout(() => {
-        setIsSubmitted(false)
-        setRegisteredServer(null)
-        setFormData({
-          name: "",
-          description: "",
-          url: "",
-          headers: "",
-        })
-        setTools([])
-        setToolsError("")
-        setSubmitError("")
-        setShowAuthHeaders(false)
-      }, 5000)
+      // Encode the registration result and redirect to success page
+      const encodedData = encodeURIComponent(JSON.stringify(result))
+      router.push(`/register/success?data=${encodedData}`)
 
     } catch (error) {
       console.error("Server registration failed:", error)
@@ -257,106 +242,6 @@ export default function RegisterPage() {
   }, [connectError]);
 
   const isFormValid = formData.name && formData.description && formData.url && isWalletConnected && tools.length > 0
-
-  if (isSubmitted) {
-    return (
-      <div className="min-h-screen p-6 md:p-8 lg:p-12">
-        <div className="max-w-2xl mx-auto">
-          <Card className={`${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"} shadow-lg`}>
-            <CardContent className="pt-8 pb-8 px-6 md:px-8">
-              <div className="text-center space-y-8">
-                <CheckCircle className={`h-20 w-20 mx-auto ${isDark ? "text-green-400" : "text-green-600"}`} />
-                <div className="space-y-3">
-                  <h3 className={`text-2xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>MCP Server Registered!</h3>
-                  <p className={`text-lg ${isDark ? "text-gray-300" : "text-gray-600"} max-w-md mx-auto`}>
-                    Your server has been registered successfully and is now available on the platform.
-                  </p>
-                </div>
-
-                {registeredServer && (
-                  <div className="space-y-6 mt-8">
-                    <div className={`text-left p-6 rounded-lg ${isDark ? "bg-gray-700" : "bg-gray-50"}`}>
-                      <h4 className={`font-semibold mb-4 text-lg ${isDark ? "text-white" : "text-gray-900"}`}>Server Details</h4>
-                      <div className="space-y-3 text-sm">
-                        <div className="flex flex-col sm:flex-row sm:justify-between">
-                          <span className={`font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>Name:</span>
-                          <span className={`${isDark ? "text-gray-400" : "text-gray-600"} mt-1 sm:mt-0`}>{registeredServer.server?.name}</span>
-                        </div>
-                        <div className="flex flex-col sm:flex-row sm:justify-between">
-                          <span className={`font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>Server ID:</span>
-                          <span className={`font-mono text-xs ${isDark ? "text-gray-400" : "text-gray-600"} mt-1 sm:mt-0 break-all`}>{registeredServer.server?.serverId}</span>
-                        </div>
-                        <div className="flex flex-col sm:flex-row sm:justify-between">
-                          <span className={`font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>Status:</span>
-                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${isDark ? "bg-green-900 text-green-300" : "bg-green-100 text-green-800"} mt-1 sm:mt-0 self-start sm:self-center`}>
-                            {registeredServer.server?.status || 'Active'}
-                          </span>
-                        </div>
-                        <div className="flex flex-col sm:flex-row sm:justify-between">
-                          <span className={`font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>Receiver Address:</span>
-                          <div className="flex items-center gap-2 mt-1 sm:mt-0">
-                            <span className={`font-mono text-xs ${isDark ? "text-gray-400" : "text-gray-600"} break-all`}>
-                              {registeredServer.server?.receiverAddress}
-                            </span>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openBlockscout(registeredServer.server?.receiverAddress)}
-                              className={`p-1 h-auto ${isDark ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-gray-900"}`}
-                              title="View on Blockscout"
-                            >
-                              <ExternalLink className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {registeredServer.summary && (
-                      <div className={`text-left p-6 rounded-lg ${isDark ? "bg-gray-700" : "bg-gray-50"}`}>
-                        <h4 className={`font-semibold mb-4 text-lg ${isDark ? "text-white" : "text-gray-900"}`}>Tools Summary</h4>
-                        <div className="grid grid-cols-3 gap-6 text-center">
-                          <div className="space-y-2">
-                            <div className={`text-3xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{registeredServer.summary.totalTools}</div>
-                            <div className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>Total Tools</div>
-                          </div>
-                          <div className="space-y-2">
-                            <div className="text-3xl font-bold text-green-600">{registeredServer.summary.monetizedTools}</div>
-                            <div className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>Monetized</div>
-                          </div>
-                          <div className="space-y-2">
-                            <div className="text-3xl font-bold text-blue-600">{registeredServer.summary.freeTools}</div>
-                            <div className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>Free</div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className={`p-4 rounded-lg ${isDark ? "bg-blue-900/20 border border-blue-800" : "bg-blue-50 border border-blue-200"}`}>
-                      <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-                        <p className={`text-sm ${isDark ? "text-blue-200" : "text-blue-800"} text-center sm:text-left`}>
-                          Payment processing is now active for your wallet address.
-                        </p>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openBlockscout(walletAddress || "")}
-                          className={`flex items-center gap-2 ${isDark ? "border-blue-700 text-blue-200 hover:bg-blue-800/50" : "border-blue-300 text-blue-800 hover:bg-blue-100"}`}
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                          View Address
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="min-h-screen p-6 md:p-8 lg:p-12">
