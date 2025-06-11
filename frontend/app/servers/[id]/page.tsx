@@ -3,6 +3,7 @@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useTheme } from "@/context/ThemeContext"
 import { openBlockscout } from "@/lib/blockscout"
 import { api } from "@/lib/utils"
@@ -72,6 +73,7 @@ interface ServerData {
       status: string
       createdAt: string
       settledAt?: string
+      transactionHash?: string
       user: {
         id: string
         walletAddress: string
@@ -354,57 +356,49 @@ export default function ServerDashboard() {
           </Card>
         </div>
 
-        {/* Server Info and Connection */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <Card className={`lg:col-span-2 ${isDark ? "bg-gray-800 border-gray-700" : ""}`}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Globe className="h-5 w-5" />
-                Server Information
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <label className={`text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                  Receiver Address
-                </label>
-                <div className="flex items-center gap-2 mt-1">
-                  <code className={`flex-1 text-xs p-2 rounded border font-mono ${
-                    isDark ? "bg-gray-700 border-gray-600 text-gray-300" : "bg-gray-100 border-gray-200"
-                  }`}>
-                    {serverData.receiverAddress}
-                  </code>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => copyToClipboard(serverData.receiverAddress)}
-                    className={isDark ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600" : ""}
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => openBlockscout(serverData.receiverAddress)}
-                    className={isDark ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600" : ""}
-                    title="View on Blockscout"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                  </Button>
-                </div>
+        {/* Server Connection */}
+        <Card className={`mb-8 ${isDark ? "bg-gray-800 border-gray-700" : ""}`}>
+          <CardHeader>
+            <CardTitle className="text-lg font-medium">Connection & Owner</CardTitle>
+            <CardDescription>Essential information for connecting to and trusting this server</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Payment Address */}
+            <div>
+              <label className={`text-sm font-medium block mb-2 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                Payment Address
+              </label>
+              <div className="flex items-center gap-2">
+                <code className={`flex-1 text-sm p-3 rounded-md font-mono ${
+                  isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-800"
+                }`}>
+                  {serverData.receiverAddress}
+                </code>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => copyToClipboard(serverData.receiverAddress)}
+                  title="Copy address"
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => openBlockscout(serverData.receiverAddress)}
+                  title="View on Blockscout"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </Button>
               </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          <Card className={isDark ? "bg-gray-800 border-gray-700" : ""}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Owner
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
+            {/* Owner & Server ID */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className={`text-sm font-medium block mb-3 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                  Server Owner
+                </label>
                 <div className="flex items-center gap-3">
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                     isDark ? "bg-gray-700" : "bg-gray-100"
@@ -419,26 +413,31 @@ export default function ServerDashboard() {
                       <Users className="h-5 w-5" />
                     )}
                   </div>
-                  <div>
-                    <p className="font-medium">{serverData.creator.displayName}</p>
-                    <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                  <div className="flex-1">
+                    <div className="font-medium">{serverData.creator.displayName}</div>
+                    <button
+                      onClick={() => openBlockscout(serverData.creator.walletAddress)}
+                      className={`text-xs hover:underline ${isDark ? "text-gray-400 hover:text-gray-300" : "text-gray-600 hover:text-gray-700"}`}
+                    >
                       {serverData.creator.walletAddress.slice(0, 6)}...{serverData.creator.walletAddress.slice(-4)}
-                    </p>
+                    </button>
                   </div>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className={`w-full ${isDark ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600" : ""}`}
-                  onClick={() => openBlockscout(serverData.creator.walletAddress)}
-                >
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  View on Explorer
-                </Button>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+
+              <div>
+                <label className={`text-sm font-medium block mb-3 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                  Server ID
+                </label>
+                <code className={`text-sm font-mono block p-3 rounded-md ${
+                  isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-800"
+                }`}>
+                  {serverData.serverId}
+                </code>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Tools */}
         <Card className={`mb-8 ${isDark ? "bg-gray-800 border-gray-700" : ""}`}>
@@ -452,57 +451,80 @@ export default function ServerDashboard() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {serverData.tools.map((tool) => (
-                <Card key={tool.id} className={`${isDark ? "bg-gray-700 border-gray-600" : "bg-white"}`}>
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between">
-                      <CardTitle className="text-base">{tool.name}</CardTitle>
-                      {tool.isMonetized && (
-                        <Badge variant="secondary" className={`text-xs ${isDark ? "bg-gray-600 text-gray-200" : ""}`}>
-                          Paid
-                        </Badge>
-                      )}
-                    </div>
-                    <CardDescription className="text-sm">
-                      {tool.description}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {tool.pricing.length > 0 && (
-                      <div>
-                        <p className={`text-xs font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                          Price: {formatCurrency(tool.pricing[0].price, tool.pricing[0].currency)}
-                        </p>
-                      </div>
-                    )}
-                    
-                    <div className="flex justify-between text-xs">
-                      <span className={isDark ? "text-gray-400" : "text-gray-600"}>
-                        {tool.usage.length} uses
-                      </span>
-                      <span className={isDark ? "text-gray-400" : "text-gray-600"}>
-                        {tool.payments.length} payments
-                      </span>
-                    </div>
-                    
-                    {tool.proofs.length > 0 && (
-                      <div className="flex items-center gap-2 text-xs">
-                        <div className={`flex items-center gap-1 ${
-                          tool.proofs.filter(p => p.isConsistent).length > 0 ? "text-green-500" : "text-red-500"
-                        }`}>
-                          {tool.proofs.filter(p => p.isConsistent).length > 0 ? (
-                            <CheckCircle className="h-3 w-3" />
-                          ) : (
-                            <XCircle className="h-3 w-3" />
-                          )}
-                          {tool.proofs.filter(p => p.isConsistent).length}/{tool.proofs.length} verified
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[300px]">Tool</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Price</TableHead>
+                    <TableHead>Usage</TableHead>
+                    <TableHead className="text-right">Verification</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {serverData.tools.map((tool) => (
+                    <TableRow key={tool.id}>
+                      <TableCell className="font-medium">
+                        <div>
+                          <div className="font-medium text-sm">{tool.name}</div>
+                          <div className={`text-xs mt-1 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                            {tool.description.length > 60 ? `${tool.description.substring(0, 60)}...` : tool.description}
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
+                      </TableCell>
+                      <TableCell>
+                        {tool.isMonetized ? (
+                          <Badge variant="secondary" className={`text-xs ${isDark ? "bg-gray-600 text-gray-200" : ""}`}>
+                            Paid
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className={`text-xs ${isDark ? "border-gray-500 text-gray-300" : ""}`}>
+                            Free
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {tool.pricing.length > 0 ? (
+                          formatCurrency(tool.pricing[0].price, tool.pricing[0].currency)
+                        ) : (
+                          <span className={isDark ? "text-gray-400" : "text-gray-500"}>Free</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          <div>{tool.usage.length} uses</div>
+                          <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                            {tool.payments.length} payments
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {tool.proofs.length > 0 ? (
+                          <div className="flex items-center justify-end gap-2 text-xs">
+                            <div className={`flex items-center gap-1 ${
+                              tool.proofs.filter(p => p.isConsistent).length > 0 ? "text-green-500" : "text-red-500"
+                            }`}>
+                              {tool.proofs.filter(p => p.isConsistent).length > 0 ? (
+                                <CheckCircle className="h-3 w-3" />
+                              ) : (
+                                <XCircle className="h-3 w-3" />
+                              )}
+                              <span>
+                                {tool.proofs.filter(p => p.isConsistent).length}/{tool.proofs.length}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                            No proofs
+                          </span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           </CardContent>
         </Card>

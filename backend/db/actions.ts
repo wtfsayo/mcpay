@@ -1380,7 +1380,8 @@ export const txOperations = {
                                 network: true,
                                 status: true,
                                 createdAt: true,
-                                settledAt: true
+                                settledAt: true,
+                                transactionHash: true
                             },
                             with: {
                                 user: {
