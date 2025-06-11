@@ -719,7 +719,7 @@ export default function ServerDashboard() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => openBlockscout(payment.transactionHash!)}
+                              onClick={() => openBlockscout(payment.transactionHash!, "tx")}
                               title="View transaction"
                             >
                               <ExternalLink className="h-3 w-3" />
