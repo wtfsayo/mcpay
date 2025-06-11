@@ -523,9 +523,11 @@ export default function ServerDashboard() {
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isDark ? "bg-gray-700" : "bg-gray-100"
                     }`}>
                     {serverData.creator.avatarUrl ? (
-                      <img
+                      <Image
                         src={serverData.creator.avatarUrl}
                         alt={serverData.creator.displayName}
+                        width={40}
+                        height={40}
                         className="w-10 h-10 rounded-full"
                       />
                     ) : (
@@ -737,7 +739,7 @@ export default function ServerDashboard() {
                   <div className={`text-center py-6 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
                     <Shield className="h-8 w-8 mx-auto mb-2 opacity-50" />
                     <p className="text-sm">No proofs yet</p>
-                    <p className="text-xs mt-1">Proofs will appear here when users verify this server's tools</p>
+                    <p className="text-xs mt-1">Proofs will appear here when users verify this server&apos;s tools</p>
                   </div>
                 )}
               </div>
