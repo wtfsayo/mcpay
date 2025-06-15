@@ -6,6 +6,7 @@ import { WagmiProvider } from 'wagmi'
 import { wagmiConfig } from '../lib/config'
 import { AppReactQueryProvider } from '../context/providers'
 import Navbar from "@/components/Navbar"
+import ScrollReset from "@/components/scroll-reset"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -48,18 +49,19 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <ThemeProvider>
-        <WagmiProvider config={wagmiConfig}>
-          <AppReactQueryProvider>
-            <body
-              className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-            >
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
+        <ThemeProvider>
+          <WagmiProvider config={wagmiConfig}>
+            <AppReactQueryProvider>
+              <ScrollReset />
               <Navbar />
               {children}
-            </body>
-          </AppReactQueryProvider>
-        </WagmiProvider>
-      </ThemeProvider>
+            </AppReactQueryProvider>
+          </WagmiProvider>
+        </ThemeProvider>
+      </body>
     </html>
   );
 }

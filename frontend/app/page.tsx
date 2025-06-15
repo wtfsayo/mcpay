@@ -110,21 +110,35 @@ export default function MCPBrowser() {
 
   const copyToClipboard = (text: string) => navigator.clipboard.writeText(text)
 
-  // Loading state
-  if (loading) {
-    return (
-      <div className={`min-h-screen ${isDark ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-900"}`}>
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex items-center justify-center py-12">
-            <div className="flex items-center gap-3">
-              <Loader2 className="h-6 w-6 animate-spin" />
-              <p className={isDark ? "text-gray-300" : "text-gray-600"}>Loading MCP servers...</p>
-            </div>
+  // Skeleton card component
+  const SkeletonCard = () => (
+    <Card className="hover:shadow-lg transition-all duration-200">
+      <CardHeader className="pb-4">
+        <div className="flex items-center gap-3">
+          <div className={`p-2 rounded-lg w-12 h-12 animate-pulse ${isDark ? "bg-gray-700" : "bg-gray-200"}`} />
+          <div className="flex-1 space-y-2">
+            <div className={`h-5 rounded animate-pulse ${isDark ? "bg-gray-700" : "bg-gray-200"}`} style={{ width: '60%' }} />
+            <div className={`h-4 rounded animate-pulse ${isDark ? "bg-gray-700" : "bg-gray-200"}`} style={{ width: '40%' }} />
           </div>
         </div>
-      </div>
-    )
-  }
+        <div className="space-y-2 mt-3">
+          <div className={`h-3 rounded animate-pulse ${isDark ? "bg-gray-700" : "bg-gray-200"}`} />
+          <div className={`h-3 rounded animate-pulse ${isDark ? "bg-gray-700" : "bg-gray-200"}`} style={{ width: '80%' }} />
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <div className={`h-4 rounded animate-pulse ${isDark ? "bg-gray-700" : "bg-gray-200"}`} style={{ width: '30%' }} />
+          <div className={`h-8 rounded animate-pulse ${isDark ? "bg-gray-700" : "bg-gray-200"}`} />
+        </div>
+        <div className="space-y-2">
+          <div className={`h-4 rounded animate-pulse ${isDark ? "bg-gray-700" : "bg-gray-200"}`} style={{ width: '50%' }} />
+          <div className={`h-8 rounded animate-pulse ${isDark ? "bg-gray-700" : "bg-gray-200"}`} />
+        </div>
+        <div className={`h-10 rounded animate-pulse ${isDark ? "bg-gray-700" : "bg-gray-200"}`} />
+      </CardContent>
+    </Card>
+  )
 
   // Error state
   if (error) {
@@ -167,6 +181,7 @@ export default function MCPBrowser() {
                 variant={selectedCategory === category ? "default" : "outline"}
                 onClick={() => setSelectedCategory(category)}
                 size="sm"
+                disabled={loading}
               >
                 {category}
               </Button>
@@ -176,85 +191,108 @@ export default function MCPBrowser() {
 
         {/* Results Count */}
         <div className="mb-6">
-          <p className={isDark ? "text-gray-300" : "text-gray-600"}>
-            {filteredServers.length} MCP server{filteredServers.length !== 1 ? "s" : ""} found
-          </p>
+          {loading ? (
+            <div className={`h-5 w-32 rounded animate-pulse ${isDark ? "bg-gray-700" : "bg-gray-200"}`} />
+          ) : error ? (
+            <div className="flex items-center gap-2">
+              <AlertCircle className={`h-4 w-4 ${isDark ? "text-red-400" : "text-red-500"}`} />
+              <p className={`${isDark ? "text-red-400" : "text-red-500"}`}>Failed to load servers</p>
+            </div>
+          ) : (
+            <p className={isDark ? "text-gray-300" : "text-gray-600"}>
+              {filteredServers.length} MCP server{filteredServers.length !== 1 ? "s" : ""} found
+            </p>
+          )}
         </div>
 
         {/* MCP Server Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-          {filteredServers.map((server) => (
-            <Card key={server.id} className="hover:shadow-lg transition-all duration-200">
-              <CardHeader className="pb-4">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${isDark ? "bg-gray-700" : "bg-gray-100"}`}>
-                    {server.icon}
+          {loading ? (
+            // Show skeleton cards while loading
+            Array.from({ length: 6 }).map((_, index) => (
+              <SkeletonCard key={`skeleton-${index}`} />
+            ))
+          ) : error ? (
+            // Show error message in grid area
+            <div className="col-span-full text-center py-12">
+              <AlertCircle className={`h-12 w-12 mx-auto mb-4 ${isDark ? "text-red-400" : "text-red-500"}`} />
+              <h3 className="text-lg font-medium mb-2">Failed to load MCP servers</h3>
+              <p className={`mb-4 ${isDark ? "text-gray-400" : "text-gray-600"}`}>{error}</p>
+              <Button onClick={() => window.location.reload()}>Try Again</Button>
+            </div>
+          ) : filteredServers.length === 0 ? (
+            // Show empty state
+            <div className="col-span-full text-center py-12">
+              <Globe className={`h-12 w-12 mx-auto mb-4 ${isDark ? "text-gray-500" : "text-gray-400"}`} />
+              <h3 className="text-lg font-medium mb-2">No MCP servers found</h3>
+              <p className={isDark ? "text-gray-400" : "text-gray-600"}>
+                {mcpServers.length === 0 ? "No servers are currently registered." : "Try a different category."}
+              </p>
+            </div>
+          ) : (
+            // Show actual server cards
+            filteredServers.map((server) => (
+              <Card key={server.id} className="hover:shadow-lg transition-all duration-200">
+                <CardHeader className="pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${isDark ? "bg-gray-700" : "bg-gray-100"}`}>
+                      {server.icon}
+                    </div>
+                    <div className="flex-1">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        {server.name}
+                        {server.verified && <Badge variant="secondary" className="text-xs">Verified</Badge>}
+                      </CardTitle>
+                      <Badge variant="outline" className="text-xs mt-1">{server.category}</Badge>
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      {server.name}
-                      {server.verified && <Badge variant="secondary" className="text-xs">Verified</Badge>}
-                    </CardTitle>
-                    <Badge variant="outline" className="text-xs mt-1">{server.category}</Badge>
+                  <CardDescription className="text-sm leading-relaxed h-12 line-clamp-2">
+                    {server.description}
+                  </CardDescription>
+                </CardHeader>
+
+                <CardContent className="space-y-4">
+                  {/* URL */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">MCP URL</label>
+                    <div className="flex items-center gap-2">
+                      <code className={`flex-1 text-xs p-2 rounded border font-mono break-all ${
+                        isDark ? "bg-gray-700 border-gray-600" : "bg-gray-100 border-gray-200"
+                      }`}>
+                        {`https://api.mcpay.fun/mcp/${server.id}`}
+                      </code>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => copyToClipboard(`https://api.mcpay.fun/mcp/${server.id}`)}
+                        className="shrink-0"
+                      >
+                        Copy
+                      </Button>
+                    </div>
                   </div>
-                </div>
-                <CardDescription className="text-sm leading-relaxed h-12 line-clamp-2">
-                  {server.description}
-                </CardDescription>
-              </CardHeader>
 
-              <CardContent className="space-y-4">
-                {/* URL */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">MCP URL</label>
-                  <div className="flex items-center gap-2">
-                    <code className={`flex-1 text-xs p-2 rounded border font-mono break-all ${
-                      isDark ? "bg-gray-700 border-gray-600" : "bg-gray-100 border-gray-200"
-                    }`}>
-                      {`https://api.mcpay.fun/mcp/${server.id}`}
-                    </code>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => copyToClipboard(`https://api.mcpay.fun/mcp/${server.id}`)}
-                      className="shrink-0"
-                    >
-                      Copy
-                    </Button>
+                  {/* Tools */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium flex items-center gap-2">
+                      <Tool className="h-4 w-4" />
+                      Available Tools ({server.tools.length})
+                    </label>
+                    <ToolsModal server={server} />
                   </div>
-                </div>
 
-                {/* Tools */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium flex items-center gap-2">
-                    <Tool className="h-4 w-4" />
-                    Available Tools ({server.tools.length})
-                  </label>
-                  <ToolsModal server={server} />
-                </div>
-
-                {/* Actions */}
-                <Button size="sm" variant="outline" asChild className="w-full">
-                  <Link href={`/servers/${server.id}`}>
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    View Dashboard
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
+                  {/* Actions */}
+                  <Button size="sm" variant="outline" asChild className="w-full">
+                    <Link href={`/servers/${server.id}`}>
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      View Dashboard
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            ))
+          )}
         </div>
-
-        {/* Empty State */}
-        {filteredServers.length === 0 && (
-          <div className="text-center py-12">
-            <Globe className={`h-12 w-12 mx-auto mb-4 ${isDark ? "text-gray-500" : "text-gray-400"}`} />
-            <h3 className="text-lg font-medium mb-2">No MCP servers found</h3>
-            <p className={isDark ? "text-gray-400" : "text-gray-600"}>
-              {mcpServers.length === 0 ? "No servers are currently registered." : "Try a different category."}
-            </p>
-          </div>
-        )}
 
         {/* Footer */}
         <div className={`text-center text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}>
