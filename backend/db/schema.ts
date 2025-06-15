@@ -88,6 +88,7 @@ export const toolUsage = pgTable('tool_usage', {
   executionTimeMs: integer('execution_time_ms'),
   ipAddress: text('ip_address'),
   userAgent: text('user_agent'),
+  result: jsonb('result'),
 }, (table) => [
   index('tool_usage_tool_id_idx').on(table.toolId),
   index('tool_usage_user_id_idx').on(table.userId),

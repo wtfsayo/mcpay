@@ -317,6 +317,10 @@ verbs.forEach(verb => {
                             requestData: {
                                 toolName: toolCall.name,
                                 args: toolCall.args
+                            },
+                            result: {
+                                error: "Payment verification failed",
+                                status: "payment_failed"
                             }
                         })(tx);
                         
@@ -432,6 +436,22 @@ verbs.forEach(verb => {
                 const upstream = await forwardRequest(c, id, body)
                 console.log(`[${new Date().toISOString()}] Received upstream response, mirroring back to client`)
 
+                // Capture response data for logging
+                let responseData: Record<string, unknown> | undefined;
+                try {
+                    const clonedResponse = upstream.clone();
+                    const responseText = await clonedResponse.text();
+                    if (responseText) {
+                        try {
+                            responseData = JSON.parse(responseText);
+                        } catch {
+                            responseData = { response: responseText };
+                        }
+                    }
+                } catch (e) {
+                    console.log(`[${new Date().toISOString()}] Could not capture response data:`, e);
+                }
+
                 // Record successful tool usage in database
                 if (toolCall.toolId && toolCall.serverId) {
                     await withTransaction(async (tx) => {
@@ -446,7 +466,8 @@ verbs.forEach(verb => {
                             requestData: {
                                 toolName: toolCall.name,
                                 args: toolCall.args
-                            }
+                            },
+                            result: responseData
                         })(tx);
                         
                         // Update daily analytics using internal server ID
@@ -490,6 +511,24 @@ verbs.forEach(verb => {
         const upstream = await forwardRequest(c, id, body)
         console.log(`[${new Date().toISOString()}] Received upstream response, mirroring back to client`)
 
+        // Capture response data for logging
+        let responseData: Record<string, unknown> | undefined;
+        if (toolCall && toolCall.toolId && toolCall.serverId) {
+            try {
+                const clonedResponse = upstream.clone();
+                const responseText = await clonedResponse.text();
+                if (responseText) {
+                    try {
+                        responseData = JSON.parse(responseText);
+                    } catch {
+                        responseData = { response: responseText };
+                    }
+                }
+            } catch (e) {
+                console.log(`[${new Date().toISOString()}] Could not capture response data:`, e);
+            }
+        }
+
         // Record tool usage if we have tool information
         if (toolCall && toolCall.toolId && toolCall.serverId) {
             await withTransaction(async (tx) => {
@@ -504,7 +543,8 @@ verbs.forEach(verb => {
                     requestData: {
                         toolName: toolCall.name,
                         args: toolCall.args
-                    }
+                    },
+                    result: responseData
                 })(tx);
                 
                 // Update daily analytics using internal server ID

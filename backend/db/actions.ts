@@ -171,7 +171,8 @@ export const txOperations = {
                                 id: true,
                                 timestamp: true,
                                 responseStatus: true,
-                                executionTimeMs: true
+                                executionTimeMs: true,
+                                result: false
                             },
                             with: {
                                 user: {
@@ -719,6 +720,7 @@ export const txOperations = {
         ipAddress?: string;
         userAgent?: string;
         requestData?: Record<string, unknown>;
+        result?: Record<string, unknown>;
     }) => async (tx: TransactionType) => {
         const executionTime = data.executionTimeMs !== undefined ? data.executionTimeMs : undefined;
 
@@ -730,6 +732,7 @@ export const txOperations = {
             ipAddress: data.ipAddress,
             userAgent: data.userAgent,
             requestData: data.requestData,
+            result: data.result,
             timestamp: new Date()
         }).returning();
 
@@ -1400,7 +1403,8 @@ export const txOperations = {
                                 id: true,
                                 timestamp: true,
                                 responseStatus: true,
-                                executionTimeMs: true
+                                executionTimeMs: true,
+                                result: false
                             },
                             with: {
                                 user: {
