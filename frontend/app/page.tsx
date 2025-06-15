@@ -177,10 +177,16 @@ export default function MCPBrowser() {
   const copyToClipboard = (text: string) => navigator.clipboard.writeText(text)
 
   // Format number with commas
-  const formatNumber = (num: number) => num.toLocaleString()
+  const formatNumber = (num: number | undefined | null) => {
+    if (num === undefined || num === null || isNaN(num)) return '0'
+    return num.toLocaleString()
+  }
 
   // Format currency
-  const formatCurrency = (num: number) => `$${num.toFixed(2)}`
+  const formatCurrency = (num: number | undefined | null) => {
+    if (num === undefined || num === null || isNaN(num)) return '$0.00'
+    return `$${num.toFixed(2)}`
+  }
 
   // Stats card component
   const StatsCard = ({ 
