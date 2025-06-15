@@ -259,29 +259,24 @@ app.get('/servers/:serverId/tools', async (c) => {
 
 // Analytics endpoints
 app.get('/analytics/usage', async (c) => {
-    const { startDate, endDate, toolId, userId } = c.req.query();
+    try {
+        const { startDate, endDate, toolId, userId, serverId } = c.req.query();
 
-    // TODO: Replace with actual DB call
-    // const usage = await withTransaction(async (tx) => {
-    //     return await txOperations.getToolUsageAnalytics({
-    //         startDate,
-    //         endDate,
-    //         toolId,
-    //         userId
-    //     })(tx);
-    // });
+        const analytics = await withTransaction(async (tx) => {
+            return await txOperations.getComprehensiveAnalytics({
+                startDate: startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Default to last 30 days
+                endDate: endDate ? new Date(endDate) : new Date(),
+                toolId,
+                userId,
+                serverId
+            })(tx);
+        });
 
-    const usage = {
-        totalRequests: 42,
-        successfulRequests: 40,
-        failedRequests: 2,
-        averageExecutionTime: 150,
-        topTools: [
-            { name: 'example_tool', count: 25 }
-        ]
-    };
-
-    return c.json(usage);
+        return c.json(analytics);
+    } catch (error) {
+        console.error('Error fetching analytics:', error);
+        return c.json({ error: 'Failed to fetch analytics' }, 500);
+    }
 });
 
 app.get('/inspect-mcp-tools', async (c) => {

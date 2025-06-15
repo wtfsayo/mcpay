@@ -14,6 +14,12 @@ import {
   TrendingUp,
   AlertCircle,
   Loader2,
+  Activity,
+  DollarSign,
+  Users,
+  Zap,
+  CheckCircle,
+  Server,
 } from "lucide-react"
 import { ToolsModal, MCPServer } from "@/components/ToolsModal"
 import { useTheme } from "@/context/ThemeContext"
@@ -42,6 +48,43 @@ interface APIServer {
   createdAt: string;
   updatedAt: string;
   tools: APITool[];
+}
+
+interface AnalyticsData {
+  totalRequests: number;
+  successfulRequests: number;
+  failedRequests: number;
+  successRate: number;
+  averageExecutionTime: number;
+  totalRevenue: number;
+  totalPayments: number;
+  averagePaymentValue: number;
+  totalServers: number;
+  activeServers: number;
+  totalTools: number;
+  monetizedTools: number;
+  uniqueUsers: number;
+  totalProofs: number;
+  consistentProofs: number;
+  consistencyRate: number;
+  topToolsByRequests: Array<{
+    id: string;
+    name: string;
+    requests: number;
+    revenue: number;
+  }>;
+  topToolsByRevenue: Array<{
+    id: string;
+    name: string;
+    requests: number;
+    revenue: number;
+  }>;
+  dailyActivity: Array<{
+    date: string;
+    requests: number;
+    revenue: number;
+    uniqueUsers: number;
+  }>;
 }
 
 const transformServerData = (apiServer: APIServer): MCPServer => ({
@@ -77,15 +120,37 @@ export default function MCPBrowser() {
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
+  const [analyticsLoading, setAnalyticsLoading] = useState(true)
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null)
   const { isDark, toggleTheme } = useTheme()
 
   useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        setAnalyticsLoading(true)
+        setAnalyticsError(null)
+        
+        const analyticsResponse = await fetch('https://api.mcpay.fun/api/analytics/usage')
+        if (!analyticsResponse.ok) {
+          throw new Error(`Failed to fetch analytics: ${analyticsResponse.status}`)
+        }
+        
+        const analyticsData: AnalyticsData = await analyticsResponse.json()
+        setAnalytics(analyticsData)
+      } catch (err) {
+        setAnalyticsError(err instanceof Error ? err.message : 'Failed to fetch analytics')
+      } finally {
+        setAnalyticsLoading(false)
+      }
+    }
+
     const fetchServers = async () => {
       try {
         setLoading(true)
         setError(null)
         
-        const serversResponse = await fetch('https://api.mcpay.fun/api/servers?limit=50')
+        const serversResponse = await fetch('https://api.mcpay.fun/api/servers?limit=50&type=trending')
         if (!serversResponse.ok) {
           throw new Error(`Failed to fetch servers: ${serversResponse.status}`)
         }
@@ -101,6 +166,7 @@ export default function MCPBrowser() {
       }
     }
 
+    fetchAnalytics()
     fetchServers()
   }, [])
 
@@ -109,6 +175,77 @@ export default function MCPBrowser() {
   )
 
   const copyToClipboard = (text: string) => navigator.clipboard.writeText(text)
+
+  // Format number with commas
+  const formatNumber = (num: number) => num.toLocaleString()
+
+  // Format currency
+  const formatCurrency = (num: number) => `$${num.toFixed(2)}`
+
+  // Stats card component
+  const StatsCard = ({ 
+    title, 
+    value, 
+    icon: Icon, 
+    subtitle, 
+    trend 
+  }: { 
+    title: string
+    value: string | number
+    icon: any
+    subtitle?: string
+    trend?: string
+  }) => (
+    <Card className="p-6">
+      <div className="flex items-center">
+        <div className={`p-3 rounded-full ${isDark ? "bg-blue-900/20" : "bg-blue-50"}`}>
+          <Icon className={`h-6 w-6 ${isDark ? "text-blue-400" : "text-blue-600"}`} />
+        </div>
+        <div className="ml-4 flex-1">
+          <p className={`text-sm font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+            {title}
+          </p>
+          <div className="flex items-baseline">
+            <p className={`text-2xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+              {value}
+            </p>
+            {trend && (
+              <p className={`ml-2 text-sm font-medium ${
+                trend.startsWith('+') 
+                  ? 'text-green-600' 
+                  : trend.startsWith('-') 
+                  ? 'text-red-600' 
+                  : isDark ? 'text-gray-400' : 'text-gray-500'
+              }`}>
+                {trend}
+              </p>
+            )}
+          </div>
+          {subtitle && (
+            <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+              {subtitle}
+            </p>
+          )}
+        </div>
+      </div>
+    </Card>
+  )
+
+  // Stats skeleton component
+  const StatsSkeleton = () => (
+    <Card className="p-6">
+      <div className="flex items-center">
+        <div className={`p-3 rounded-full animate-pulse ${isDark ? "bg-gray-700" : "bg-gray-200"}`}>
+          <div className="h-6 w-6" />
+        </div>
+        <div className="ml-4 flex-1 space-y-2">
+          <div className={`h-4 rounded animate-pulse ${isDark ? "bg-gray-700" : "bg-gray-200"}`} style={{ width: '60%' }} />
+          <div className={`h-6 rounded animate-pulse ${isDark ? "bg-gray-700" : "bg-gray-200"}`} style={{ width: '40%' }} />
+          <div className={`h-3 rounded animate-pulse ${isDark ? "bg-gray-700" : "bg-gray-200"}`} style={{ width: '80%' }} />
+        </div>
+      </div>
+    </Card>
+  )
 
   // Skeleton card component
   const SkeletonCard = () => (
@@ -172,6 +309,79 @@ export default function MCPBrowser() {
           </p>
         </div>
 
+        {/* Platform Stats */}
+        <div className="mb-12">
+          <h2 className={`text-2xl font-bold text-center mb-8 ${isDark ? "text-white" : "text-gray-900"}`}>
+            Platform Statistics
+          </h2>
+          
+          {analyticsLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {Array.from({ length: 8 }).map((_, index) => (
+                <StatsSkeleton key={`stats-skeleton-${index}`} />
+              ))}
+            </div>
+          ) : analyticsError ? (
+            <div className="text-center py-8">
+              <AlertCircle className={`h-8 w-8 mx-auto mb-4 ${isDark ? "text-red-400" : "text-red-500"}`} />
+              <p className={`text-sm ${isDark ? "text-red-400" : "text-red-500"}`}>
+                Failed to load platform statistics
+              </p>
+            </div>
+          ) : analytics ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <StatsCard
+                title="Total Servers"
+                value={formatNumber(analytics.totalServers)}
+                icon={Server}
+                subtitle={`${analytics.activeServers} active`}
+              />
+              <StatsCard
+                title="Available Tools"
+                value={formatNumber(analytics.totalTools)}
+                icon={Tool}
+                subtitle={`${analytics.monetizedTools} monetized`}
+              />
+              <StatsCard
+                title="Total Requests"
+                value={formatNumber(analytics.totalRequests)}
+                icon={Activity}
+                subtitle={`${analytics.successRate}% success rate`}
+              />
+              <StatsCard
+                title="Unique Users"
+                value={formatNumber(analytics.uniqueUsers)}
+                icon={Users}
+                subtitle="Active developers"
+              />
+              <StatsCard
+                title="Total Revenue"
+                value={formatCurrency(analytics.totalRevenue)}
+                icon={DollarSign}
+                subtitle={`${formatNumber(analytics.totalPayments)} transactions`}
+              />
+              <StatsCard
+                title="Avg Response Time"
+                value={`${analytics.averageExecutionTime}ms`}
+                icon={Zap}
+                subtitle="Tool execution speed"
+              />
+              <StatsCard
+                title="Verification Proofs"
+                value={formatNumber(analytics.totalProofs)}
+                icon={CheckCircle}
+                subtitle={`${analytics.consistencyRate}% consistent`}
+              />
+              <StatsCard
+                title="Avg Payment"
+                value={formatCurrency(analytics.averagePaymentValue)}
+                icon={TrendingUp}
+                subtitle="Per transaction"
+              />
+            </div>
+          ) : null}
+        </div>
+
         {/* Category Filter */}
         <div className="flex justify-center mb-8">
           <div className="flex gap-2 flex-wrap">
@@ -187,6 +397,13 @@ export default function MCPBrowser() {
               </Button>
             ))}
           </div>
+        </div>
+
+        {/* Browse Servers Section */}
+        <div className="mb-8">
+          <h2 className={`text-2xl font-bold text-center mb-8 ${isDark ? "text-white" : "text-gray-900"}`}>
+            Browse MCP Servers
+          </h2>
         </div>
 
         {/* Results Count */}

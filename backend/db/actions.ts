@@ -1325,6 +1325,195 @@ export const txOperations = {
         });
     },
 
+    // Comprehensive Analytics for Landing Page
+    getComprehensiveAnalytics: (filters?: {
+        startDate?: Date;
+        endDate?: Date; 
+        toolId?: string;
+        userId?: string;
+        serverId?: string;
+    }) => async (tx: TransactionType) => {
+        const startDate = filters?.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        const endDate = filters?.endDate || new Date();
+
+        // Get basic counts with simpler queries
+        const [servers, tools, usage, payments, proofs] = await Promise.all([
+            tx.query.mcpServers.findMany({ 
+                columns: { id: true, status: true, name: true } 
+            }),
+            tx.query.mcpTools.findMany({ 
+                columns: { id: true, name: true, isMonetized: true } 
+            }),
+            tx.query.toolUsage.findMany({ 
+                columns: { 
+                    id: true, 
+                    responseStatus: true, 
+                    executionTimeMs: true,
+                    userId: true,
+                    timestamp: true,
+                    toolId: true
+                }
+            }),
+            tx.query.payments.findMany({ 
+                columns: { 
+                    id: true, 
+                    amount: true, 
+                    status: true,
+                    userId: true,
+                    createdAt: true,
+                    toolId: true
+                }
+            }),
+            tx.query.proofs.findMany({ 
+                columns: { 
+                    id: true, 
+                    isConsistent: true,
+                    createdAt: true
+                }
+            })
+        ]);
+
+        // Calculate core metrics
+        const totalServers = servers.length;
+        const activeServers = servers.filter(s => s.status === 'active').length;
+        const totalTools = tools.length;
+        const monetizedTools = tools.filter(t => t.isMonetized).length;
+
+        // Process usage data
+        const totalRequests = usage.length;
+        const successfulRequests = usage.filter(u => 
+            u.responseStatus === 'success' || u.responseStatus === '200'
+        ).length;
+        const failedRequests = totalRequests - successfulRequests;
+        const successRate = totalRequests > 0 ? (successfulRequests / totalRequests) * 100 : 0;
+
+        const executionTimes = usage
+            .filter(u => u.executionTimeMs !== null && u.executionTimeMs !== undefined)
+            .map(u => u.executionTimeMs!);
+        const averageExecutionTime = executionTimes.length > 0 
+            ? executionTimes.reduce((sum, time) => sum + time, 0) / executionTimes.length
+            : 0;
+
+        // Process payment data
+        const completedPayments = payments.filter(p => p.status === 'completed');
+        const totalPayments = completedPayments.length;
+        const totalRevenue = completedPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+        const averagePaymentValue = totalPayments > 0 ? totalRevenue / totalPayments : 0;
+
+        // Process proof data
+        const totalProofs = proofs.length;
+        const consistentProofs = proofs.filter(p => p.isConsistent).length;
+        const consistencyRate = totalProofs > 0 ? (consistentProofs / totalProofs) * 100 : 0;
+
+        // Calculate unique users (simple approach)
+        const uniqueUserIds = new Set<string>();
+        usage.forEach(u => { if (u.userId) uniqueUserIds.add(u.userId); });
+        completedPayments.forEach(p => { if (p.userId) uniqueUserIds.add(p.userId); });
+
+        // Create tool name lookup
+        const toolNames = new Map<string, string>();
+        tools.forEach(t => toolNames.set(t.id, t.name));
+
+        // Simple top tools calculation
+        const toolRequestCounts = new Map<string, number>();
+        const toolRevenueCounts = new Map<string, number>();
+
+        usage.forEach(u => {
+            if (u.toolId) {
+                const current = toolRequestCounts.get(u.toolId) || 0;
+                toolRequestCounts.set(u.toolId, current + 1);
+            }
+        });
+
+        completedPayments.forEach(p => {
+            if (p.toolId) {
+                const current = toolRevenueCounts.get(p.toolId) || 0;
+                toolRevenueCounts.set(p.toolId, current + parseFloat(p.amount));
+            }
+        });
+
+        const topToolsByRequests = Array.from(toolRequestCounts.entries())
+            .sort(([,a], [,b]) => b - a)
+            .slice(0, 10)
+            .map(([toolId, count]) => ({
+                id: toolId,
+                name: toolNames.get(toolId) || 'Unknown Tool',
+                requests: count,
+                revenue: toolRevenueCounts.get(toolId) || 0
+            }));
+
+        const topToolsByRevenue = Array.from(toolRevenueCounts.entries())
+            .sort(([,a], [,b]) => b - a)
+            .slice(0, 10)
+            .map(([toolId, revenue]) => ({
+                id: toolId,
+                name: toolNames.get(toolId) || 'Unknown Tool',
+                requests: toolRequestCounts.get(toolId) || 0,
+                revenue
+            }));
+
+        // Simple daily activity (last 30 days)
+        const last30Days = [];
+        for (let i = 29; i >= 0; i--) {
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            const dateStr = date.toISOString().split('T')[0];
+            
+            const dayUsage = usage.filter(u => u.timestamp.toISOString().split('T')[0] === dateStr);
+            const dayPayments = completedPayments.filter(p => p.createdAt.toISOString().split('T')[0] === dateStr);
+            const dayUsers = new Set<string>();
+            
+            dayUsage.forEach(u => { if (u.userId) dayUsers.add(u.userId); });
+            dayPayments.forEach(p => { if (p.userId) dayUsers.add(p.userId); });
+            
+            last30Days.push({
+                date: dateStr,
+                requests: dayUsage.length,
+                revenue: Math.round(dayPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0) * 100) / 100,
+                uniqueUsers: dayUsers.size
+            });
+        }
+
+        return {
+            // Core metrics
+            totalRequests,
+            successfulRequests,
+            failedRequests,
+            successRate: Math.round(successRate * 100) / 100,
+            averageExecutionTime: Math.round(averageExecutionTime),
+            
+            // Financial metrics
+            totalRevenue: Math.round(totalRevenue * 100) / 100,
+            totalPayments,
+            averagePaymentValue: Math.round(averagePaymentValue * 100) / 100,
+            
+            // Platform metrics
+            totalServers,
+            activeServers,
+            totalTools,
+            monetizedTools,
+            uniqueUsers: uniqueUserIds.size,
+            
+            // Proof/verification metrics
+            totalProofs,
+            consistentProofs,
+            consistencyRate: Math.round(consistencyRate * 100) / 100,
+            
+            // Top performers
+            topToolsByRequests,
+            topToolsByRevenue,
+            topServersByActivity: [], // Simplified for now
+            
+            // Time series data for charts
+            dailyActivity: last30Days,
+            
+            // Period info
+            periodStart: startDate.toISOString(),
+            periodEnd: endDate.toISOString(),
+            periodDays: Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
+        };
+    },
+
     getMcpServerWithStats: (serverId: string) => async (tx: TransactionType) => {
         const server = await tx.query.mcpServers.findFirst({
             where: eq(mcpServers.serverId, serverId),
