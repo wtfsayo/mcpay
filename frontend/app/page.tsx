@@ -409,7 +409,7 @@ export default function MCPBrowser() {
               </div>
               <h3 className="text-xl font-semibold mb-2">Unable to load statistics</h3>
               <p className={`text-sm ${isDark ? "text-red-400" : "text-red-500"}`}>
-                We're working to restore the data feed
+                We&apos;re working to restore the data feed
               </p>
             </div>
           ) : analytics ? (
@@ -568,16 +568,6 @@ export default function MCPBrowser() {
               }`} style={{ animationDelay: `${index * 100}ms` }}>
                 {/* Gradient overlay */}
                 <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-purple-500/5 to-pink-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-                
-                {/* Verified badge */}
-                {server.verified && (
-                  <div className="absolute top-4 right-4 z-10">
-                    <Badge className={`${isDark ? "bg-green-600" : "bg-green-600"} text-white border-0 shadow-lg`}>
-                      <Shield className="h-3 w-3 mr-1" />
-                      Verified
-                    </Badge>
-                  </div>
-                )}
 
                 <CardHeader className="pb-4 relative">
                   <div className="flex items-center gap-4">
