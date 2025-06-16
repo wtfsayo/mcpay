@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textArea"
 import { ConnectButton } from "@/components/connect-button"
 import { useTheme } from "@/context/ThemeContext"
-import { api } from "@/lib/utils"
+import { api, urlUtils } from "@/lib/utils"
 import {
   Activity,
   AlertCircle,
@@ -299,7 +299,7 @@ export default function ConnectPage() {
     setConnectionState(prev => ({ ...prev, isLoading: true, error: undefined }))
 
     try {
-      const serverUrl = typeof server === 'string' ? server : `https://api.mcpay.fun/mcp/${server.id}`
+      const serverUrl = typeof server === 'string' ? server : urlUtils.getMcpUrl(server.id)
       
       // Import the PaymentTransport and AI SDK
       const { createPaymentTransport } = await import('mcpay')

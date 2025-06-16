@@ -13,7 +13,7 @@ import {
   isNativeToken,
   type Network
 } from "@/lib/tokens"
-import { api } from "@/lib/utils"
+import { api, urlUtils } from "@/lib/utils"
 import {
   Activity,
   AlertCircle,
@@ -471,12 +471,12 @@ export default function ServerDashboard() {
               <div className="flex items-center gap-2">
                 <code className={`flex-1 text-sm p-3 rounded-md font-mono ${isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-800"
                   }`}>
-                  https://api.mcpay.fun/mcp/{serverData.serverId}
+                  {urlUtils.getMcpUrl(serverData.serverId)}
                 </code>
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => copyToClipboard(`https://api.mcpay.fun/mcp/${serverData.serverId}`)}
+                  onClick={() => copyToClipboard(urlUtils.getMcpUrl(serverData.serverId))}
                   title="Copy MCP URL"
                 >
                   <Copy className="h-4 w-4" />

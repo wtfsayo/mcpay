@@ -25,6 +25,7 @@ import {
 } from "lucide-react"
 import Image from "next/image"
 import { useEffect, useState } from "react"
+import { urlUtils } from "@/lib/utils"
 
 // API response types
 interface APITool {
@@ -133,7 +134,7 @@ export default function MCPBrowser() {
         setAnalyticsLoading(true)
         setAnalyticsError(null)
         
-        const analyticsResponse = await fetch('https://api.mcpay.fun/api/analytics/usage')
+        const analyticsResponse = await fetch(urlUtils.getApiUrl('/analytics/usage'))
         if (!analyticsResponse.ok) {
           throw new Error(`Failed to fetch analytics: ${analyticsResponse.status}`)
         }
@@ -152,7 +153,7 @@ export default function MCPBrowser() {
         setLoading(true)
         setError(null)
         
-        const serversResponse = await fetch('https://api.mcpay.fun/api/servers?limit=50&type=trending')
+        const serversResponse = await fetch(urlUtils.getApiUrl('/servers?limit=50&type=trending'))
         if (!serversResponse.ok) {
           throw new Error(`Failed to fetch servers: ${serversResponse.status}`)
         }
@@ -600,7 +601,7 @@ export default function MCPBrowser() {
                       <code className={`flex-1 text-xs p-3 rounded-lg font-mono break-all transition-colors duration-200 ${
                         isDark ? "bg-gray-700/50 border border-gray-600/50 hover:bg-gray-700" : "bg-gray-50 border border-gray-200 hover:bg-gray-100"
                       }`}>
-                        {`https://api.mcpay.fun/mcp/${server.id}`}
+                        {urlUtils.getMcpUrl(server.id)}
                       </code>
                       <Button
                         size="sm"
@@ -608,7 +609,7 @@ export default function MCPBrowser() {
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          copyToClipboard(`https://api.mcpay.fun/mcp/${server.id}`);
+                          copyToClipboard(urlUtils.getMcpUrl(server.id));
                         }}
                         className="shrink-0 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                       >
