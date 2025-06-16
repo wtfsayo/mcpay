@@ -7,10 +7,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useTheme } from "@/context/ThemeContext"
 import { openBlockscout } from "@/lib/blockscout"
 import {
-  getTokenInfo,
   formatTokenAmount,
+  getTokenInfo,
   getTokenVerification,
-  isNativeToken,
   type Network
 } from "@/lib/tokens"
 import { api, urlUtils } from "@/lib/utils"
@@ -20,20 +19,23 @@ import {
   BarChart3,
   CheckCircle,
   Clock,
+  Coins,
   Copy,
   DollarSign,
   ExternalLink,
-  Globe,
   Loader2,
+  Play,
+  Plug,
+  RefreshCcw,
   Shield,
   Users,
   Wrench,
-  XCircle,
-  Coins
+  XCircle
 } from "lucide-react"
 import Image from "next/image"
 import { useParams } from "next/navigation"
 import { useEffect, useState } from "react"
+import { ToolExecutionModal } from "@/components/ToolExecutionModal"
 
 // Types based on the API response structure
 interface ServerData {
@@ -181,6 +183,8 @@ export default function ServerDashboard() {
   const [serverData, setServerData] = useState<ServerData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedTool, setSelectedTool] = useState<any>(null)
+  const [showToolModal, setShowToolModal] = useState(false)
   const { isDark } = useTheme()
 
   useEffect(() => {
@@ -206,6 +210,11 @@ export default function ServerDashboard() {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
+  }
+
+  const handleToolExecution = (tool: any) => {
+    setSelectedTool(tool)
+    setShowToolModal(true)
   }
 
   // Enhanced formatCurrency function using token registry
@@ -280,19 +289,6 @@ export default function ServerDashboard() {
             </span>
           )}
         </div>
-
-        {/* Verification Badge */}
-        {showVerification && verification.verified && (
-          <Badge
-            variant="outline"
-            className={`text-xs flex items-center gap-1 ${isDark ? "border-green-500 text-green-400" : "border-green-600 text-green-600"
-              }`}
-            title={`Verified by ${verification.source}`}
-          >
-            <Shield className="h-3 w-3" />
-            Verified
-          </Badge>
-        )}
 
         {/* Stablecoin Badge */}
         {tokenInfo?.isStablecoin && (
@@ -373,17 +369,15 @@ export default function ServerDashboard() {
         <div className="mb-8">
           <div className="flex items-start justify-between mb-4">
             <div>
-              <h1 className="text-3xl font-bold mb-2">{serverData.name}</h1>
-              <p className={`text-lg max-w-2xl ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+              <h1 className="text-2xl font-bold mb-2">{serverData.name}</h1>
+              <p className={`text-sm max-w-xl ${isDark ? "text-gray-300" : "text-gray-600"}`}>
                 {serverData.description}
               </p>
             </div>
-            <Badge
-              variant={serverData.status === 'active' ? 'default' : 'secondary'}
-              className={`text-sm ${isDark ? "bg-gray-600 text-gray-200" : ""}`}
-            >
-              {serverData.status}
-            </Badge>
+            <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+              <RefreshCcw className="h-4 w-4" />
+              Refresh
+            </Button>
           </div>
 
           <div className="flex items-center gap-4 text-sm">
@@ -393,67 +387,85 @@ export default function ServerDashboard() {
             <span className={isDark ? "text-gray-400" : "text-gray-500"}>
               Last Activity: {formatDate(serverData.stats.lastActivity)}
             </span>
-            <span className={`font-medium ${getReputationColor(serverData.stats.reputationScore)}`}>
+            {/* <span className={`font-medium ${getReputationColor(serverData.stats.reputationScore)}`}>
               Reputation: {(serverData.stats.reputationScore * 100).toFixed(1)}%
-            </span>
+            </span> */}
           </div>
         </div>
 
         {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card className={isDark ? "bg-gray-800 border-gray-700" : ""}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">${serverData.stats.totalRevenue.toFixed(4)}</div>
-              <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                From {serverData.stats.totalPayments} payments
-              </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+          <Card className={`${isDark ? "bg-gray-800 border-gray-700" : ""} hover:shadow-md transition-shadow`}>
+            <CardContent className="p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <p className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                    Total Revenue
+                  </p>
+                  <div className="text-base font-bold mt-0.5">${serverData.stats.totalRevenue.toFixed(2)}</div>
+                  <p className={`text-xs mt-0.5 ${isDark ? "text-gray-500" : "text-gray-500"}`}>
+                    {serverData.stats.totalPayments} payments
+                  </p>
+                </div>
+                <div className={`p-1.5 rounded-full ${isDark ? "bg-gray-700" : "bg-gray-100"}`}>
+                  <DollarSign className="h-3.5 w-3.5 text-green-500" />
+                </div>
+              </div>
             </CardContent>
           </Card>
 
-          <Card className={isDark ? "bg-gray-800 border-gray-700" : ""}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Usage</CardTitle>
-              <Activity className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{serverData.stats.totalUsage.toLocaleString()}</div>
-              <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                Avg response: {serverData.stats.avgResponseTime.toFixed(0)}ms
-              </p>
+          <Card className={`${isDark ? "bg-gray-800 border-gray-700" : ""} hover:shadow-md transition-shadow`}>
+            <CardContent className="p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <p className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                    Total Usage
+                  </p>
+                  <div className="text-base font-bold mt-0.5">{serverData.stats.totalUsage.toLocaleString()}</div>
+                  <p className={`text-xs mt-0.5 ${isDark ? "text-gray-500" : "text-gray-500"}`}>
+                    {serverData.stats.avgResponseTime.toFixed(0)}ms avg
+                  </p>
+                </div>
+                <div className={`p-1.5 rounded-full ${isDark ? "bg-gray-700" : "bg-gray-100"}`}>
+                  <Activity className="h-3.5 w-3.5 text-blue-500" />
+                </div>
+              </div>
             </CardContent>
           </Card>
 
-          <Card className={isDark ? "bg-gray-800 border-gray-700" : ""}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Unique Users</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{serverData.stats.uniqueUsers}</div>
-              <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                Active users
-              </p>
+          <Card className={`${isDark ? "bg-gray-800 border-gray-700" : ""} hover:shadow-md transition-shadow`}>
+            <CardContent className="p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <p className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                    Unique Users
+                  </p>
+                  <div className="text-base font-bold mt-0.5">{serverData.stats.uniqueUsers}</div>
+                  <p className={`text-xs mt-0.5 ${isDark ? "text-gray-500" : "text-gray-500"}`}>
+                    Active users
+                  </p>
+                </div>
+                <div className={`p-1.5 rounded-full ${isDark ? "bg-gray-700" : "bg-gray-100"}`}>
+                  <Users className="h-3.5 w-3.5 text-purple-500" />
+                </div>
+              </div>
             </CardContent>
           </Card>
 
-          <Card className={isDark ? "bg-gray-800 border-gray-700" : ""}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          {/* <Card className={isDark ? "bg-gray-800 border-gray-700" : ""}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
               <CardTitle className="text-sm font-medium">Verification Score</CardTitle>
               <Shield className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className={`text-2xl font-bold ${getReputationColor(serverData.stats.reputationScore)}`}>
+              <div className={`text-xl font-bold ${getReputationColor(serverData.stats.reputationScore)}`}>
                 {(serverData.stats.reputationScore * 100).toFixed(1)}%
               </div>
               <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                 {serverData.stats.consistentProofs}/{serverData.stats.totalProofs} consistent
               </p>
             </CardContent>
-          </Card>
+          </Card> */}
         </div>
 
         {/* Server Connection */}
@@ -580,6 +592,7 @@ export default function ServerDashboard() {
                     <TableHead>Price</TableHead>
                     <TableHead>Usage</TableHead>
                     <TableHead className="text-right">Verification</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -644,6 +657,17 @@ export default function ServerDashboard() {
                             No proofs
                           </span>
                         )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleToolExecution(tool)}
+                          className={`text-xs ${isDark ? "border-gray-600 text-gray-300 hover:bg-gray-700" : ""}`}
+                        >
+                          <Play className="h-3 w-3 mr-1" />
+                          Try
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -763,8 +787,8 @@ export default function ServerDashboard() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Amount & Token</TableHead>
+                    <TableHead></TableHead>
+                    <TableHead>Amount</TableHead>
                     <TableHead>User</TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead>Network</TableHead>
@@ -772,7 +796,9 @@ export default function ServerDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {serverData.tools.flatMap(tool => tool.payments).slice(0, 10).map((payment) => (
+                  {serverData.tools.flatMap(tool => tool.payments)
+                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                    .slice(0, 10).map((payment) => (
                     <TableRow key={payment.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -786,9 +812,6 @@ export default function ServerDashboard() {
                               <Clock className="h-3 w-3" />
                             )}
                           </div>
-                          <Badge variant={payment.status === 'completed' ? 'default' : 'secondary'} className="text-xs">
-                            {payment.status}
-                          </Badge>
                         </div>
                       </TableCell>
                       <TableCell className="font-medium">
@@ -822,39 +845,18 @@ export default function ServerDashboard() {
                           <Badge variant="outline" className="text-xs">
                             {payment.network}
                           </Badge>
-                          {/* Network verification indicator */}
-                          {(payment.network === 'base' || payment.network === 'base-sepolia') && (
-                            <Badge
-                              variant="outline"
-                              className={`text-xs ${isDark ? "border-blue-500 text-blue-400" : "border-blue-600 text-blue-600"}`}
-                            >
-                              MCPay Native
-                            </Badge>
-                          )}
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
                         {payment.transactionHash ? (
                           <div className="flex items-center justify-end gap-2">
-                            <code className={`text-xs font-mono ${isDark ? "text-gray-300" : "text-gray-600"}`}>
-                              {payment.transactionHash.slice(0, 6)}...{payment.transactionHash.slice(-4)}
-                            </code>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => copyToClipboard(payment.transactionHash!)}
-                              title="Copy transaction hash"
-                            >
-                              <Copy className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
+                            <button
                               onClick={() => openBlockscout(payment.transactionHash!, "tx")}
-                              title="View transaction"
+                              className={`text-xs font-mono hover:underline ${isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-700"}`}
+                              title="View transaction on block explorer"
                             >
-                              <ExternalLink className="h-3 w-3" />
-                            </Button>
+                              {payment.transactionHash.slice(0, 6)}...{payment.transactionHash.slice(-4)}
+                            </button>
                           </div>
                         ) : (
                           <span className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
@@ -869,6 +871,19 @@ export default function ServerDashboard() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Tool Execution Modal */}
+        {serverData && (
+          <ToolExecutionModal
+            isOpen={showToolModal}
+            onClose={() => {
+              setShowToolModal(false)
+              setSelectedTool(null)
+            }}
+            tool={selectedTool}
+            serverId={serverData.serverId}
+          />
+        )}
       </div>
     </div>
   )

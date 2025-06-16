@@ -15,8 +15,6 @@ import { useTheme } from "@/context/ThemeContext"
 import { useConnect, useConnectors } from 'wagmi'
 import { ConnectButton } from "./connect-button"
 
-
-
 interface NavbarProps {
   activeTab?: string
   onTabChange?: (tab: string) => void
@@ -30,8 +28,6 @@ export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
   const connectors = useConnectors()
 
   const { isDark } = useTheme()
-
-
 
   const handleTabChange = (tabId: string) => {
     if (onTabChange) {
@@ -133,17 +129,21 @@ export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
               {/* Mobile Connect Button */}
               <div className="px-3 py-2">
                 {
-                  connectors?.filter((connector) => connector.name == "MetaMask").map((connector) => (
+                  connectors?.filter((connector) => 
+                    connector.name === "MetaMask" || 
+                    connector.name === "Coinbase Wallet" ||
+                    connector.name.toLowerCase().includes("porto")
+                  ).map((connector) => (
                     <button
                       key={connector.uid}
                       onClick={() => connect.connect({ connector })}
-                      className={`w-full text-left px-3 py-2 text-sm font-medium transition-colors duration-200 ${
+                      className={`w-full text-left px-3 py-2 text-sm font-medium transition-colors duration-200 block ${
                         isDark
                           ? "text-gray-300 hover:bg-gray-800 hover:text-white"
                           : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                       }`}
                     >
-                      {connector.name == "MetaMask" ? 'Connected' : 'Connect'}
+                      {connector.name}
                     </button>
                   ))
                 }
