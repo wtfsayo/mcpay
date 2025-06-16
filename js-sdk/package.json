@@ -1,11 +1,27 @@
 {
   "name": "mcpay",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "SDK and CLI for MCPay functionality - MCP servers with payment capabilities",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
     "mcpay": "dist/cli/index.js"
+  },
+  "exports": {
+    ".": {
+      "browser": "./dist/browser.js",
+      "node": "./dist/index.js",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "default": "./dist/browser.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts", 
+      "default": "./dist/server.js"
+    }
   },
   "scripts": {
     "build": "tsc",
