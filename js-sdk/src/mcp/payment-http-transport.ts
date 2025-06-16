@@ -119,8 +119,16 @@ export class PaymentTransport extends StreamableHTTPClientTransport {
                 return validated as unknown as PaymentRequirements;
             });
 
-            // Use hardcoded chain ID for now
-            const chainId = 84532;
+            // Get chain ID from wallet client
+            const chainId = (walletClient as any).chain?.id || 
+                           (walletClient as any).client?.chain?.id || 
+                           84532; // fallback to Base Sepolia
+
+            console.log("[x402] Constructor payment fetch - Wallet client chain info:", {
+                walletChainId: (walletClient as any).chain?.id,
+                clientChainId: (walletClient as any).client?.chain?.id,
+                resolvedChainId: chainId
+            });
 
             // Select appropriate payment requirements
             const selectedPaymentRequirements = this._paymentRequirementsSelector(
@@ -134,9 +142,15 @@ export class PaymentTransport extends StreamableHTTPClientTransport {
                 throw new Error(`Payment amount ${selectedPaymentRequirements.maxAmountRequired} exceeds maximum allowed ${this._maxPaymentValue}`);
             }
 
+            console.log("[x402] Constructor - About to create payment header with:", {
+                walletClient: walletClient,
+                x402Version,
+                selectedPaymentRequirements
+            });
+
             // Create payment header
             const paymentHeader = await createPaymentHeader(
-                this._walletClient,
+                walletClient,
                 x402Version,
                 selectedPaymentRequirements,
             );
@@ -379,15 +393,15 @@ export class PaymentTransport extends StreamableHTTPClientTransport {
             });
 
             // Determine chain ID from wallet client
-            //   const chainId = evm.isSignerWallet(this._walletClient)
-            //     ? this._walletClient.chain?.id
-            //     : evm.isAccount(this._walletClient)
-            //       ? this._walletClient.client?.chain?.id
-            //       : undefined;
+            const chainId = (this._walletClient as any).chain?.id || 
+                           (this._walletClient as any).client?.chain?.id || 
+                           84532; // fallback to Base Sepolia
 
-            const chainId = 84532;
-
-
+            console.log("[x402] Wallet client chain info:", {
+                walletChainId: (this._walletClient as any).chain?.id,
+                clientChainId: (this._walletClient as any).client?.chain?.id,
+                resolvedChainId: chainId
+            });
             console.log("[x402] Using chain ID:", chainId);
 
             // Select appropriate payment requirements
@@ -404,7 +418,9 @@ export class PaymentTransport extends StreamableHTTPClientTransport {
                 throw new Error(`Payment amount ${selectedPaymentRequirements.maxAmountRequired} exceeds maximum allowed ${this._maxPaymentValue}`);
             }
 
-            console.log(this._walletClient); 
+            console.log("[x402] Wallet client details:", this._walletClient); 
+            console.log("[x402] Selected payment requirements for header creation:", selectedPaymentRequirements);
+            console.log("[x402] x402Version:", x402Version);
             
             // Create payment header
             console.log("[x402] Creating payment header...");
