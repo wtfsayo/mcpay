@@ -458,13 +458,6 @@ export default function MCPBrowser() {
                 delay={500}
               />
               <StatsCard
-                title="Trust & Security"
-                value={formatNumber(analytics.totalProofs)}
-                icon={Shield}
-                subtitle={`${analytics.consistencyRate}% consistency`}
-                delay={600}
-              />
-              <StatsCard
                 title="Value per Call"
                 value={formatCurrency(analytics.averagePaymentValue)}
                 icon={BarChart3}
