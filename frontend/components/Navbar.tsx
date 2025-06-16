@@ -66,21 +66,6 @@ export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
               variant="ghost"
               asChild
               className={`px-3 py-2 text-sm font-medium transition-colors duration-200 ${
-                pathname === "/connect"
-                  ? isDark
-                    ? "bg-gray-800 text-white"
-                    : "bg-gray-100 text-gray-900"
-                  : isDark
-                    ? "text-gray-300 hover:bg-gray-800 hover:text-white"
-                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`}
-            >
-              <Link href="/connect">Connect</Link>
-            </Button>
-            <Button
-              variant="ghost"
-              asChild
-              className={`px-3 py-2 text-sm font-medium transition-colors duration-200 ${
                 pathname === "/register"
                   ? isDark
                     ? "bg-gray-800 text-white"
@@ -127,23 +112,6 @@ export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
         {isMobileMenuOpen && (
           <div className="md:hidden">
             <div className="px-2 pt-2 pb-3 space-y-1 border-t border-gray-200 dark:border-gray-700">
-              {/* Connect button for mobile */}
-              <Button
-                variant="ghost"
-                asChild
-                onClick={() => setIsMobileMenuOpen(false)}
-                className={`w-full justify-start px-3 py-2 text-sm font-medium transition-colors duration-200 ${
-                  pathname === "/connect"
-                    ? isDark
-                      ? "bg-gray-800 text-white"
-                      : "bg-gray-100 text-gray-900"
-                    : isDark
-                      ? "text-gray-300 hover:bg-gray-800 hover:text-white"
-                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                }`}
-              >
-                <Link href="/connect">Connect</Link>
-              </Button>
               {/* Register button for mobile */}
               <Button
                 variant="ghost"
