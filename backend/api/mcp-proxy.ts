@@ -54,7 +54,7 @@ const verbs = ["post", "get", "delete"] as const;
  * Copies a client request to the upstream, returning the upstream Response.
  * Works for POST, GET, DELETE – anything the MCP spec allows.
  */
-const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer) => {
+const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer, metadata?: {user?: User}) => {
     let targetUpstream = DEFAULT_UPSTREAM;
     let authHeaders: Record<string, unknown> | undefined = undefined;
 
@@ -97,6 +97,9 @@ const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer) => {
     })
 
     headers.set('host', targetUpstream.host);
+
+    // set user information headers
+    headers.set("x-mcpay-wallet-address", metadata?.user?.walletAddress || "");
 
     if (authHeaders) {
         for (const [key, value] of Object.entries(authHeaders)) {
@@ -444,7 +447,7 @@ verbs.forEach(verb => {
                 c.header("X-PAYMENT-RESPONSE", responseHeader);
 
                 console.log(`[${new Date().toISOString()}] Forwarding request to upstream with ID: ${id}`)
-                const upstream = await forwardRequest(c, id, body)
+                const upstream = await forwardRequest(c, id, body, { user: user || undefined })
                 console.log(`[${new Date().toISOString()}] Received upstream response, mirroring back to client`)
 
                 // Capture response data for logging
@@ -519,7 +522,7 @@ verbs.forEach(verb => {
         }
 
         console.log(`[${new Date().toISOString()}] Forwarding request to upstream with ID: ${id}`)
-        const upstream = await forwardRequest(c, id, body)
+        const upstream = await forwardRequest(c, id, body, { user: user || undefined })
         console.log(`[${new Date().toISOString()}] Received upstream response, mirroring back to client`)
 
         // Capture response data for logging
