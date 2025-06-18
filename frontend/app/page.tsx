@@ -676,15 +676,14 @@ export default function MCPBrowser() {
                 API Documentation
               </button>
               <span className={isDark ? "text-gray-600" : "text-gray-400"}>•</span>
-              <button
-                onClick={() => {
-                  // You can add developer guide link here
-                  console.log('Developer Guide clicked');
-                }}
+              <a
+                href="https://github.com/microchipgnu/mcpay.fun"
+                target="_blank"
+                rel="noopener noreferrer"
                 className={`hover:text-blue-500 transition-colors duration-200 ${isDark ? "text-gray-400" : "text-gray-500"} cursor-pointer`}
               >
-                Developer Guide
-              </button>
+                Open Source
+              </a>
             </div>
           </div>
         </div>
