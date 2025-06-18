@@ -28,6 +28,7 @@ export const runAgent = async (prompt: string) => {
         model: openai("gpt-4o-mini"),
         prompt,
         tools,
+        maxSteps: 10,
     });
 
     return result.text;
