@@ -1,7 +1,5 @@
 import { createMcpHandler, experimental_withMcpAuth } from "@vercel/mcp-adapter";
 import { z } from "zod";
-import { gateway } from "@vercel/ai-sdk-gateway";
-import { generateText } from "ai";
 import { runAgent } from "../lib/agent.js";
 
 const VALID_KEYS = process.env.VALID_KEYS?.split(",");
@@ -49,4 +47,5 @@ const wrappedHandler = async (req: Request) => {
   return authHandler(req);
 };
 
-export { wrappedHandler as GET, wrappedHandler as POST, wrappedHandler as DELETE };
+export { wrappedHandler as DELETE, wrappedHandler as GET, wrappedHandler as POST };
+

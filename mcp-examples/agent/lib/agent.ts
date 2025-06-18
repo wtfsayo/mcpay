@@ -1,8 +1,8 @@
 import { experimental_createMCPClient, generateText } from "ai";
-import { gateway } from "@vercel/ai-sdk-gateway";
 import { createPaymentTransport } from "mcpay/browser";
-import { privateKeyToAccount } from "viem/accounts";
 import { Hex } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { openai } from "./ai.js";
 
 const privateKey = process.env.PRIVATE_KEY as Hex;
 const mcpServers = process.env.MCP_SERVERS?.split(",");
@@ -25,7 +25,7 @@ export const runAgent = async (prompt: string) => {
     }
 
     const result = await generateText({
-        model: gateway("openai/gpt-4o-mini"),
+        model: openai("gpt-4o-mini"),
         prompt,
         tools,
     });
