@@ -231,7 +231,11 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     const properties = getToolProperties(tool)
     
     Object.entries(properties).forEach(([key, prop]) => {
-      inputs[key] = prop.default || ''
+      if (prop.type === 'array') {
+        inputs[key] = prop.default || []
+      } else {
+        inputs[key] = prop.default || ''
+      }
     })
     
     setToolInputs(inputs)
@@ -362,6 +366,72 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     const currentValue = toolInputs[inputName] || ''
     const requiredFields = getRequiredFields(tool)
     const isRequired = requiredFields.includes(inputName)
+
+    // Handle array inputs
+    if (inputProp.type === 'array') {
+      const arrayValue = Array.isArray(currentValue) ? currentValue : []
+      
+      const addArrayItem = () => {
+        const newArray = [...arrayValue, '']
+        updateToolInput(inputName, newArray)
+      }
+      
+      const removeArrayItem = (index: number) => {
+        const newArray = arrayValue.filter((_: any, i: number) => i !== index)
+        updateToolInput(inputName, newArray)
+      }
+      
+      const updateArrayItem = (index: number, value: string) => {
+        const newArray = [...arrayValue]
+        newArray[index] = value
+        updateToolInput(inputName, newArray)
+      }
+
+      return (
+        <div key={inputName} className="space-y-2">
+          <label className={`text-sm font-medium flex items-center gap-1 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+            {inputName}
+            {isRequired && <span className="text-red-500">*</span>}
+          </label>
+          <div className="space-y-2">
+            {arrayValue.map((item: string, index: number) => (
+              <div key={index} className="flex items-center gap-2">
+                <Input
+                  type="text"
+                  value={item}
+                  onChange={(e) => updateArrayItem(index, e.target.value)}
+                  placeholder={`Enter ${inputName} item ${index + 1}`}
+                  className={`flex-1 ${isDark ? "bg-gray-700 border-gray-600 text-white" : ""}`}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => removeArrayItem(index)}
+                  className={`px-2 ${isDark ? "border-gray-600 text-gray-300 hover:bg-gray-700" : ""}`}
+                >
+                  ×
+                </Button>
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={addArrayItem}
+              className={`w-full ${isDark ? "border-gray-600 text-gray-300 hover:bg-gray-700" : ""}`}
+            >
+              + Add {inputName} item
+            </Button>
+          </div>
+          {inputProp.description && (
+            <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+              {inputProp.description}
+            </p>
+          )}
+        </div>
+      )
+    }
 
     if (inputProp.enum) {
       return (
