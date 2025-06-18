@@ -2,19 +2,19 @@ import { createMcpHandler, experimental_withMcpAuth } from "@vercel/mcp-adapter"
 import { z } from "zod";
 import { gateway } from "@vercel/ai-sdk-gateway";
 import { generateText } from "ai";
+import { runAgent } from "../lib/agent.js";
 
 const VALID_KEYS = process.env.VALID_KEYS?.split(",");
 
 const handler = createMcpHandler((server) => { 
 
   server.tool(
-    "inference", 
-    "Run inference with a specified model",
+    "runAgent", 
+    "Run the agent",
     {
-      prompt: z.string().describe("The prompt to infer"),
-      model: z.string().describe("The model to use for inference")
+      prompt: z.string().describe("The prompt to run the agent"),
     },
-    async ({ prompt, model }, {authInfo}) => {
+    async ({ prompt }, {authInfo}) => {
 
       if (!authInfo?.token) {
         return { content: [{ type: "text", text: "Unauthorized" }] };
@@ -24,12 +24,9 @@ const handler = createMcpHandler((server) => {
         return { content: [{ type: "text", text: "Unauthorized" }] };
       }
 
-      const text = await generateText({
-        model: gateway(model),
-        prompt,
-      });
+      const result = await runAgent(prompt)
 
-      return { content: [{ type: "text", text: text.text }] };
+      return { content: [{ type: "text", text: result }] };
     })
 });
 
@@ -42,7 +39,7 @@ const wrappedHandler = async (req: Request) => {
       return Promise.resolve({
         token,
         clientId: "agent-mcp",
-        scopes: ["inference"],
+        scopes: ["runAgent"],
       });
     }
 
