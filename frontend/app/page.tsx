@@ -437,32 +437,11 @@ export default function MCPBrowser() {
                 delay={200}
               />
               <StatsCard
-                title="Active Developers"
-                value={formatNumber(analytics.uniqueUsers)}
-                icon={Users}
-                subtitle="Building the future"
-                delay={300}
-              />
-              <StatsCard
                 title="Revenue Generated"
                 value={formatCurrency(analytics.totalRevenue)}
                 icon={DollarSign}
                 subtitle={`${formatNumber(analytics.totalPayments)} transactions`}
                 delay={400}
-              />
-              <StatsCard
-                title="Lightning Fast"
-                value={`${analytics.averageExecutionTime}ms`}
-                icon={Zap}
-                subtitle="Average response time"
-                delay={500}
-              />
-              <StatsCard
-                title="Value per Call"
-                value={formatCurrency(analytics.averagePaymentValue)}
-                icon={BarChart3}
-                subtitle="Average transaction"
-                delay={700}
               />
             </div>
           ) : null}
