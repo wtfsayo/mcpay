@@ -11,8 +11,9 @@ const handler = createMcpHandler((server) => {
     "Run the agent",
     {
       prompt: z.string().describe("The prompt to run the agent"),
+      mcpServers: z.array(z.string()).describe("The MCP servers to use"),
     },
-    async ({ prompt }, {authInfo}) => {
+    async ({ prompt, mcpServers }, {authInfo}) => {
 
       if (!authInfo?.token) {
         return { content: [{ type: "text", text: "Unauthorized" }] };
@@ -22,7 +23,7 @@ const handler = createMcpHandler((server) => {
         return { content: [{ type: "text", text: "Unauthorized" }] };
       }
 
-      const result = await runAgent(prompt)
+      const result = await runAgent(prompt, mcpServers)
 
       return { content: [{ type: "text", text: result }] };
     })

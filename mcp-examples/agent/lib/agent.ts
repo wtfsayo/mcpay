@@ -5,9 +5,8 @@ import { privateKeyToAccount } from "viem/accounts";
 import { openai } from "./ai.js";
 
 const privateKey = process.env.PRIVATE_KEY as Hex;
-const mcpServers = process.env.MCP_SERVERS?.split(",");
 
-export const runAgent = async (prompt: string) => {
+export const runAgent = async (prompt: string, mcpServers: string[]) => {
     // Get tools from all MCP servers and merge into a single object
 
     const tools = mcpServers
