@@ -2,12 +2,10 @@ import { AgentKit, CdpV2WalletProvider } from "@coinbase/agentkit";
 import { getVercelAITools } from "@coinbase/agentkit-vercel-ai-sdk";
 import { experimental_createMCPClient, generateText } from "ai";
 import { createPaymentTransport } from "mcpay/browser";
-import { createWalletClient, Hex, http, WalletClient } from "viem";
-import { openai } from "./ai.js";
+import { createWalletClient, http, WalletClient } from "viem";
 import { toAccount } from "viem/accounts";
 import { baseSepolia } from "viem/chains";
-
-const privateKey = process.env.PRIVATE_KEY as Hex;
+import { openai } from "./ai.js";
 
 const cdpWalletConfig = {
     apiKeyId: process.env.CDP_API_KEY_ID,
