@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  jose: 4.15.9
+
 importers:
 
   .:
@@ -1210,12 +1213,6 @@ packages:
   jose@4.15.9:
     resolution: {integrity: sha512-1vUQX+IdDMVPj4k8kOxgUqlcK518yluMuGZwqlr44FS1ppZB/5GWh4rZG89erpOBOJjU/OBsnCVFfapsRz6nEA==}
 
-  jose@5.10.0:
-    resolution: {integrity: sha512-s+3Al/p9g32Iq+oqXxkW//7jk2Vig6FF1CFqzVXoTUXt2qz89YWbL+OwS17NFYEvxC35n0FKeGO2LGYSxeM2Gg==}
-
-  jose@6.0.11:
-    resolution: {integrity: sha512-QxG7EaliDARm1O1S8BGakqncGT9s25bKL1WSf6/oa17Tkqwi8D2ZNglqCF+DsYF88/rV66Q/Q2mFAy697E1DUg==}
-
   js-sha3@0.8.0:
     resolution: {integrity: sha512-gF1cRrHhIzNfToc802P800N8PpXS+evLLXfsVpowqmAFR9uwbi89WvXg2QspOmXL8QL86J4T1EpFu+yUkwJY3Q==}
 
@@ -1897,7 +1894,7 @@ snapshots:
       '@solana/web3.js': 1.98.2(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)
       abitype: 1.0.6(typescript@5.8.3)(zod@3.25.67)
       axios: 1.9.0
-      jose: 6.0.11
+      jose: 4.15.9
       md5: 2.3.0
       viem: 2.31.3(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.25.67)
       zod: 3.25.67
@@ -1922,7 +1919,7 @@ snapshots:
       dotenv: 16.5.0
       ed2curve: 0.3.0
       ethers: 6.14.4(bufferutil@4.0.9)(utf-8-validate@5.0.10)
-      jose: 5.10.0
+      jose: 4.15.9
       secp256k1: 5.0.1
       viem: 2.31.3(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.25.67)
     transitivePeerDependencies:
@@ -3281,10 +3278,6 @@ snapshots:
       - utf-8-validate
 
   jose@4.15.9: {}
-
-  jose@5.10.0: {}
-
-  jose@6.0.11: {}
 
   js-sha3@0.8.0: {}
 
