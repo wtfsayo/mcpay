@@ -16,6 +16,8 @@ import { useTheme } from "@/context/ThemeContext"
 import { ConnectButton } from "@/components/connect-button"
 import { openBlockscout } from "@/lib/blockscout"
 import { useRouter } from "next/navigation"
+import { type Network, getTokensByNetwork, getStablecoins, NETWORKS, type NetworkInfo } from "@/lib/tokens"
+import { switchToNetwork, getConnectionStatus } from "@/lib/wallet-utils"
 
 interface MCPTool {
   name: string
@@ -73,6 +75,9 @@ export default function RegisterPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState("")
   const [showAuthHeaders, setShowAuthHeaders] = useState(false)
+  const [selectedNetwork, setSelectedNetwork] = useState<Network>('base-sepolia')
+  const [selectedPaymentToken, setSelectedPaymentToken] = useState<string>('')
+  const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false)
 
   const { address: walletAddress, isConnected: isWalletConnected } = useAccount()
   const { error: connectError } = useConnect()
@@ -107,6 +112,20 @@ export default function RegisterPage() {
         }
       }
 
+      // Get the selected payment token address - use predefined mapping for simplicity
+      const defaultPaymentTokens: Record<Network, string> = {
+        'base-sepolia': '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC on Base Sepolia
+        'base': '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', // USDC on Base
+        'sei-testnet': '0xeAcd10aaA6f362a94823df6BBC3C536841870772', // USDC on Sei Testnet
+        'ethereum': '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC on Ethereum
+        'arbitrum': '0xaf88d065e77c8cc2239327c5edb3a432268e5831', // USDC on Arbitrum
+        'optimism': '0x0b2c639c533813f4aa9d7837caf62653d097ff85', // USDC on Optimism
+        'polygon': '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359', // USDC on Polygon
+      }
+      
+      const paymentTokenAddress = selectedPaymentToken || defaultPaymentTokens[selectedNetwork] || 
+        '0x0000000000000000000000000000000000000000' // fallback to native token
+
       // Prepare tools data with payment information
       const toolsWithPayment = tools
         .filter(tool => tool.price && parseFloat(tool.price) > 0)
@@ -114,8 +133,8 @@ export default function RegisterPage() {
           name: tool.name,
           payment: {
             maxAmountRequired: parseFloat(tool.price || "0"),
-            asset: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // USDC on Base Sepolia
-            network: "base-sepolia",
+            asset: paymentTokenAddress,
+            network: selectedNetwork,
             resource: `tool://${tool.name}`,
             description: `Payment for ${tool.name} tool usage`,
             payTo: walletAddress,
@@ -221,6 +240,23 @@ export default function RegisterPage() {
 
   const updateToolPrice = (toolName: string, price: string) => {
     setTools(tools.map((tool) => (tool.name === toolName ? { ...tool, price } : tool)))
+  }
+
+  const handleNetworkChange = async (network: Network) => {
+    setSelectedNetwork(network)
+    setSelectedPaymentToken('') // Reset payment token selection
+  }
+
+  const handleSwitchToSelectedNetwork = async () => {
+    setIsSwitchingNetwork(true)
+    try {
+      await switchToNetwork(selectedNetwork)
+    } catch (error) {
+      console.error('Failed to switch network:', error)
+      setToolsError(`Failed to switch to ${NETWORKS[selectedNetwork].name}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setIsSwitchingNetwork(false)
+    }
   }
 
   // Debounced URL checking
@@ -423,6 +459,70 @@ export default function RegisterPage() {
 
                 <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
                   Connect your wallet to receive payments from tool usage
+                </p>
+              </div>
+
+              {/* Payment Network Selection */}
+              <div className="space-y-4">
+                <label className={`text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                  Payment Network *
+                </label>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {Object.entries(NETWORKS).map(([networkKey, networkInfo]) => (
+                    <Button
+                      key={networkKey}
+                      type="button"
+                      variant={selectedNetwork === networkKey ? "default" : "outline"}
+                      onClick={() => handleNetworkChange(networkKey as Network)}
+                      className={`h-auto p-4 justify-start ${selectedNetwork === networkKey 
+                        ? isDark ? "bg-gray-700 text-white border-gray-500" : "bg-gray-900 text-white border-gray-900"
+                        : isDark ? "border-gray-600 text-gray-300 hover:bg-gray-700" : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 w-full">
+                        <div className={`w-2 h-2 rounded-full ${
+                          networkInfo.isTestnet 
+                            ? "bg-orange-500" 
+                            : "bg-green-500"
+                        }`} />
+                        <div className="text-left">
+                          <div className="font-medium text-sm">{networkInfo.name}</div>
+                          <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                            {networkInfo.isTestnet ? "Testnet" : "Mainnet"}
+                          </div>
+                        </div>
+                      </div>
+                    </Button>
+                  ))}
+                </div>
+
+                {/* Network Switch Button */}
+                {isWalletConnected && (
+                  <div className="flex items-center gap-3 p-3 rounded-lg border border-dashed border-gray-300 dark:border-gray-600">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSwitchToSelectedNetwork}
+                      disabled={isSwitchingNetwork}
+                      className={`px-4 py-2 ${isDark ? "border-gray-600 text-gray-400 hover:text-white hover:bg-gray-700" : "border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100"}`}
+                    >
+                      {isSwitchingNetwork ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                      )}
+                      Switch to {NETWORKS[selectedNetwork].name}
+                    </Button>
+                    <span className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                      Ensure your wallet is on the correct network
+                    </span>
+                  </div>
+                )}
+
+                <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                  Select the blockchain network where you want to receive payments
                 </p>
               </div>
 

@@ -1,4 +1,5 @@
 import { type Connector } from 'wagmi'
+import { type Network, NETWORKS, getNetworkByChainId, type NetworkInfo } from './tokens'
 
 // Check if MetaMask is available in the browser
 export function isMetaMaskAvailable(): boolean {
@@ -114,12 +115,13 @@ export function verifyWalletConnection(
   }
 }
 
-// Get connection status with detailed information
+// Update connection status to support any network
 export function getConnectionStatus(
   isConnected: boolean,
   address?: string,
   connector?: Connector,
-  chainId?: number
+  chainId?: number,
+  preferredNetwork?: Network
 ): {
   status: 'disconnected' | 'connected' | 'connecting' | 'error'
   details: {
@@ -130,6 +132,8 @@ export function getConnectionStatus(
     isPorto: boolean
     chainId?: number
     address?: string
+    currentNetwork?: Network
+    isOnPreferredNetwork?: boolean
   }
   recommendations: string[]
 } {
@@ -151,6 +155,8 @@ export function getConnectionStatus(
   const isMetaMask = connector ? isMetaMaskConnector(connector) : false
   const isCoinbaseWallet = connector ? isCoinbaseWalletConnector(connector) : false
   const isPorto = connector ? isPortoConnector(connector) : false
+  const currentNetwork = chainId ? getNetworkByChainId(chainId) : undefined
+  const isOnPreferredNetwork = preferredNetwork ? currentNetwork === preferredNetwork : true
   
   if (!address) {
     recommendations.push('Try reconnecting your wallet')
@@ -162,7 +168,9 @@ export function getConnectionStatus(
         isMetaMask,
         isCoinbaseWallet,
         isPorto,
-        chainId
+        chainId,
+        currentNetwork,
+        isOnPreferredNetwork
       },
       recommendations
     }
@@ -181,8 +189,10 @@ export function getConnectionStatus(
     recommendations.push('Consider using Porto for Web3 payments')
   }
 
-  if (chainId !== 84532) { // Base Sepolia
-    recommendations.push('Switch to Base Sepolia network for full functionality')
+  // Network-specific recommendations
+  if (preferredNetwork && !isOnPreferredNetwork) {
+    const networkInfo = NETWORKS[preferredNetwork]
+    recommendations.push(`Switch to ${networkInfo.name} network for full functionality`)
   }
 
   return {
@@ -194,63 +204,31 @@ export function getConnectionStatus(
       isCoinbaseWallet,
       isPorto,
       chainId,
-      address
+      address,
+      currentNetwork,
+      isOnPreferredNetwork
     },
     recommendations
   }
 }
 
-// MetaMask-specific network switching
-export async function switchToBaseSepolia(): Promise<boolean> {
-  if (!isMetaMaskAvailable()) {
-    throw new Error('MetaMask not available')
-  }
-
-  try {
-    await (window as any).ethereum.request({
-      method: 'wallet_switchEthereumChain',
-      params: [{ chainId: '0x14a34' }], // Base Sepolia chain ID in hex
-    })
-    return true
-  } catch (error: any) {
-    // Chain doesn't exist, try to add it
-    if (error.code === 4902) {
-      try {
-        await (window as any).ethereum.request({
-          method: 'wallet_addEthereumChain',
-          params: [{
-            chainId: '0x14a34',
-            chainName: 'Base Sepolia',
-            nativeCurrency: {
-              name: 'Ethereum',
-              symbol: 'ETH',
-              decimals: 18,
-            },
-            rpcUrls: ['https://sepolia.base.org'],
-            blockExplorerUrls: ['https://sepolia.basescan.org'],
-          }],
-        })
-        return true
-      } catch (addError) {
-        console.error('Failed to add Base Sepolia network:', addError)
-        return false
-      }
-    }
-    console.error('Failed to switch to Base Sepolia:', error)
-    return false
-  }
-}
-
-// Generic network switching for supported wallets
-export async function switchToBaseSepoliaGeneric(): Promise<boolean> {
+// Generic network switching function
+export async function switchToNetwork(network: Network): Promise<boolean> {
   if (typeof window === 'undefined' || !(window as any).ethereum) {
     throw new Error('No wallet provider available')
   }
 
+  const networkInfo = NETWORKS[network]
+  if (!networkInfo) {
+    throw new Error(`Unsupported network: ${network}`)
+  }
+
+  const chainIdHex = `0x${networkInfo.chainId.toString(16)}`
+
   try {
     await (window as any).ethereum.request({
       method: 'wallet_switchEthereumChain',
-      params: [{ chainId: '0x14a34' }], // Base Sepolia chain ID in hex
+      params: [{ chainId: chainIdHex }],
     })
     return true
   } catch (error: any) {
@@ -260,24 +238,43 @@ export async function switchToBaseSepoliaGeneric(): Promise<boolean> {
         await (window as any).ethereum.request({
           method: 'wallet_addEthereumChain',
           params: [{
-            chainId: '0x14a34',
-            chainName: 'Base Sepolia',
-            nativeCurrency: {
-              name: 'Ethereum',
-              symbol: 'ETH',
-              decimals: 18,
-            },
-            rpcUrls: ['https://sepolia.base.org'],
-            blockExplorerUrls: ['https://sepolia.basescan.org'],
+            chainId: chainIdHex,
+            chainName: networkInfo.name,
+            nativeCurrency: networkInfo.nativeCurrency,
+            rpcUrls: networkInfo.rpcUrls,
+            blockExplorerUrls: networkInfo.blockExplorerUrls,
           }],
         })
         return true
       } catch (addError) {
-        console.error('Failed to add Base Sepolia network:', addError)
+        console.error(`Failed to add ${networkInfo.name} network:`, addError)
         return false
       }
     }
-    console.error('Failed to switch to Base Sepolia:', error)
+    console.error(`Failed to switch to ${networkInfo.name}:`, error)
     return false
   }
+}
+
+// Specific network switching functions for convenience
+export async function switchToBaseSepolia(): Promise<boolean> {
+  return switchToNetwork('base-sepolia')
+}
+
+export async function switchToSeiTestnet(): Promise<boolean> {
+  return switchToNetwork('sei-testnet')
+}
+
+export async function switchToBase(): Promise<boolean> {
+  return switchToNetwork('base')
+}
+
+// Get all supported networks for UI display
+export function getSupportedNetworks(): NetworkInfo[] {
+  return Object.values(NETWORKS)
+}
+
+// Check if a chain ID is supported
+export function isSupportedChainId(chainId: number): boolean {
+  return Object.values(NETWORKS).some(network => network.chainId === chainId)
 } 

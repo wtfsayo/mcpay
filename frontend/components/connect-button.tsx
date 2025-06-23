@@ -1,65 +1,71 @@
 "use client"
 
-
-
-import { useState, useEffect } from "react"
-import { useConnect, useAccount, useDisconnect, useChainId, useBalance, type Connector } from "wagmi"
-import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, ChevronDown, LogOut, Wallet, ExternalLink, AlertTriangle, CheckCircle, RefreshCw, DollarSign } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { openBlockscout } from "@/lib/blockscout"
+import { getNetworkByChainId, getTokenInfo, NETWORKS, type Network } from "@/lib/tokens"
 import {
-  verifyMetaMaskConnection,
-  verifyWalletConnection,
   getConnectionStatus,
-  isMetaMaskConnector,
-  isMetaMaskAvailable,
   isCoinbaseWalletConnector,
-  isCoinbaseWalletAvailable,
+  isMetaMaskConnector,
   isPortoConnector,
-  isPortoAvailable,
-  switchToBaseSepolia,
-  switchToBaseSepoliaGeneric
+  switchToNetwork,
+  verifyWalletConnection
 } from "@/lib/wallet-utils"
-import { getTokenInfo, formatTokenAmount, type Network, getNetworkByChainId } from "@/lib/tokens"
+import { AlertTriangle, CheckCircle, ChevronDown, DollarSign, ExternalLink, Loader2, LogOut, RefreshCw, Wallet, Network as NetworkIcon } from "lucide-react"
+import { useEffect, useState } from "react"
+import { useAccount, useBalance, useChainId, useConnect, useDisconnect, type Connector } from "wagmi"
 
 export function ConnectButton() {
   const [isLoading, setIsLoading] = useState(false)
   const [connectionError, setConnectionError] = useState<string>("")
-  const [showDetails, setShowDetails] = useState(false)
+  const [isNetworkSwitching, setIsNetworkSwitching] = useState(false)
 
   const { connect, connectors, error: connectError } = useConnect()
   const { address, isConnected, connector } = useAccount()
   const { disconnect } = useDisconnect()
   const chainId = useChainId()
 
-  // Get network info
-  const network = getNetworkByChainId(chainId) as Network
-
-  // Get USDC token info for current network
-  const usdcAddress = network === 'base-sepolia'
-    ? '0x036cbd53842c5426634e7929541ec2318f3dcf7e'
-    : network === 'base'
-      ? '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913'
-      : undefined
-
-  const usdcToken = usdcAddress ? getTokenInfo(usdcAddress, network) : undefined
-
-  // Fetch USDC balance
-  const { data: usdcBalance, isLoading: isLoadingUsdcBalance } = useBalance({
-    address: address,
-    token: usdcAddress as `0x${string}`,
-    query: {
-      enabled: !!(address && usdcAddress && isConnected),
-      refetchInterval: 10000, // Refetch every 10 seconds
-    }
-  })
-
-  // Get connection status and verification
-  const connectionStatus = getConnectionStatus(isConnected, address, connector, chainId)
+  // Multi-chain support - define supported chains
+  const supportedChains: Network[] = ['base-sepolia', 'sei-testnet', 'base', 'ethereum']
+  const currentNetwork = getNetworkByChainId(chainId) as Network
+  const defaultNetwork: Network = 'base-sepolia'
+  
+  const connectionStatus = getConnectionStatus(isConnected, address, connector, chainId, currentNetwork)
   const verification = verifyWalletConnection(isConnected, address, connector)
+
+  // Multi-chain USDC addresses
+  const usdcAddresses: Record<Network, string> = {
+    'base-sepolia': '0x036cbd53842c5426634e7929541ec2318f3dcf7e',
+    'base': '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913',
+    'sei-testnet': '0xeAcd10aaA6f362a94823df6BBC3C536841870772',
+    'ethereum': '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+    'arbitrum': '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+    'optimism': '0x0b2c639c533813f4aa9d7837caf62653d097ff85',
+    'polygon': '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359',
+  }
+
+  // Multi-chain balance fetching
+  const createBalanceQuery = (network: Network) => {
+    const usdcAddress = usdcAddresses[network]
+    return {
+      address: address,
+      token: usdcAddress as `0x${string}`,
+      chainId: NETWORKS[network].chainId,
+      query: {
+        enabled: !!(address && usdcAddress && isConnected),
+        refetchInterval: 30000, // Refetch every 30 seconds
+      }
+    }
+  }
+
+  // Fetch balances for all supported chains
+  const balanceQueries = supportedChains.map(network => ({
+    network,
+    ...useBalance(createBalanceQuery(network))
+  }))
 
   // Handle connection errors
   useEffect(() => {
@@ -75,37 +81,16 @@ export function ConnectButton() {
       setIsLoading(true)
       setConnectionError("")
 
-      // If connecting to MetaMask and wrong network, try to switch first
-      if (isMetaMaskConnector(connector) && isMetaMaskAvailable()) {
-        try {
-          await switchToBaseSepolia()
-        } catch (error) {
-          console.warn("Could not switch network before connecting:", error)
-          // Continue with connection anyway
-        }
-      }
-      // If connecting to Coinbase Wallet and wrong network, try generic switch
-      else if (isCoinbaseWalletConnector(connector) && isCoinbaseWalletAvailable()) {
-        try {
-          await switchToBaseSepoliaGeneric()
-        } catch (error) {
-          console.warn("Could not switch network before connecting:", error)
-          // Continue with connection anyway
-        }
-      }
-      // If connecting to Porto and wrong network, try generic switch
-      else if (isPortoConnector(connector)) {
-        try {
-          // await switchToBaseSepoliaGeneric()
-          console.log("Switched to Base Sepolia")
-        } catch (error) {
-          console.warn("Could not switch network before connecting:", error)
-          // Continue with connection anyway
-        }
+      // Try to switch to default network before connecting
+      try {
+        await switchToNetwork(defaultNetwork)
+        console.log(`Switched to ${NETWORKS[defaultNetwork].name}`)
+      } catch (error) {
+        console.warn("Could not switch network before connecting:", error)
+        // Continue with connection anyway
       }
 
       console.log("Connecting to connector:", connector)
-
       connect({ connector })
     } catch (error) {
       console.error("Connection error:", error)
@@ -128,27 +113,19 @@ export function ConnectButton() {
     }
   }
 
-  const handleNetworkSwitch = async () => {
+  const handleNetworkSwitch = async (targetNetwork: Network) => {
     try {
-      setIsLoading(true)
+      setIsNetworkSwitching(true)
+      setConnectionError("")
 
-      // Use appropriate network switching method based on connector
-      if (connector && isMetaMaskConnector(connector)) {
-        const success = await switchToBaseSepolia()
-        if (!success) {
-          setConnectionError("Failed to switch to Base Sepolia network")
-        }
-      } else {
-        // Use generic switching for other wallets including Coinbase Wallet and Porto
-        const success = await switchToBaseSepoliaGeneric()
-        if (!success) {
-          setConnectionError("Failed to switch to Base Sepolia network")
-        }
+      const success = await switchToNetwork(targetNetwork)
+      if (!success) {
+        setConnectionError(`Failed to switch to ${NETWORKS[targetNetwork].name} network`)
       }
     } catch (error) {
       setConnectionError(error instanceof Error ? error.message : "Failed to switch network")
     } finally {
-      setIsLoading(false)
+      setIsNetworkSwitching(false)
     }
   }
 
@@ -165,6 +142,17 @@ export function ConnectButton() {
     return `${formatted.toFixed(2)} ${symbol}`
   }
 
+  // Get network icon/status
+  const getNetworkStatus = (network: Network, isCurrent: boolean) => {
+    const networkInfo = NETWORKS[network]
+    return {
+      name: networkInfo.name,
+      isTestnet: networkInfo.isTestnet,
+      isCurrent,
+      isSupported: supportedChains.includes(network)
+    }
+  }
+
   // Get preferred connectors
   const metaMaskConnector = connectors.find(c => isMetaMaskConnector(c))
   const coinbaseConnector = connectors.find(c => isCoinbaseWalletConnector(c))
@@ -174,8 +162,8 @@ export function ConnectButton() {
     const isMetaMask = connector ? isMetaMaskConnector(connector) : false
     const isCoinbaseWallet = connector ? isCoinbaseWalletConnector(connector) : false
     const isPorto = connector ? isPortoConnector(connector) : false
-    const isCorrectNetwork = chainId === 84532 // Base Sepolia
-
+    const currentNetworkInfo = currentNetwork ? NETWORKS[currentNetwork] : null
+    const isOnSupportedNetwork = supportedChains.includes(currentNetwork)
 
     return (
       <div className="space-y-2">
@@ -190,7 +178,7 @@ export function ConnectButton() {
               <ChevronDown className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-80">
+          <DropdownMenuContent align="end" className="w-96">
             {/* Connection Status */}
             <div className="px-3 py-2 border-b">
               <div className="flex items-center gap-2">
@@ -202,58 +190,118 @@ export function ConnectButton() {
                 <span className="text-sm font-medium">
                   {verification.isValid ? "Connected" : "Connection Issues"}
                 </span>
-                {network === 'base-sepolia' && (
+                {currentNetworkInfo?.isTestnet && (
                   <Badge variant="outline" className="text-xs text-orange-600 border-orange-200">
                     Testnet
                   </Badge>
                 )}
               </div>
               <p className="text-xs text-gray-600 mt-1">
-                {connector?.name} • {network?.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                {connector?.name} • {currentNetwork ? NETWORKS[currentNetwork].name : 'Unknown Network'}
               </p>
             </div>
 
-            {/* Balance Information */}
-            <div className="px-3 py-3 border-b bg-gray-50/50 dark:bg-gray-800/50">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 mb-2">
-                  <DollarSign className="h-4 w-4 text-gray-600" />
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Balances</span>
+            {/* Current Network Status */}
+            <div className="px-3 py-2 border-b bg-blue-50/50 dark:bg-blue-900/20">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <NetworkIcon className="h-4 w-4 text-blue-600" />
+                  <span className="text-sm font-medium">Current Network</span>
                 </div>
-
-                {/* USDC Balance */}
-                {usdcToken && (
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-1">
-                      <span className="text-xs text-gray-600 dark:text-gray-400">USDC</span>
-                    </div>
-                    <span className="text-xs font-mono">
-                      {isLoadingUsdcBalance ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : usdcBalance ? (
-                        formatBalance(usdcBalance.value, usdcBalance.decimals, "USDC")
-                      ) : (
-                        "0.00 USDC"
-                      )}
-                    </span>
-                  </div>
-                )}
-
-                {!usdcToken && isCorrectNetwork && (
-                  <div className="text-xs text-gray-500 italic">
-                    USDC not available on this network
-                  </div>
-                )}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">{currentNetworkInfo?.name || 'Unknown'}</span>
+                  {isOnSupportedNetwork ? (
+                    <Badge variant="outline" className="text-xs text-green-600 border-green-200">
+                      Supported
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-xs text-orange-600 border-orange-200">
+                      Unsupported
+                    </Badge>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Network Switch Option */}
-            {!isCorrectNetwork && (
-              <DropdownMenuItem onClick={handleNetworkSwitch} className="cursor-pointer">
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Switch to Base Sepolia
-              </DropdownMenuItem>
+            {/* Multi-Chain Balances */}
+            <div className="px-3 py-3 border-b bg-gray-50/50 dark:bg-gray-800/50">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 mb-3">
+                  <DollarSign className="h-4 w-4 text-gray-600" />
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Multi-Chain USDC Balances</span>
+                </div>
+
+                {balanceQueries.map(({ network, data: balance, isLoading: isLoadingBalance, error }) => {
+                  const networkInfo = NETWORKS[network]
+                  const usdcToken = getTokenInfo(usdcAddresses[network], network)
+                  const isCurrent = network === currentNetwork
+
+                  return (
+                    <div key={network} className={`flex justify-between items-center p-2 rounded ${isCurrent ? 'bg-blue-100 dark:bg-blue-900/30' : ''}`}>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${isCurrent ? 'bg-blue-500' : networkInfo.isTestnet ? 'bg-orange-400' : 'bg-green-500'}`} />
+                        <span className="text-xs font-medium">{networkInfo.name}</span>
+                        {networkInfo.isTestnet && <Badge variant="outline" className="text-xs">Testnet</Badge>}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono">
+                          {isLoadingBalance ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : error ? (
+                            <span className="text-red-500">Error</span>
+                          ) : balance ? (
+                            formatBalance(balance.value, balance.decimals, "USDC")
+                          ) : (
+                            "0.00 USDC"
+                          )}
+                        </span>
+                        {!isCurrent && (
+                          <Button
+                            onClick={() => handleNetworkSwitch(network)}
+                            disabled={isNetworkSwitching}
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-xs"
+                          >
+                            {isNetworkSwitching ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              "Switch"
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Quick Network Switch */}
+            {!isOnSupportedNetwork && (
+              <>
+                <DropdownMenuSeparator />
+                <div className="px-3 py-2">
+                  <p className="text-xs text-amber-600 mb-2">⚠️ Switch to a supported network:</p>
+                  <div className="grid grid-cols-2 gap-1">
+                    {supportedChains.slice(0, 4).map((network) => (
+                      <Button
+                        key={network}
+                        onClick={() => handleNetworkSwitch(network)}
+                        disabled={isNetworkSwitching}
+                        variant="outline"
+                        size="sm"
+                        className="text-xs h-8"
+                      >
+                        {NETWORKS[network].name}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </>
             )}
+
+            <DropdownMenuSeparator />
 
             <DropdownMenuItem
               onClick={() => openBlockscout(address)}
@@ -284,11 +332,21 @@ export function ConnectButton() {
         )}
 
         {/* Network Warning */}
-        {!isCorrectNetwork && (
+        {!isOnSupportedNetwork && currentNetworkInfo && (
           <Alert className="w-full">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription className="text-xs">
-              Wrong network. Please switch to Base Sepolia for full functionality.
+              Unsupported network. Switch to: {supportedChains.map(n => NETWORKS[n].name).join(', ')}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Network Switching Loading */}
+        {isNetworkSwitching && (
+          <Alert className="w-full">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <AlertDescription className="text-xs">
+              Switching networks...
             </AlertDescription>
           </Alert>
         )}
@@ -312,8 +370,7 @@ export function ConnectButton() {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-
-          {/* MetaMask Second (if available) */}
+          {/* MetaMask (if available) */}
           {metaMaskConnector && (
             <DropdownMenuItem
               key={metaMaskConnector.id}
@@ -327,7 +384,7 @@ export function ConnectButton() {
             </DropdownMenuItem>
           )}
 
-          {/* Coinbase Wallet Third (if available) */}
+          {/* Coinbase Wallet (if available) */}
           {coinbaseConnector && (
             <DropdownMenuItem
               key={coinbaseConnector.id}
@@ -341,7 +398,7 @@ export function ConnectButton() {
             </DropdownMenuItem>
           )}
 
-          {/* Porto First (if available) - Featured for Web3 payments */}
+          {/* Porto (if available) */}
           {portoConnector && (
             <DropdownMenuItem
               key={portoConnector.id}
@@ -353,7 +410,6 @@ export function ConnectButton() {
               </div>
             </DropdownMenuItem>
           )}
-
 
           {/* Other Connectors */}
           {connectors

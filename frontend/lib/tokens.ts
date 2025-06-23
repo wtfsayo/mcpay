@@ -16,7 +16,7 @@
 // TYPES & INTERFACES
 // =============================================================================
 
-export type Network = 'base' | 'base-sepolia' | 'ethereum' | 'arbitrum' | 'optimism' | 'polygon';
+export type Network = 'base' | 'base-sepolia' | 'ethereum' | 'arbitrum' | 'optimism' | 'polygon' | 'sei-testnet';
 export type TokenCategory = 'stablecoin' | 'utility' | 'defi' | 'meme' | 'governance' | 'wrapped';
 
 export interface TokenInfo {
@@ -116,6 +116,15 @@ export const NETWORKS: Record<Network, NetworkInfo> = {
     blockExplorerUrls: ['https://polygonscan.com'],
     iconUrl: '/networks/polygon.svg',
     isTestnet: false,
+  },
+  'sei-testnet': {
+    name: 'Sei Testnet',
+    chainId: 1328,
+    nativeCurrency: { name: 'Sei', symbol: 'SEI', decimals: 18 },
+    rpcUrls: ['https://evm-rpc-testnet.sei-apis.com'],
+    blockExplorerUrls: ['https://seitrace.com/?chain=atlantic-2'],
+    iconUrl: '/networks/sei.svg',
+    isTestnet: true,
   },
 };
 
@@ -559,6 +568,50 @@ export const TOKEN_REGISTRY: Record<Network, Record<string, TokenInfo>> = {
       recommendedForPayments: true,
       verified: true,
       verificationSource: 'Circle Official Documentation',
+    },
+  },
+
+  // SEI TESTNET - Sei Testnet Configuration
+  'sei-testnet': {
+    // Native SEI
+    '0x0000000000000000000000000000000000000000': {
+      symbol: 'SEI',
+      name: 'Sei',
+      network: 'sei-testnet',
+      decimals: 18,
+      category: 'utility',
+      logoUri: '/tokens/sei.svg',
+      coingeckoId: 'sei-network',
+      isStablecoin: false,
+      isNative: true,
+      chainId: 1328,
+      tags: ['native', 'gas', 'testnet'],
+      description: 'Native Sei on Sei Testnet - NO FINANCIAL VALUE',
+      popularityScore: 100,
+      liquidityTier: 'high',
+      recommendedForPayments: true,
+      verified: true,
+      verificationSource: 'Sei Protocol Official',
+    },
+    // USDC (Testnet) - User provided address
+    '0xeacd10aaa6f362a94823df6bbc3c536841870772': {
+      symbol: 'USDC',
+      name: 'USD Coin',
+      network: 'sei-testnet',
+      decimals: 6,
+      category: 'stablecoin',
+      logoUri: '/tokens/usdc.svg',
+      coingeckoId: 'usd-coin',
+      isStablecoin: true,
+      isNative: false,
+      chainId: 1328,
+      tags: ['stablecoin', 'testnet', 'payments', 'usd'],
+      description: 'USD Coin on Sei Testnet - NO FINANCIAL VALUE',
+      popularityScore: 95,
+      liquidityTier: 'high',
+      recommendedForPayments: true,
+      verified: true,
+      verificationSource: 'User Verified',
     },
   },
 };

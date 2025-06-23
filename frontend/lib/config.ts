@@ -3,10 +3,10 @@
 import { porto } from 'porto/wagmi'
 import { metaMask, coinbaseWallet } from 'wagmi/connectors'
 import { http, createConfig, createStorage } from 'wagmi'
-import { baseSepolia } from 'wagmi/chains'
+import { baseSepolia, seiTestnet } from 'wagmi/chains'
  
 export const wagmiConfig = createConfig({
-  chains: [baseSepolia],
+  chains: [baseSepolia, seiTestnet],
   connectors: [
     porto(),
     metaMask({
@@ -27,5 +27,6 @@ export const wagmiConfig = createConfig({
     : undefined,
   transports: {
     [baseSepolia.id]: http(),
+    [seiTestnet.id]: http(),
   },
 })

@@ -22,14 +22,17 @@ import {
   Copy,
   Loader2,
   Play,
+  RefreshCw,
   Shield,
   Wrench
 } from "lucide-react"
 import { createPaymentTransport, PaymentTransport } from "mcpay/browser"
 import Image from "next/image"
 import { useEffect, useState } from "react"
-import { useAccount, useWalletClient } from "wagmi"
+import { useAccount, useWalletClient, useChainId } from "wagmi"
 import type { Account } from "viem"
+import { switchToNetwork, getConnectionStatus } from "@/lib/wallet-utils"
+import { NETWORKS, getNetworkByChainId } from "@/lib/tokens"
 
 interface InputProperty {
   type: string
@@ -86,12 +89,68 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
   const { isDark } = useTheme()
   const { address, isConnected } = useAccount()
   const { data: walletClient } = useWalletClient()
+  const chainId = useChainId()
   const [toolInputs, setToolInputs] = useState<Record<string, any>>({})
   const [execution, setExecution] = useState<ToolExecution>({ status: 'idle' })
   const [isMobile, setIsMobile] = useState(false)
   const [mcpClient, setMcpClient] = useState<any>(null)
   const [mcpTools, setMcpTools] = useState<Record<string, any>>({})
   const [isInitialized, setIsInitialized] = useState(false)
+  const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false)
+
+  // Network compatibility checking
+  const getRequiredNetwork = () => {
+    if (!tool?.isMonetized || !tool.pricing.length) return null
+    return tool.pricing[0].network
+  }
+
+  const getCurrentNetwork = () => {
+    return chainId ? getNetworkByChainId(chainId) : null
+  }
+
+  const isOnCorrectNetwork = () => {
+    const requiredNetwork = getRequiredNetwork()
+    const currentNetwork = getCurrentNetwork()
+    
+    if (!requiredNetwork) return true // Free tools don't require specific network
+    return requiredNetwork === currentNetwork
+  }
+
+  const handleNetworkSwitch = async () => {
+    const requiredNetwork = getRequiredNetwork()
+    if (!requiredNetwork) return
+
+    setIsSwitchingNetwork(true)
+    setExecution({ status: 'idle' }) // Clear any previous errors
+    
+    try {
+      console.log(`[Network Switch] Starting switch to ${requiredNetwork}`)
+      console.log(`[Network Switch] Network info:`, NETWORKS[requiredNetwork as Network])
+      
+      await switchToNetwork(requiredNetwork as Network)
+      console.log(`[Network Switch] Successfully switched to ${requiredNetwork}`)
+      
+      // Clear any previous errors after successful switch
+      if (execution.status === 'error') {
+        setExecution({ status: 'idle' })
+      }
+    } catch (error) {
+      console.error('[Network Switch] Failed to switch network:', error)
+      console.error('[Network Switch] Error details:', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        requiredNetwork,
+        availableNetworks: Object.keys(NETWORKS)
+      })
+      
+      setExecution({ 
+        status: 'error', 
+        error: `Failed to switch to ${requiredNetwork}: ${error instanceof Error ? error.message : 'Unknown error. Check browser console for details.'}`
+      })
+    } finally {
+      setIsSwitchingNetwork(false)
+    }
+  }
 
   // Enhanced formatCurrency function using token registry
   const formatCurrency = (amount: string | number, currency: string, network?: string) => {
@@ -241,6 +300,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     setToolInputs(inputs)
     setExecution({ status: 'idle' })
     setIsInitialized(false) // Reset initialization when tool changes
+    setIsSwitchingNetwork(false) // Reset network switching state
   }, [tool])
 
   // Initialize MCP client when modal opens and user is connected
@@ -309,6 +369,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
       setMcpClient(null)
       setMcpTools({})
       setExecution({ status: 'idle' })
+      setIsSwitchingNetwork(false)
     }
   }, [isOpen])
 
@@ -598,6 +659,86 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
               </div>
             </div>
           )}
+
+          {/* Network Status Warning */}
+          {tool.isMonetized && tool.pricing.length > 0 && isConnected && !isOnCorrectNetwork() && (
+            <div className={`p-3 rounded-md border ${
+              isDark ? "bg-orange-900/20 text-orange-400 border-orange-800" : "bg-orange-50 text-orange-600 border-orange-200"
+            }`}>
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <div className="text-sm font-medium mb-1">Network Mismatch</div>
+                  <div className="text-xs mb-3">
+                    This tool requires <strong>{getRequiredNetwork()}</strong> network, but you're connected to{" "}
+                    <strong>{getCurrentNetwork() || 'unknown network'}</strong>.
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleNetworkSwitch}
+                      disabled={isSwitchingNetwork}
+                      size="sm"
+                      className={`text-xs ${
+                        isDark 
+                          ? "bg-orange-600 hover:bg-orange-700 text-white" 
+                          : "bg-orange-600 hover:bg-orange-700 text-white"
+                      }`}
+                    >
+                      {isSwitchingNetwork ? (
+                        <>
+                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                          Switching...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="h-3 w-3 mr-1" />
+                          Switch to {getRequiredNetwork()}
+                        </>
+                      )}
+                    </Button>
+                    
+                    {/* Manual add network info */}
+                    {getRequiredNetwork() === 'sei-testnet' && (
+                      <Button
+                        onClick={() => {
+                          const networkInfo = NETWORKS['sei-testnet']
+                          const config = {
+                            chainId: `0x${networkInfo.chainId.toString(16)}`,
+                            chainName: networkInfo.name,
+                            nativeCurrency: networkInfo.nativeCurrency,
+                            rpcUrls: networkInfo.rpcUrls,
+                            blockExplorerUrls: networkInfo.blockExplorerUrls,
+                          }
+                          navigator.clipboard.writeText(JSON.stringify(config, null, 2))
+                          console.log('[Manual Network] Sei Testnet config:', config)
+                          alert('Sei Testnet network config copied to clipboard!\n\nTo manually add:\n1. Open your wallet settings\n2. Go to Networks\n3. Add Custom Network\n4. Paste the config\n\nOr check browser console for details.')
+                        }}
+                        variant="outline"
+                        size="sm"
+                        className="text-xs"
+                      >
+                        <Copy className="h-3 w-3 mr-1" />
+                        Manual Setup
+                      </Button>
+                    )}
+                  </div>
+                  
+                  {/* Manual Instructions for Sei Testnet */}
+                  {getRequiredNetwork() === 'sei-testnet' && (
+                    <div className="mt-3 p-2 rounded text-xs bg-orange-100 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800">
+                      <div className="font-medium mb-1">Sei Testnet Network Details:</div>
+                      <div className="space-y-1 font-mono text-xs">
+                        <div>Chain ID: 1328 (0x530)</div>
+                        <div>RPC: https://evm-rpc-testnet.sei-apis.com</div>
+                        <div>Symbol: SEI</div>
+                        <div>Explorer: https://seitrace.com/?chain=atlantic-2</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Input Fields */}
@@ -612,7 +753,24 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
               )}
             </div>
           </div>
-        )}
+                  )}
+
+          {/* Network Status Success */}
+          {tool.isMonetized && tool.pricing.length > 0 && isConnected && isOnCorrectNetwork() && (
+            <div className={`p-3 rounded-md border ${
+              isDark ? "bg-green-900/20 text-green-400 border-green-800" : "bg-green-50 text-green-600 border-green-200"
+            }`}>
+              <div className="flex items-center gap-2">
+                <CheckCircle className="h-4 w-4" />
+                <div className="text-sm">
+                  <span className="font-medium">Ready to Execute</span>
+                  <span className="ml-2 text-xs opacity-80">
+                    Connected to {getCurrentNetwork()} network
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
         {/* Connection Status */}
         {!isConnected || !walletClient ? (
@@ -651,7 +809,16 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
         {/* Execute Button */}
         <Button
           onClick={executeTool}
-          disabled={!isConnected || !walletClient || !isInitialized || !mcpTools[tool.name] || execution.status === 'executing' || execution.status === 'initializing'}
+          disabled={
+            !isConnected || 
+            !walletClient || 
+            !isInitialized || 
+            !mcpTools[tool.name] || 
+            execution.status === 'executing' || 
+            execution.status === 'initializing' ||
+            (tool.isMonetized && !isOnCorrectNetwork()) ||
+            isSwitchingNetwork
+          }
           className={`w-full ${isDark ? "bg-blue-600 hover:bg-blue-700" : ""}`}
         >
           {execution.status === 'initializing' ? (
@@ -663,6 +830,16 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               Executing...
+            </>
+          ) : isSwitchingNetwork ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Switching Network...
+            </>
+          ) : tool.isMonetized && !isOnCorrectNetwork() ? (
+            <>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Switch Network to Execute
             </>
           ) : (
             <>
