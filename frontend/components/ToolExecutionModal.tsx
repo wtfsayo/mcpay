@@ -670,7 +670,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
                 <div className="flex-1">
                   <div className="text-sm font-medium mb-1">Network Mismatch</div>
                   <div className="text-xs mb-3">
-                    This tool requires <strong>{getRequiredNetwork()}</strong> network, but you're connected to{" "}
+                    This tool requires <strong>{getRequiredNetwork()}</strong> network, but youre connected to{" "}
                     <strong>{getCurrentNetwork() || 'unknown network'}</strong>.
                   </div>
                   <div className="flex gap-2">

@@ -47,25 +47,54 @@ export function ConnectButton() {
     'polygon': '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359',
   }
 
-  // Multi-chain balance fetching
-  const createBalanceQuery = (network: Network) => {
-    const usdcAddress = usdcAddresses[network]
-    return {
-      address: address,
-      token: usdcAddress as `0x${string}`,
-      chainId: NETWORKS[network].chainId,
-      query: {
-        enabled: !!(address && usdcAddress && isConnected),
-        refetchInterval: 30000, // Refetch every 30 seconds
-      }
+  // Multi-chain balance fetching - call hooks at top level
+  const baseSepoliaBalance = useBalance({
+    address: address,
+    token: usdcAddresses['base-sepolia'] as `0x${string}`,
+    chainId: NETWORKS['base-sepolia'].chainId,
+    query: {
+      enabled: !!(address && usdcAddresses['base-sepolia'] && isConnected),
+      refetchInterval: 30000,
     }
-  }
+  })
 
-  // Fetch balances for all supported chains
-  const balanceQueries = supportedChains.map(network => ({
-    network,
-    ...useBalance(createBalanceQuery(network))
-  }))
+  const seiTestnetBalance = useBalance({
+    address: address,
+    token: usdcAddresses['sei-testnet'] as `0x${string}`,
+    chainId: NETWORKS['sei-testnet'].chainId,
+    query: {
+      enabled: !!(address && usdcAddresses['sei-testnet'] && isConnected),
+      refetchInterval: 30000,
+    }
+  })
+
+  const baseBalance = useBalance({
+    address: address,
+    token: usdcAddresses['base'] as `0x${string}`,
+    chainId: NETWORKS['base'].chainId,
+    query: {
+      enabled: !!(address && usdcAddresses['base'] && isConnected),
+      refetchInterval: 30000,
+    }
+  })
+
+  const ethereumBalance = useBalance({
+    address: address,
+    token: usdcAddresses['ethereum'] as `0x${string}`,
+    chainId: NETWORKS['ethereum'].chainId,
+    query: {
+      enabled: !!(address && usdcAddresses['ethereum'] && isConnected),
+      refetchInterval: 30000,
+    }
+  })
+
+  // Create balance queries object
+  const balanceQueries = [
+    { network: 'base-sepolia' as Network, ...baseSepoliaBalance },
+    { network: 'sei-testnet' as Network, ...seiTestnetBalance },
+    { network: 'base' as Network, ...baseBalance },
+    { network: 'ethereum' as Network, ...ethereumBalance },
+  ]
 
   // Handle connection errors
   useEffect(() => {
