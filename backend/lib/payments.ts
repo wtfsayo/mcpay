@@ -19,14 +19,123 @@
  * in most cases - just set the appropriate environment variables.
  */
 
-import type { Network, PaymentPayload, PaymentRequirements, Price, Resource } from "x402/types";
-
-import { processPriceToAtomicAmount } from "x402/shared";
-import { useFacilitator } from "x402/verify";
+import { Address } from "viem";
 import { exact } from "x402/schemes";
+import type { ERC20TokenAmount, PaymentPayload, PaymentRequirements, Price, Resource } from "x402/types";
+import { moneySchema } from "x402/types";
+import { useFacilitator } from "x402/verify";
+import { SupportedNetwork, SupportedPaymentRequirements } from "./types.js";
+
+/**
+ * Parses the amount from the given price
+ *
+ * @param price - The price to parse
+ * @param network - The network to get the default asset for
+ * @returns The parsed amount or an error message
+ */
+export function processPriceToAtomicAmount(
+    price: Price,
+    network: SupportedNetwork,
+): { maxAmountRequired: string; asset: ERC20TokenAmount["asset"] } | { error: string } {
+    // Handle USDC amount (string) or token amount (ERC20TokenAmount)
+    let maxAmountRequired: string;
+    let asset: ERC20TokenAmount["asset"];
+
+    if (typeof price === "string" || typeof price === "number") {
+        // USDC amount in dollars
+        const parsedAmount = moneySchema.safeParse(price);
+        if (!parsedAmount.success) {
+            return {
+                error: `Invalid price (price: ${price}). Must be in the form "$3.10", 0.10, "0.001", ${parsedAmount.error}`,
+            };
+        }
+        const parsedUsdAmount = parsedAmount.data;
+        asset = getDefaultAsset(network);
+        maxAmountRequired = (parsedUsdAmount * 10 ** asset.decimals).toString();
+    } else {
+        // Token amount in atomic units
+        maxAmountRequired = price.amount;
+        asset = price.asset;
+    }
+
+    return {
+        maxAmountRequired,
+        asset,
+    };
+}
+
+/**
+* Gets the default asset (USDC) for the given network
+*
+* @param network - The network to get the default asset for
+* @returns The default asset
+*/
+export function getDefaultAsset(network: SupportedNetwork) {
+    return {
+        address: getUsdcAddressForChain(getNetworkId(network)),
+        decimals: 6,
+        eip712: {
+            name: network === "base" ? "USD Coin" : network === "iotex" ? "Bridged USDC" : "USDC",
+            version: "2",
+        },
+    };
+}
+
+export function getUsdcAddressForChain(chainId: number): Address {
+    return config[chainId.toString()]?.usdcAddress as Address;
+}
+
+export const EvmNetworkToChainId = new Map<SupportedNetwork, number>([
+    ["base-sepolia", 84532],
+    ["base", 8453],
+    ["avalanche-fuji", 43113],
+    ["avalanche", 43114],
+    ["iotex", 4689],
+    ["sei-testnet", 1328],
+]);
+
+export function getNetworkId(network: SupportedNetwork): number {
+    if (EvmNetworkToChainId.has(network)) {
+        return EvmNetworkToChainId.get(network)!;
+    }
+    // TODO: Solana
+    throw new Error(`Unsupported network: ${network}`);
+}
+
+export const config: Record<string, ChainConfig> = {
+    "84532": {
+        usdcAddress: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+        usdcName: "USDC",
+    },
+    "8453": {
+        usdcAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        usdcName: "USDC",
+    },
+    "43113": {
+        usdcAddress: "0x5425890298aed601595a70AB815c96711a31Bc65",
+        usdcName: "USD Coin",
+    },
+    "43114": {
+        usdcAddress: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
+        usdcName: "USDC",
+    },
+    "4689": {
+        usdcAddress: "0xcdf79194c6c285077a58da47641d4dbe51f63542",
+        usdcName: "Bridged USDC",
+    },
+    "1328": {
+        usdcAddress: "0xeAcd10aaA6f362a94823df6BBC3C536841870772",
+        usdcName: "USDC",
+    },
+};
+
+export type ChainConfig = {
+    usdcAddress: Address;
+    usdcName: string;
+};
 
 // Network-specific facilitator URLs
-const FACILITATOR_URLS: Partial<Record<Network | "sei-testnet", Resource>> = {
+const FACILITATOR_URLS: Partial<Record<SupportedNetwork, Resource>> = {
     "base-sepolia": process.env.BASE_SEPOLIA_FACILITATOR_URL as Resource || "https://x402.org/facilitator",
     "sei-testnet": process.env.SEI_TESTNET_FACILITATOR_URL as Resource || "https://6y3cdqj5s3.execute-api.us-west-2.amazonaws.com/prod",
 } as const;
@@ -37,9 +146,9 @@ const DEFAULT_FACILITATOR_URL = process.env.FACILITATOR_URL as Resource || "http
 console.log(`[PAYMENTS] Facilitator URLs configured:`, FACILITATOR_URLS);
 
 // Create facilitator instances for each network
-const facilitatorInstances = new Map<Network, ReturnType<typeof useFacilitator>>();
+const facilitatorInstances = new Map<SupportedNetwork, ReturnType<typeof useFacilitator>>();
 
-function getFacilitatorForNetwork(network: Network) {
+function getFacilitatorForNetwork(network: SupportedNetwork) {
     if (!facilitatorInstances.has(network)) {
         const facilitatorUrl = FACILITATOR_URLS[network] || DEFAULT_FACILITATOR_URL;
         console.log(`[PAYMENTS] Creating facilitator instance for network ${network} with URL: ${facilitatorUrl}`);
@@ -53,11 +162,11 @@ export const x402Version = 1;
 
 export function createExactPaymentRequirements(
     price: Price,
-    network: Network,
+    network: SupportedNetwork,
     resource: Resource,
     description = "",
     payTo: `0x${string}`,
-): PaymentRequirements {
+): SupportedPaymentRequirements {
     const atomicAmountForAsset = processPriceToAtomicAmount(price, network);
     if ("error" in atomicAmountForAsset) {
         throw new Error(atomicAmountForAsset.error);
@@ -68,7 +177,7 @@ export function createExactPaymentRequirements(
 
     return {
         scheme: "exact",
-        network,
+        network: network,
         maxAmountRequired,
         resource,
         description,
@@ -93,7 +202,7 @@ export function createExactPaymentRequirements(
  */
 export async function verifyPayment(
     c: any,
-    paymentRequirements: PaymentRequirements[],
+    paymentRequirements: SupportedPaymentRequirements[],
 ): Promise<boolean> {
     const payment = c.req.header("X-PAYMENT");
     if (!payment) {
@@ -124,10 +233,10 @@ export async function verifyPayment(
         if (!paymentRequirement) {
             throw new Error("No payment requirements provided");
         }
-        
+
         // Get the appropriate facilitator for the network
         const facilitator = getFacilitatorForNetwork(paymentRequirement.network);
-        const response = await facilitator.verify(decodedPayment, paymentRequirement);
+        const response = await facilitator.verify(decodedPayment, paymentRequirement as PaymentRequirements);
         if (!response.isValid) {
             c.status(402);
             return c.json({
@@ -158,8 +267,8 @@ export async function verifyPayment(
  */
 export async function settle(
     decodedPayment: PaymentPayload,
-    paymentRequirement: PaymentRequirements,
+    paymentRequirement: SupportedPaymentRequirements,
 ) {
     const facilitator = getFacilitatorForNetwork(paymentRequirement.network);
-    return facilitator.settle(decodedPayment, paymentRequirement);
+    return facilitator.settle(decodedPayment, paymentRequirement as PaymentRequirements);
 }
