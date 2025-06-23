@@ -20,7 +20,7 @@ import type { PaymentRequirements } from "x402/types";
  */
 const CustomPaymentRequirementsSchema = z.object({
     scheme: z.enum(["exact"]),
-    network: z.enum(["base-sepolia", "base"]), // Restrict to supported networks
+    network: z.enum(["base-sepolia", "base", "sei-testnet"]), // Restrict to supported networks
     maxAmountRequired: z.string(),
     resource: z.string(), // Allow any string, not just URLs
     description: z.string().optional().default(""),
