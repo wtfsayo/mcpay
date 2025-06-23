@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useTheme } from "@/context/ThemeContext"
-import { openBlockscout } from "@/lib/blockscout"
+import { openExplorer, getExplorerName } from "@/lib/blockscout"
+import { AddressLink, TransactionLink } from "@/components/ExplorerLink"
 import {
   formatTokenAmount,
   getTokenInfo,
@@ -517,8 +518,8 @@ export default function ServerDashboard() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => openBlockscout(serverData.receiverAddress)}
-                  title="View on Blockscout"
+                  onClick={() => openExplorer(serverData.receiverAddress, 'base-sepolia')}
+                  title={`View on ${getExplorerName('base-sepolia')}`}
                 >
                   <ExternalLink className="h-4 w-4" />
                 </Button>
@@ -549,8 +550,9 @@ export default function ServerDashboard() {
                   <div className="flex-1">
                     <div className="font-medium">{serverData.creator.displayName}</div>
                     <button
-                      onClick={() => openBlockscout(serverData.creator.walletAddress)}
+                      onClick={() => openExplorer(serverData.creator.walletAddress, 'base-sepolia')}
                       className={`text-xs hover:underline ${isDark ? "text-gray-400 hover:text-gray-300" : "text-gray-600 hover:text-gray-700"}`}
+                      title={`View address on ${getExplorerName('base-sepolia')}`}
                     >
                       {serverData.creator.walletAddress.slice(0, 6)}...{serverData.creator.walletAddress.slice(-4)}
                     </button>
@@ -737,8 +739,9 @@ export default function ServerDashboard() {
                           <p className="text-sm font-medium">{proof.tool.name}</p>
                           <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                             <button
-                              onClick={() => openBlockscout(proof.user.walletAddress)}
+                              onClick={() => openExplorer(proof.user.walletAddress, 'base-sepolia')}
                               className={`hover:underline ${isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-700"}`}
+                              title={`View address on ${getExplorerName('base-sepolia')}`}
                             >
                               {proof.user.displayName}
                             </button>
@@ -823,12 +826,13 @@ export default function ServerDashboard() {
                         />
                       </TableCell>
                       <TableCell>
-                        <button
-                          onClick={() => openBlockscout(payment.user.walletAddress)}
-                          className={`hover:underline ${isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-700"}`}
+                        <AddressLink
+                          address={payment.user.walletAddress}
+                          network={payment.network as Network}
+                          className="text-sm"
                         >
                           {payment.user.displayName}
-                        </button>
+                        </AddressLink>
                       </TableCell>
                       <TableCell>
                         <div>
@@ -841,22 +845,25 @@ export default function ServerDashboard() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-xs">
+                        <div className="flex flex-col gap-1">
+                          <Badge variant="outline" className="text-xs w-fit">
                             {payment.network}
                           </Badge>
+                          <span className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                            {getExplorerName(payment.network as Network)}
+                          </span>
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
                         {payment.transactionHash ? (
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => openBlockscout(payment.transactionHash!, "tx")}
-                              className={`text-xs font-mono hover:underline ${isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-700"}`}
-                              title="View transaction on block explorer"
-                            >
-                              {payment.transactionHash.slice(0, 6)}...{payment.transactionHash.slice(-4)}
-                            </button>
+                          <div className="flex items-center justify-end">
+                            <TransactionLink
+                              txHash={payment.transactionHash}
+                              network={payment.network as Network}
+                              variant="button"
+                              showCopyButton={true}
+                              className="text-xs"
+                            />
                           </div>
                         ) : (
                           <span className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>

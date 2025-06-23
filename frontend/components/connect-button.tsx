@@ -4,7 +4,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
-import { openBlockscout } from "@/lib/blockscout"
+import { AddressLink } from "./ExplorerLink"
 import { getNetworkByChainId, getTokenInfo, NETWORKS, type Network } from "@/lib/tokens"
 import {
   getConnectionStatus,
@@ -303,12 +303,14 @@ export function ConnectButton() {
 
             <DropdownMenuSeparator />
 
-            <DropdownMenuItem
-              onClick={() => openBlockscout(address)}
-              className="cursor-pointer"
-            >
-              <ExternalLink className="mr-2 h-4 w-4" />
-              View on Explorer
+            <DropdownMenuItem className="p-0">
+              <AddressLink
+                address={address}
+                network={currentNetwork}
+                variant="button"
+                showExplorerName={true}
+                className="w-full justify-start"
+              />
             </DropdownMenuItem>
 
             <DropdownMenuItem onClick={handleDisconnect} className="cursor-pointer">
