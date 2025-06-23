@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from 'hono/cors';
 import api from "./api.js";    
 import mcpProxy from "./mcp-proxy.js";
+import mcpProxyV2 from "./monetized-mcp-proxy.js";
 
 const app = new Hono();
 
@@ -17,6 +18,7 @@ app.use('*', cors({
 
 app.route('/api', api);
 app.route('/mcp', mcpProxy);
+app.route('/monetized-mcp', mcpProxyV2);
 
 export const GET = app.fetch;
 export const POST = app.fetch;
