@@ -8,7 +8,7 @@ import {
     createPaymentHeader,
     selectPaymentRequirements,
 } from "x402/client";
-import { ChainIdToNetwork, evm } from "x402/types";
+import { evm } from "x402/types";
 import { z } from "zod";
 
 // Import the type from x402/types to match the expected type
@@ -133,7 +133,7 @@ export class PaymentTransport extends StreamableHTTPClientTransport {
             // Select appropriate payment requirements
             const selectedPaymentRequirements = this._paymentRequirementsSelector(
                 parsedPaymentRequirements,
-                chainId ? ChainIdToNetwork[chainId] : undefined,
+                undefined, //TODO: chainId ? ChainIdToNetwork[chainId] : undefined,
                 "exact",
             );
 
@@ -407,7 +407,7 @@ export class PaymentTransport extends StreamableHTTPClientTransport {
             // Select appropriate payment requirements
             const selectedPaymentRequirements = this._paymentRequirementsSelector(
                 parsedPaymentRequirements,
-                chainId ? ChainIdToNetwork[chainId] : undefined,
+                undefined, //TODO: chainId ? ChainIdToNetwork[chainId] : undefined,
                 "exact",
             );
 
