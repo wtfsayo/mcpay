@@ -122,7 +122,7 @@ export const NETWORKS: Record<Network, NetworkInfo> = {
     chainId: 1328,
     nativeCurrency: { name: 'Sei', symbol: 'SEI', decimals: 18 },
     rpcUrls: ['https://evm-rpc-testnet.sei-apis.com'],
-    blockExplorerUrls: ['https://seitrace.com/?chain=atlantic-2'],
+    blockExplorerUrls: ['https://seitrace.com'],
     iconUrl: '/networks/sei.svg',
     isTestnet: true,
   },

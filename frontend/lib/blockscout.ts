@@ -25,6 +25,12 @@ export const getExplorerUrl = (
   type: 'address' | 'tx' = 'address'
 ): string => {
   const baseUrl = getExplorerBaseUrl(network)
+
+  if (network === 'sei-testnet') {
+    return type === 'address' 
+      ? `${baseUrl}/address/${hash}?chain=atlantic-2`
+      : `${baseUrl}/tx/${hash}?chain=atlantic-2`
+  }
   
   // Standard explorer URL structure for most chains
   return type === 'address' 
