@@ -26,13 +26,6 @@ export const getExplorerUrl = (
 ): string => {
   const baseUrl = getExplorerBaseUrl(network)
   
-  // Handle special case for Sei Testnet which has different URL structure
-  if (network === 'sei-testnet') {
-    return type === 'address' 
-      ? `${baseUrl}&module=account&address=${hash}`
-      : `${baseUrl}&module=tx&hash=${hash}`
-  }
-  
   // Standard explorer URL structure for most chains
   return type === 'address' 
     ? `${baseUrl}/address/${hash}`
