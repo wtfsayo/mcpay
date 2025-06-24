@@ -14,7 +14,7 @@ import {
   switchToNetwork,
   verifyWalletConnection
 } from "@/lib/wallet-utils"
-import { AlertTriangle, CheckCircle, ChevronDown, DollarSign, ExternalLink, Loader2, LogOut, RefreshCw, Wallet, Network as NetworkIcon } from "lucide-react"
+import { AlertTriangle, CheckCircle, ChevronDown, DollarSign, Loader2, LogOut, Wallet } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useAccount, useBalance, useChainId, useConnect, useDisconnect, type Connector } from "wagmi"
 
@@ -28,7 +28,7 @@ export function ConnectButton() {
   const { disconnect } = useDisconnect()
   const chainId = useChainId()
 
-  // Multi-chain support - define supported chains
+  // Supported networks
   const supportedChains: Network[] = ['base-sepolia', 'sei-testnet']
   const currentNetwork = getNetworkByChainId(chainId) as Network
   const defaultNetwork: Network = 'base-sepolia'
@@ -36,18 +36,13 @@ export function ConnectButton() {
   const connectionStatus = getConnectionStatus(isConnected, address, connector, chainId, currentNetwork)
   const verification = verifyWalletConnection(isConnected, address, connector)
 
-  // Multi-chain USDC addresses
+  // USDC addresses for supported networks
   const usdcAddresses: Record<Network, string> = {
     'base-sepolia': '0x036cbd53842c5426634e7929541ec2318f3dcf7e',
-    // 'base': '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913',
     'sei-testnet': '0xeAcd10aaA6f362a94823df6BBC3C536841870772',
-    // 'ethereum': '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
-    // 'arbitrum': '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
-    // 'optimism': '0x0b2c639c533813f4aa9d7837caf62653d097ff85',
-    // 'polygon': '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359',
   }
 
-  // Multi-chain balance fetching - call hooks at top level
+  // Multi-chain balance fetching
   const baseSepoliaBalance = useBalance({
     address: address,
     token: usdcAddresses['base-sepolia'] as `0x${string}`,
@@ -68,27 +63,6 @@ export function ConnectButton() {
     }
   })
 
-  // const baseBalance = useBalance({
-  //   address: address,
-  //   token: usdcAddresses['base'] as `0x${string}`,
-  //   chainId: NETWORKS['base'].chainId,
-  //   query: {
-  //     enabled: !!(address && usdcAddresses['base'] && isConnected),
-  //     refetchInterval: 30000,
-  //   }
-  // })
-
-  // const ethereumBalance = useBalance({
-  //   address: address,
-  //   token: usdcAddresses['ethereum'] as `0x${string}`,
-  //   chainId: NETWORKS['ethereum'].chainId,
-  //   query: {
-  //     enabled: !!(address && usdcAddresses['ethereum'] && isConnected),
-  //     refetchInterval: 30000,
-  //   }
-  // })
-
-  // Create balance queries object
   const balanceQueries = [
     { network: 'base-sepolia' as Network, ...baseSepoliaBalance },
     { network: 'sei-testnet' as Network, ...seiTestnetBalance }
@@ -111,16 +85,12 @@ export function ConnectButton() {
       // Try to switch to default network before connecting
       try {
         await switchToNetwork(defaultNetwork)
-        console.log(`Switched to ${NETWORKS[defaultNetwork].name}`)
       } catch (error) {
         console.warn("Could not switch network before connecting:", error)
-        // Continue with connection anyway
       }
 
-      console.log("Connecting to connector:", connector)
       connect({ connector })
     } catch (error) {
-      console.error("Connection error:", error)
       setConnectionError(error instanceof Error ? error.message : "Failed to connect")
     } finally {
       setIsLoading(false)
@@ -130,10 +100,8 @@ export function ConnectButton() {
   const handleDisconnect = async () => {
     try {
       setIsLoading(true)
-      setConnectionError("")
       disconnect()
     } catch (error) {
-      console.error("Disconnection error:", error)
       setConnectionError(error instanceof Error ? error.message : "Failed to disconnect")
     } finally {
       setIsLoading(false)
@@ -144,7 +112,6 @@ export function ConnectButton() {
     try {
       setIsNetworkSwitching(true)
       setConnectionError("")
-
       const success = await switchToNetwork(targetNetwork)
       if (!success) {
         setConnectionError(`Failed to switch to ${NETWORKS[targetNetwork].name} network`)
@@ -156,28 +123,15 @@ export function ConnectButton() {
     }
   }
 
-  // Format address for display
   const formatAddress = (address?: string) => {
     if (!address) return ""
     return `${address.slice(0, 6)}...${address.slice(-4)}`
   }
 
-  // Format balance for display
-  const formatBalance = (balance: bigint | undefined, decimals: number, symbol: string) => {
+  const formatBalance = (balance: bigint | undefined, decimals: number) => {
     if (!balance) return "0.00"
     const formatted = Number(balance) / Math.pow(10, decimals)
-    return `${formatted.toFixed(2)} ${symbol}`
-  }
-
-  // Get network icon/status
-  const getNetworkStatus = (network: Network, isCurrent: boolean) => {
-    const networkInfo = NETWORKS[network]
-    return {
-      name: networkInfo.name,
-      isTestnet: networkInfo.isTestnet,
-      isCurrent,
-      isSupported: supportedChains.includes(network)
-    }
+    return formatted.toFixed(2)
   }
 
   // Get preferred connectors
@@ -206,7 +160,7 @@ export function ConnectButton() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-96">
-            {/* Connection Status */}
+            {/* Connection Status - Cleaned up */}
             <div className="px-3 py-2 border-b">
               <div className="flex items-center gap-2">
                 {verification.isValid ? (
@@ -217,9 +171,9 @@ export function ConnectButton() {
                 <span className="text-sm font-medium">
                   {verification.isValid ? "Connected" : "Connection Issues"}
                 </span>
-                {currentNetworkInfo?.isTestnet && (
-                  <Badge variant="outline" className="text-xs text-orange-600 border-orange-200">
-                    Testnet
+                {!isOnSupportedNetwork && (
+                  <Badge variant="outline" className="text-xs text-orange-600">
+                    Unsupported Network
                   </Badge>
                 )}
               </div>
@@ -228,47 +182,24 @@ export function ConnectButton() {
               </p>
             </div>
 
-            {/* Current Network Status */}
-            <div className="px-3 py-2 border-b bg-blue-50/50 dark:bg-blue-900/20">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <NetworkIcon className="h-4 w-4 text-blue-600" />
-                  <span className="text-sm font-medium">Current Network</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm">{currentNetworkInfo?.name || 'Unknown'}</span>
-                  {isOnSupportedNetwork ? (
-                    <Badge variant="outline" className="text-xs text-green-600 border-green-200">
-                      Supported
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-xs text-orange-600 border-orange-200">
-                      Unsupported
-                    </Badge>
-                  )}
-                </div>
+            {/* Multi-Chain Balances - Cleaned up layout */}
+            <div className="px-3 py-3 border-b">
+              <div className="flex items-center gap-2 mb-3">
+                <DollarSign className="h-4 w-4 text-gray-600" />
+                <span className="text-sm font-medium">USDC Balances</span>
               </div>
-            </div>
 
-            {/* Multi-Chain Balances */}
-            <div className="px-3 py-3 border-b bg-gray-50/50 dark:bg-gray-800/50">
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 mb-3">
-                  <DollarSign className="h-4 w-4 text-gray-600" />
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Multi-Chain USDC Balances</span>
-                </div>
-
+              <div className="space-y-2">
                 {balanceQueries.map(({ network, data: balance, isLoading: isLoadingBalance, error }) => {
                   const networkInfo = NETWORKS[network]
-                  const usdcToken = getTokenInfo(usdcAddresses[network], network)
                   const isCurrent = network === currentNetwork
 
                   return (
-                    <div key={network} className={`flex justify-between items-center p-2 rounded ${isCurrent ? 'bg-blue-100 dark:bg-blue-900/30' : ''}`}>
+                    <div key={network} className={`flex justify-between items-center p-2 rounded-md ${isCurrent ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-gray-50 dark:bg-gray-800/50'}`}>
                       <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${isCurrent ? 'bg-blue-500' : networkInfo.isTestnet ? 'bg-orange-400' : 'bg-green-500'}`} />
+                        <div className={`w-2 h-2 rounded-full ${isCurrent ? 'bg-blue-500' : 'bg-gray-400'}`} />
                         <span className="text-xs font-medium">{networkInfo.name}</span>
-                        {networkInfo.isTestnet && <Badge variant="outline" className="text-xs">Testnet</Badge>}
+                        {isCurrent && <Badge variant="outline" className="text-xs">Current</Badge>}
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-mono">
@@ -277,7 +208,7 @@ export function ConnectButton() {
                           ) : error ? (
                             <span className="text-red-500">Error</span>
                           ) : balance ? (
-                            formatBalance(balance.value, balance.decimals, "USDC")
+                            `${formatBalance(balance.value, balance.decimals)} USDC`
                           ) : (
                             "0.00 USDC"
                           )}
@@ -304,14 +235,13 @@ export function ConnectButton() {
               </div>
             </div>
 
-            {/* Quick Network Switch */}
+            {/* Network Switch Section - Only show if needed */}
             {!isOnSupportedNetwork && (
               <>
-                <DropdownMenuSeparator />
                 <div className="px-3 py-2">
-                  <p className="text-xs text-amber-600 mb-2">⚠️ Switch to a supported network:</p>
+                  <p className="text-xs text-amber-600 mb-2">Switch to supported network:</p>
                   <div className="grid grid-cols-2 gap-1">
-                    {supportedChains.slice(0, 4).map((network) => (
+                    {supportedChains.map((network) => (
                       <Button
                         key={network}
                         onClick={() => handleNetworkSwitch(network)}
@@ -325,11 +255,11 @@ export function ConnectButton() {
                     ))}
                   </div>
                 </div>
+                <DropdownMenuSeparator />
               </>
             )}
 
-            <DropdownMenuSeparator />
-
+            {/* Actions */}
             <DropdownMenuItem className="p-0">
               <AddressLink
                 address={address}
@@ -347,30 +277,25 @@ export function ConnectButton() {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* Connection Warnings */}
+        {/* Alerts - Cleaned up and simplified */}
         {verification.warnings.length > 0 && (
           <Alert className="w-full">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription className="text-xs">
               {verification.warnings[0]}
-              {verification.warnings.length > 1 && (
-                <span className="text-gray-500"> (+{verification.warnings.length - 1} more)</span>
-              )}
             </AlertDescription>
           </Alert>
         )}
 
-        {/* Network Warning */}
-        {!isOnSupportedNetwork && currentNetworkInfo && (
+        {!isOnSupportedNetwork && (
           <Alert className="w-full">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription className="text-xs">
-              Unsupported network. Switch to: {supportedChains.map(n => NETWORKS[n].name).join(', ')}
+              Switch to: {supportedChains.map(n => NETWORKS[n].name).join(', ')}
             </AlertDescription>
           </Alert>
         )}
 
-        {/* Network Switching Loading */}
         {isNetworkSwitching && (
           <Alert className="w-full">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -394,15 +319,14 @@ export function ConnectButton() {
                 Connecting
               </>
             ) : (
-              <>Connect Wallet</>
+              "Connect Wallet"
             )}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {/* MetaMask (if available) */}
+          {/* Preferred Wallets First */}
           {metaMaskConnector && (
             <DropdownMenuItem
-              key={metaMaskConnector.id}
               onClick={() => handleConnect(metaMaskConnector)}
               className="cursor-pointer"
             >
@@ -413,10 +337,8 @@ export function ConnectButton() {
             </DropdownMenuItem>
           )}
 
-          {/* Coinbase Wallet (if available) */}
           {coinbaseConnector && (
             <DropdownMenuItem
-              key={coinbaseConnector.id}
               onClick={() => handleConnect(coinbaseConnector)}
               className="cursor-pointer"
             >
@@ -427,16 +349,12 @@ export function ConnectButton() {
             </DropdownMenuItem>
           )}
 
-          {/* Porto (if available) */}
           {portoConnector && (
             <DropdownMenuItem
-              key={portoConnector.id}
               onClick={() => handleConnect(portoConnector)}
               className="cursor-pointer"
             >
-              <div className="flex items-center justify-between w-full">
-                <span>{portoConnector.name}</span>
-              </div>
+              {portoConnector.name}
             </DropdownMenuItem>
           )}
 
@@ -459,7 +377,6 @@ export function ConnectButton() {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Connection Errors */}
       {connectionError && (
         <Alert className="w-full">
           <AlertTriangle className="h-4 w-4" />
