@@ -3,16 +3,9 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import type { Account } from "viem";
 import { wrapFetchWithPayment } from "x402-fetch";
-import type { PaymentRequirementsSelector } from "x402/client";
-import {
-    createPaymentHeader,
-    selectPaymentRequirements,
-} from "x402/client";
 import { evm } from "x402/types";
 import { z } from "zod";
-
-// Import the type from x402/types to match the expected type
-import type { PaymentRequirements } from "x402/types";
+import { ChainIdToNetwork, createPaymentHeader, ExtendedPaymentRequirements, selectPaymentRequirements, type PaymentRequirementsSelector } from "../x402";
 
 /**
  * Custom schema for payment requirements that matches our server's format.
@@ -116,7 +109,7 @@ export class PaymentTransport extends StreamableHTTPClientTransport {
                     (validated as any).maxTimeoutSeconds = 60;
                 }
 
-                return validated as unknown as PaymentRequirements;
+                return validated as unknown as ExtendedPaymentRequirements;
             });
 
             // Get chain ID from wallet client
@@ -133,7 +126,7 @@ export class PaymentTransport extends StreamableHTTPClientTransport {
             // Select appropriate payment requirements
             const selectedPaymentRequirements = this._paymentRequirementsSelector(
                 parsedPaymentRequirements,
-                undefined, //TODO: chainId ? ChainIdToNetwork[chainId] : undefined,
+                chainId ? ChainIdToNetwork[chainId] : undefined,
                 "exact",
             );
 
@@ -389,7 +382,7 @@ export class PaymentTransport extends StreamableHTTPClientTransport {
                 }
 
                 // Cast to the expected PaymentRequirements type
-                return validated as unknown as PaymentRequirements;
+                return validated as unknown as ExtendedPaymentRequirements;
             });
 
             // Determine chain ID from wallet client
@@ -407,7 +400,7 @@ export class PaymentTransport extends StreamableHTTPClientTransport {
             // Select appropriate payment requirements
             const selectedPaymentRequirements = this._paymentRequirementsSelector(
                 parsedPaymentRequirements,
-                undefined, //TODO: chainId ? ChainIdToNetwork[chainId] : undefined,
+                chainId ? ChainIdToNetwork[chainId] : undefined,
                 "exact",
             );
 
