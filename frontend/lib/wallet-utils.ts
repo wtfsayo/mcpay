@@ -265,10 +265,6 @@ export async function switchToSeiTestnet(): Promise<boolean> {
   return switchToNetwork('sei-testnet')
 }
 
-export async function switchToBase(): Promise<boolean> {
-  return switchToNetwork('base')
-}
-
 // Get all supported networks for UI display
 export function getSupportedNetworks(): NetworkInfo[] {
   return Object.values(NETWORKS)
