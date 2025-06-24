@@ -4,9 +4,10 @@ import { MCPServer } from "@/components/ToolsModal"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { toast, ToastContainer } from "@/components/ui/toast"
 import { useTheme } from "@/context/ThemeContext"
+import { urlUtils } from "@/lib/utils"
 import {
-  Activity,
   AlertCircle,
   ArrowRight,
   BarChart3,
@@ -15,17 +16,15 @@ import {
   Moon,
   Rocket,
   Server,
-  Shield,
   Sparkles,
   Sun,
   PenToolIcon as Tool,
   TrendingUp,
-  Users,
   Zap
 } from "lucide-react"
 import Image from "next/image"
+import Link from "next/link"
 import { useEffect, useState } from "react"
-import { urlUtils } from "@/lib/utils"
 
 // API response types
 interface APITool {
@@ -114,7 +113,7 @@ const transformServerData = (apiServer: APIServer): MCPServer => ({
 });
 
 const categories = [
-  "All", "General", "Finance", "Automation", "Database", 
+  "All", "General", "Finance", "Automation", "Database",
   "Development", "Productivity", "Utilities", "Communication", "AI/ML"
 ]
 
@@ -133,12 +132,12 @@ export default function MCPBrowser() {
       try {
         setAnalyticsLoading(true)
         setAnalyticsError(null)
-        
+
         const analyticsResponse = await fetch(urlUtils.getApiUrl('/analytics/usage'))
         if (!analyticsResponse.ok) {
           throw new Error(`Failed to fetch analytics: ${analyticsResponse.status}`)
         }
-        
+
         const analyticsData: AnalyticsData = await analyticsResponse.json()
         setAnalytics(analyticsData)
       } catch (err) {
@@ -152,15 +151,15 @@ export default function MCPBrowser() {
       try {
         setLoading(true)
         setError(null)
-        
+
         const serversResponse = await fetch(urlUtils.getApiUrl('/servers?limit=50&type=trending'))
         if (!serversResponse.ok) {
           throw new Error(`Failed to fetch servers: ${serversResponse.status}`)
         }
-        
+
         const servers: APIServer[] = await serversResponse.json()
         const transformedServers = servers.map(server => transformServerData(server))
-        
+
         setMcpServers(transformedServers)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch servers')
@@ -173,11 +172,14 @@ export default function MCPBrowser() {
     fetchServers()
   }, [])
 
-  const filteredServers = mcpServers.filter(server => 
+  const filteredServers = mcpServers.filter(server =>
     selectedCategory === "All" || server.category === selectedCategory
   )
 
-  const copyToClipboard = (text: string) => navigator.clipboard.writeText(text)
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text)
+    toast.success("Endpoint copied • paste into `fetch()`")
+  }
 
   // Format number with commas
   const formatNumber = (num: number | undefined | null) => {
@@ -192,14 +194,14 @@ export default function MCPBrowser() {
   }
 
   // Enhanced stats card component with original color scheme
-  const StatsCard = ({ 
-    title, 
-    value, 
-    icon: Icon, 
-    subtitle, 
+  const StatsCard = ({
+    title,
+    value,
+    icon: Icon,
+    subtitle,
     trend,
     delay = 0
-  }: { 
+  }: {
     title: string
     value: string | number
     icon: any
@@ -207,12 +209,11 @@ export default function MCPBrowser() {
     trend?: string
     delay?: number
   }) => (
-    <Card className={`group relative overflow-hidden border-0 shadow-lg hover:shadow-xl transition-all duration-500 transform hover:-translate-y-1 ${
-      isDark ? "bg-gray-800/50 backdrop-blur" : "bg-white/80 backdrop-blur"
-    }`} style={{ animationDelay: `${delay}ms` }}>
+    <Card className={`group relative overflow-hidden border-0 shadow-lg hover:shadow-xl transition-all duration-500 transform hover:-translate-y-1 ${isDark ? "bg-gray-800/50 backdrop-blur" : "bg-white/80 backdrop-blur"
+      }`} style={{ animationDelay: `${delay}ms` }}>
       {/* Subtle background */}
       <div className={`absolute inset-0 ${isDark ? "bg-blue-900/5" : "bg-blue-50/50"} opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
-      
+
       {/* Content */}
       <div className="relative p-6">
         <div className="flex items-center justify-between mb-4">
@@ -220,19 +221,18 @@ export default function MCPBrowser() {
             <Icon className={`h-6 w-6 ${isDark ? "text-blue-400" : "text-blue-600"}`} />
           </div>
           {trend && (
-            <div className={`flex items-center text-sm font-medium px-2 py-1 rounded-full ${
-              trend.startsWith('+') 
-                ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20' 
-                : trend.startsWith('-') 
-                ? 'text-red-600 bg-red-50 dark:bg-red-900/20' 
+            <div className={`flex items-center text-sm font-medium px-2 py-1 rounded-full ${trend.startsWith('+')
+              ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20'
+              : trend.startsWith('-')
+                ? 'text-red-600 bg-red-50 dark:bg-red-900/20'
                 : 'text-gray-600 bg-gray-50 dark:bg-gray-700'
-            }`}>
+              }`}>
               <TrendingUp className="h-3 w-3 mr-1" />
               {trend}
             </div>
           )}
         </div>
-        
+
         <div className="space-y-1">
           <p className={`text-sm font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
             {title}
@@ -247,7 +247,7 @@ export default function MCPBrowser() {
           )}
         </div>
       </div>
-      
+
       {/* Hover effect */}
       <div className="absolute inset-0 ring-1 ring-inset ring-white/10 rounded-lg" />
     </Card>
@@ -255,9 +255,8 @@ export default function MCPBrowser() {
 
   // Enhanced stats skeleton component
   const StatsSkeleton = ({ delay = 0 }: { delay?: number }) => (
-    <Card className={`overflow-hidden border-0 shadow-lg ${
-      isDark ? "bg-gray-800/50 backdrop-blur" : "bg-white/80 backdrop-blur"
-    }`} style={{ animationDelay: `${delay}ms` }}>
+    <Card className={`overflow-hidden border-0 shadow-lg ${isDark ? "bg-gray-800/50 backdrop-blur" : "bg-white/80 backdrop-blur"
+      }`} style={{ animationDelay: `${delay}ms` }}>
       <div className="p-6">
         <div className="flex items-center justify-between mb-4">
           <div className={`p-3 rounded-xl animate-pulse ${isDark ? "bg-gray-700" : "bg-gray-200"}`}>
@@ -276,9 +275,8 @@ export default function MCPBrowser() {
 
   // Enhanced skeleton card component
   const SkeletonCard = ({ delay = 0 }: { delay?: number }) => (
-    <Card className={`overflow-hidden border-0 shadow-lg hover:shadow-xl transition-all duration-300 ${
-      isDark ? "bg-gray-800/50 backdrop-blur" : "bg-white/90 backdrop-blur"
-    }`} style={{ animationDelay: `${delay}ms` }}>
+    <Card className={`overflow-hidden border-0 shadow-lg hover:shadow-xl transition-all duration-300 ${isDark ? "bg-gray-800/50 backdrop-blur" : "bg-white/90 backdrop-blur"
+      }`} style={{ animationDelay: `${delay}ms` }}>
       <CardHeader className="pb-4 relative">
         <div className="absolute top-4 right-4">
           <div className={`h-5 w-16 rounded-full animate-pulse ${isDark ? "bg-gray-700" : "bg-gray-200"}`} />
@@ -334,69 +332,50 @@ export default function MCPBrowser() {
 
   return (
     <div className={`min-h-screen ${isDark ? "bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900" : "bg-gradient-to-br from-gray-50 via-white to-gray-100"}`}>
-      {/* Animated background elements */}
+      {/* Subtle background gradient */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className={`absolute -top-40 -right-40 w-80 h-80 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob ${isDark ? "bg-purple-500" : "bg-purple-300"}`} />
-        <div className={`absolute -bottom-40 -left-40 w-80 h-80 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000 ${isDark ? "bg-blue-500" : "bg-blue-300"}`} />
-        <div className={`absolute top-40 left-40 w-80 h-80 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000 ${isDark ? "bg-pink-500" : "bg-pink-300"}`} />
+        <div className={`absolute inset-0 ${isDark ? "bg-gradient-to-br from-gray-900/50 via-transparent to-gray-800/30" : "bg-gradient-to-br from-blue-50/30 via-transparent to-purple-50/20"}`} />
       </div>
 
       <div className="relative container mx-auto px-4 py-8">
         {/* Enhanced Header */}
-        <div className="text-center mb-16 relative">          
-          <div className="flex justify-center mb-6 animate-fade-in-up">
-            <Image 
-              src="/mcpay-logo.svg" 
-              alt="MCPay Logo" 
-              width={200} 
-              height={200}
-              className="drop-shadow-lg"
-            />
-          </div>
-          <div className={`h-1 w-32 ${isDark ? "bg-blue-400" : "bg-blue-600"} mx-auto mb-6 rounded-full`} />
-          
-          <p className={`text-xl max-w-4xl mx-auto leading-relaxed animate-fade-in-up animation-delay-300 ${isDark ? "text-gray-300" : "text-gray-600"}`}>
-            Transform your AI capabilities with monetizable MCP servers. Connect, extend, and earn through the x402 protocol.
+        <div className="text-center mb-16 relative">
+          <div className="mb-[100px]"></div>
+          <h1 className={`text-5xl font-extrabold tracking-tight mb-6 animate-fade-in-up ${isDark ? "text-white" : "text-gray-900"}`}>
+            Monetise your MCP server in <span className="text-[#0052FF]">one&nbsp;click.</span>
+          </h1>
+
+          <p className={`text-lg max-w-3xl mx-auto leading-relaxed animate-fade-in-up animation-delay-300 ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+            Serve, price & settle with on-chain USDC via <a href="https://x402.org" className="underline hover:text-[#00D8FF] transition-colors" target="_blank" rel="noopener noreferrer">x402</a>.
           </p>
-          
+
           <div className="flex items-center justify-center gap-6 mt-8 animate-fade-in-up animation-delay-500">
-            <Button 
-              size="lg" 
-              className={`${isDark ? "bg-blue-600 hover:bg-blue-700" : "bg-blue-600 hover:bg-blue-700"} text-white shadow-lg hover:shadow-xl transition-all duration-300`}
+            <Link href="/register">
+              <Button
+                size="lg"
+                className="bg-[#0052FF] hover:bg-[#0052FF]/90 text-white shadow-lg hover:shadow-xl transition-all duration-300"
+              >
+                <Rocket className="h-5 w-5 mr-2" />
+                Monetise your server
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
+            </Link>
+
+            <button
+              className="text-sm underline hover:text-[#0052FF] transition-colors cursor-pointer"
               onClick={() => {
                 // Scroll to servers section
                 document.querySelector('#servers-section')?.scrollIntoView({ behavior: 'smooth' });
               }}
             >
-              <Rocket className="h-5 w-5 mr-2" />
-              Get Started
-              <ArrowRight className="h-4 w-4 ml-2" />
-            </Button>
-            <Button 
-              variant="outline" 
-              size="lg" 
-              className="border-2 hover:bg-blue-50 dark:hover:bg-blue-950/50"
-              onClick={() => {
-                window.open('https://modelcontextprotocol.io', '_blank');
-              }}
-            >
-              <Globe className="h-5 w-5 mr-2" />
-              Learn More
-            </Button>
+              Discover MCP servers
+            </button>
           </div>
+
         </div>
 
         {/* Enhanced Platform Stats */}
         <div className="mb-16">
-          <div className="text-center mb-12">
-            <h2 className={`text-4xl font-bold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
-              Platform at a Glance
-            </h2>
-            <p className={`text-lg ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-              Real-time metrics from our growing ecosystem
-            </p>
-          </div>
-          
           {analyticsLoading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {Array.from({ length: 8 }).map((_, index) => (
@@ -416,35 +395,50 @@ export default function MCPBrowser() {
           ) : analytics ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               <StatsCard
-                title="Active Servers"
+                title="Live MCP Servers"
                 value={formatNumber(analytics.totalServers)}
                 icon={Server}
                 subtitle={`${analytics.activeServers} online now`}
                 delay={0}
               />
               <StatsCard
-                title="Available Tools"
-                value={formatNumber(analytics.totalTools)}
-                icon={Tool}
-                subtitle={`${analytics.monetizedTools} monetized`}
+                title="USDC Paid Out"
+                value={formatCurrency(analytics.totalRevenue)}
+                icon={DollarSign}
+                subtitle={`${formatNumber(analytics.totalPayments)} transactions`}
                 delay={100}
               />
               <StatsCard
-                title="Total Requests"
-                value={formatNumber(analytics.totalRequests)}
-                icon={Activity}
+                title="Avg. payout / 1k calls"
+                value={formatCurrency(analytics.totalRequests > 0 ? (analytics.totalRevenue / (analytics.totalRequests / 1000)) : 0)}
+                icon={TrendingUp}
                 subtitle={`${analytics.successRate}% success rate`}
                 delay={200}
               />
               <StatsCard
-                title="Revenue Generated"
-                value={formatCurrency(analytics.totalRevenue)}
-                icon={DollarSign}
-                subtitle={`${formatNumber(analytics.totalPayments)} transactions`}
-                delay={400}
+                title="Easiest server setup"
+                value="< 1 min"
+                icon={Zap}
+                subtitle={`${analytics.monetizedTools} monetized tools`}
+                delay={300}
               />
             </div>
           ) : null}
+        </div>
+
+
+
+        {/* Enhanced Browse Servers Section */}
+        <div className="mb-12" id="servers-section">
+          <div className="text-center mb-12">
+            <h2 className={`text-4xl font-bold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
+              Discover MCP Servers
+            </h2>
+            <div className="h-0.5 w-32 mx-auto mb-6 bg-gradient-to-r from-violet-500 to-blue-500 rounded-full" />
+            <p className={`text-lg ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+              Explore powerful tools and services from our community
+            </p>
+          </div>
         </div>
 
         {/* Enhanced Category Filter */}
@@ -457,8 +451,8 @@ export default function MCPBrowser() {
                 onClick={() => setSelectedCategory(category)}
                 size="sm"
                 disabled={loading}
-                className={selectedCategory === category 
-                  ? `${isDark ? "bg-blue-600 hover:bg-blue-700" : "bg-blue-600 hover:bg-blue-700"} text-white shadow-lg` 
+                className={selectedCategory === category
+                  ? `${isDark ? "bg-blue-600 hover:bg-blue-700" : "bg-blue-600 hover:bg-blue-700"} text-white shadow-lg`
                   : "hover:bg-white/70 dark:hover:bg-gray-700/70"
                 }
               >
@@ -468,20 +462,8 @@ export default function MCPBrowser() {
           </div>
         </div>
 
-        {/* Enhanced Browse Servers Section */}
-        <div className="mb-12" id="servers-section">
-          <div className="text-center mb-12">
-            <h2 className={`text-4xl font-bold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
-              Discover MCP Servers
-            </h2>
-            <p className={`text-lg ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-              Explore powerful tools and services from our community
-            </p>
-          </div>
-        </div>
-
-        {/* Results Count with better styling */}
-        <div className="mb-8 flex items-center justify-between">
+                {/* Results Count with better styling */}
+        <div className="mb-8">
           {loading ? (
             <div className={`h-6 w-48 rounded-full animate-pulse ${isDark ? "bg-gray-700" : "bg-gray-200"}`} />
           ) : error ? (
@@ -497,11 +479,6 @@ export default function MCPBrowser() {
               </p>
             </div>
           )}
-          
-          <Button variant="outline" size="sm" onClick={toggleTheme} className="flex items-center gap-2 backdrop-blur bg-white/50 dark:bg-gray-800/50">
-            {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            {isDark ? "Light" : "Dark"}
-          </Button>
         </div>
 
         {/* Enhanced MCP Server Grid */}
@@ -536,9 +513,10 @@ export default function MCPBrowser() {
             </div>
           ) : (
             filteredServers.map((server, index) => (
-              <Card key={server.id} className={`group relative overflow-hidden border-0 shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 animate-fade-in-up ${
-                isDark ? "bg-gray-800/60 backdrop-blur" : "bg-white/80 backdrop-blur"
-              }`} style={{ animationDelay: `${index * 100}ms` }}>
+              <Card key={server.id} className={`group relative overflow-hidden border ${isDark
+                ? "bg-surface-dark backdrop-blur border-white/[0.08] shadow-sm hover:shadow-md"
+                : "bg-surface backdrop-blur border-black/[0.05] shadow-sm hover:shadow-md"
+                } transition-all duration-300 hover:scale-[1.02] animate-fade-in-up`} style={{ animationDelay: `${index * 100}ms` }}>
                 {/* Gradient overlay */}
                 <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-purple-500/5 to-pink-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
 
@@ -556,7 +534,7 @@ export default function MCPBrowser() {
                       </Badge>
                     </div>
                   </div>
-                  
+
                   <CardDescription className="text-sm leading-relaxed mt-4 h-12 line-clamp-2">
                     {server.description}
                   </CardDescription>
@@ -570,9 +548,8 @@ export default function MCPBrowser() {
                       MCP Connection URL
                     </label>
                     <div className="flex items-center gap-2">
-                      <code className={`flex-1 text-xs p-3 rounded-lg font-mono break-all transition-colors duration-200 ${
-                        isDark ? "bg-gray-700/50 border border-gray-600/50 hover:bg-gray-700" : "bg-gray-50 border border-gray-200 hover:bg-gray-100"
-                      }`}>
+                      <code className={`flex-1 text-xs p-3 rounded-lg font-mono break-all transition-colors duration-200 ${isDark ? "bg-gray-700/50 border border-gray-600/50 hover:bg-gray-700" : "bg-gray-50 border border-gray-200 hover:bg-gray-100"
+                        }`}>
                         {urlUtils.getMcpUrl(server.id)}
                       </code>
                       <Button
@@ -602,9 +579,9 @@ export default function MCPBrowser() {
                   </div>
 
                   {/* Enhanced action button */}
-                  <Button 
-                    size="lg" 
-                    variant="outline" 
+                  <Button
+                    size="lg"
+                    variant="outline"
                     className="w-full hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:border-blue-300 dark:hover:border-blue-600 transition-all duration-300"
                     onClick={(e) => {
                       e.preventDefault();
@@ -613,8 +590,7 @@ export default function MCPBrowser() {
                     }}
                   >
                     <BarChart3 className="h-4 w-4 mr-2" />
-                    View Analytics
-                    <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition-transform duration-300" />
+                    Open Dashboard →
                   </Button>
                 </CardContent>
 
@@ -627,6 +603,19 @@ export default function MCPBrowser() {
           )}
         </div>
 
+        {/* Trust bar */}
+        <div className="m-16 flex flex-wrap items-center justify-center gap-8 opacity-60 animate-fade-in-up animation-delay-700">
+          <a href="https://ethglobal.com/showcase/mcpay-fun-y16d3" target="_blank" rel="noopener noreferrer">
+            <img src="/logos/ethglobal-logo.png" alt="ETHGlobal finalist" className="h-10 grayscale hover:grayscale-0 transition-all duration-300" />
+          </a>
+          <a href="https://x402.org" target="_blank" rel="noopener noreferrer">
+            <img src="/logos/x402-icon-blue.png" alt="Runs on x402" className="h-10 grayscale hover:grayscale-0 transition-all duration-300" />
+          </a>
+          <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener noreferrer">
+            <img src="/logos/mcp-logo.png" alt="Powered by MCP" className="h-8 grayscale hover:grayscale-0 transition-all duration-300" />
+          </a>
+        </div>
+
         {/* Enhanced Footer */}
         <div className={`text-center py-12 border-t ${isDark ? "border-gray-700" : "border-gray-200"}`}>
           <div className="flex flex-col items-center gap-6">
@@ -636,37 +625,40 @@ export default function MCPBrowser() {
                 Powered by the <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Model Context Protocol</a> and <a href="https://x402.org" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">x402</a>
               </p>
             </div>
-            
-            <div className="flex items-center gap-6 text-sm">
-              <button
-                onClick={() => window.open('https://modelcontextprotocol.io', '_blank')}
-                className={`hover:text-blue-500 transition-colors duration-200 ${isDark ? "text-gray-400" : "text-gray-500"} cursor-pointer`}
-              >
-                Learn about MCP
-              </button>
-              <span className={isDark ? "text-gray-600" : "text-gray-400"}>•</span>
-              <button
-                onClick={() => {
-                  // You can add API documentation link here
-                  console.log('API Documentation clicked');
-                }}
-                className={`hover:text-blue-500 transition-colors duration-200 ${isDark ? "text-gray-400" : "text-gray-500"} cursor-pointer`}
-              >
-                API Documentation
-              </button>
-              <span className={isDark ? "text-gray-600" : "text-gray-400"}>•</span>
+
+            <div className="flex items-center gap-4 text-sm">
               <a
                 href="https://github.com/microchipgnu/mcpay.fun"
                 target="_blank"
                 rel="noopener noreferrer"
-                className={`hover:text-blue-500 transition-colors duration-200 ${isDark ? "text-gray-400" : "text-gray-500"} cursor-pointer`}
+                className={`hover:text-[#0052FF] transition-colors duration-200 ${isDark ? "text-gray-400" : "text-gray-500"} cursor-pointer`}
               >
-                Open Source
+                GitHub
               </a>
+              <span className={isDark ? "text-gray-600" : "text-gray-400"}>·</span>
+              <a
+                href="https://x.com/microchipgnu"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`hover:text-[#0052FF] transition-colors duration-200 ${isDark ? "text-gray-400" : "text-gray-500"} cursor-pointer`}
+              >
+                X
+              </a>
+              <span className={isDark ? "text-gray-600" : "text-gray-400"}>·</span>
+              <button
+                onClick={toggleTheme}
+                className={`flex items-center gap-1.5 hover:text-[#0052FF] transition-colors duration-200 ${isDark ? "text-gray-400" : "text-gray-500"} cursor-pointer`}
+              >
+                {isDark ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+                {isDark ? "Light" : "Dark"}
+              </button>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Toast container */}
+      <ToastContainer />
 
       {/* Custom CSS for animations */}
       <style jsx>{`
@@ -681,27 +673,8 @@ export default function MCPBrowser() {
           }
         }
 
-        @keyframes blob {
-          0% {
-            transform: translate(0px, 0px) scale(1);
-          }
-          33% {
-            transform: translate(30px, -50px) scale(1.1);
-          }
-          66% {
-            transform: translate(-20px, 20px) scale(0.9);
-          }
-          100% {
-            transform: translate(0px, 0px) scale(1);
-          }
-        }
-
         .animate-fade-in-up {
-          animation: fade-in-up 0.8s ease-out forwards;
-        }
-
-        .animate-blob {
-          animation: blob 7s infinite;
+          animation: fade-in-up 0.6s ease-out forwards;
         }
 
         .animation-delay-300 {
