@@ -29,7 +29,7 @@ export function ConnectButton() {
   const chainId = useChainId()
 
   // Multi-chain support - define supported chains
-  const supportedChains: Network[] = ['base-sepolia', 'sei-testnet', 'base', 'ethereum']
+  const supportedChains: Network[] = ['base-sepolia', 'sei-testnet']
   const currentNetwork = getNetworkByChainId(chainId) as Network
   const defaultNetwork: Network = 'base-sepolia'
   
@@ -39,12 +39,12 @@ export function ConnectButton() {
   // Multi-chain USDC addresses
   const usdcAddresses: Record<Network, string> = {
     'base-sepolia': '0x036cbd53842c5426634e7929541ec2318f3dcf7e',
-    'base': '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913',
+    // 'base': '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913',
     'sei-testnet': '0xeAcd10aaA6f362a94823df6BBC3C536841870772',
-    'ethereum': '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
-    'arbitrum': '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
-    'optimism': '0x0b2c639c533813f4aa9d7837caf62653d097ff85',
-    'polygon': '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359',
+    // 'ethereum': '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+    // 'arbitrum': '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+    // 'optimism': '0x0b2c639c533813f4aa9d7837caf62653d097ff85',
+    // 'polygon': '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359',
   }
 
   // Multi-chain balance fetching - call hooks at top level
@@ -68,32 +68,30 @@ export function ConnectButton() {
     }
   })
 
-  const baseBalance = useBalance({
-    address: address,
-    token: usdcAddresses['base'] as `0x${string}`,
-    chainId: NETWORKS['base'].chainId,
-    query: {
-      enabled: !!(address && usdcAddresses['base'] && isConnected),
-      refetchInterval: 30000,
-    }
-  })
+  // const baseBalance = useBalance({
+  //   address: address,
+  //   token: usdcAddresses['base'] as `0x${string}`,
+  //   chainId: NETWORKS['base'].chainId,
+  //   query: {
+  //     enabled: !!(address && usdcAddresses['base'] && isConnected),
+  //     refetchInterval: 30000,
+  //   }
+  // })
 
-  const ethereumBalance = useBalance({
-    address: address,
-    token: usdcAddresses['ethereum'] as `0x${string}`,
-    chainId: NETWORKS['ethereum'].chainId,
-    query: {
-      enabled: !!(address && usdcAddresses['ethereum'] && isConnected),
-      refetchInterval: 30000,
-    }
-  })
+  // const ethereumBalance = useBalance({
+  //   address: address,
+  //   token: usdcAddresses['ethereum'] as `0x${string}`,
+  //   chainId: NETWORKS['ethereum'].chainId,
+  //   query: {
+  //     enabled: !!(address && usdcAddresses['ethereum'] && isConnected),
+  //     refetchInterval: 30000,
+  //   }
+  // })
 
   // Create balance queries object
   const balanceQueries = [
     { network: 'base-sepolia' as Network, ...baseSepoliaBalance },
-    { network: 'sei-testnet' as Network, ...seiTestnetBalance },
-    { network: 'base' as Network, ...baseBalance },
-    { network: 'ethereum' as Network, ...ethereumBalance },
+    { network: 'sei-testnet' as Network, ...seiTestnetBalance }
   ]
 
   // Handle connection errors

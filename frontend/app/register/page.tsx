@@ -78,6 +78,7 @@ export default function RegisterPage() {
   const [selectedNetwork, setSelectedNetwork] = useState<Network>('base-sepolia')
   const [selectedPaymentToken, setSelectedPaymentToken] = useState<string>('')
   const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false)
+  const [showNetworkSelection, setShowNetworkSelection] = useState(false)
 
   const { address: walletAddress, isConnected: isWalletConnected } = useAccount()
   const { error: connectError } = useConnect()
@@ -115,12 +116,12 @@ export default function RegisterPage() {
       // Get the selected payment token address - use predefined mapping for simplicity
       const defaultPaymentTokens: Record<Network, string> = {
         'base-sepolia': '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC on Base Sepolia
-        'base': '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', // USDC on Base
+        // 'base': '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', // USDC on Base
         'sei-testnet': '0xeAcd10aaA6f362a94823df6BBC3C536841870772', // USDC on Sei Testnet
-        'ethereum': '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC on Ethereum
-        'arbitrum': '0xaf88d065e77c8cc2239327c5edb3a432268e5831', // USDC on Arbitrum
-        'optimism': '0x0b2c639c533813f4aa9d7837caf62653d097ff85', // USDC on Optimism
-        'polygon': '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359', // USDC on Polygon
+        // 'ethereum': '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC on Ethereum
+        // 'arbitrum': '0xaf88d065e77c8cc2239327c5edb3a432268e5831', // USDC on Arbitrum
+        // 'optimism': '0x0b2c639c533813f4aa9d7837caf62653d097ff85', // USDC on Optimism
+        // 'polygon': '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359', // USDC on Polygon
       }
       
       const paymentTokenAddress = selectedPaymentToken || defaultPaymentTokens[selectedNetwork] || 
@@ -462,68 +463,104 @@ export default function RegisterPage() {
                 </p>
               </div>
 
-              {/* Payment Network Selection */}
+              {/* Payment Network Selection - Compact Version */}
               <div className="space-y-4">
-                <label className={`text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                  Payment Network *
-                </label>
-
-                <div className="grid grid-cols-2 gap-3">
-                  {Object.entries(NETWORKS).map(([networkKey, networkInfo]) => (
-                    <Button
-                      key={networkKey}
-                      type="button"
-                      variant={selectedNetwork === networkKey ? "default" : "outline"}
-                      onClick={() => handleNetworkChange(networkKey as Network)}
-                      className={`h-auto p-4 justify-start ${selectedNetwork === networkKey 
-                        ? isDark ? "bg-gray-700 text-white border-gray-500" : "bg-gray-900 text-white border-gray-900"
-                        : isDark ? "border-gray-600 text-gray-300 hover:bg-gray-700" : "border-gray-300 text-gray-700 hover:bg-gray-50"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 w-full">
-                        <div className={`w-2 h-2 rounded-full ${
-                          networkInfo.isTestnet 
-                            ? "bg-orange-500" 
-                            : "bg-green-500"
-                        }`} />
-                        <div className="text-left">
-                          <div className="font-medium text-sm">{networkInfo.name}</div>
-                          <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                            {networkInfo.isTestnet ? "Testnet" : "Mainnet"}
-                          </div>
-                        </div>
-                      </div>
-                    </Button>
-                  ))}
+                <div className="flex items-center justify-between">
+                  <label className={`text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                    Payment Network
+                  </label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowNetworkSelection(!showNetworkSelection)}
+                    className={`px-3 py-1 ${isDark ? "text-gray-400 hover:text-white hover:bg-gray-700" : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"}`}
+                  >
+                    {showNetworkSelection ? "Hide" : "Change"}
+                  </Button>
                 </div>
 
-                {/* Network Switch Button */}
-                {isWalletConnected && (
-                  <div className="flex items-center gap-3 p-3 rounded-lg border border-dashed border-gray-300 dark:border-gray-600">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleSwitchToSelectedNetwork}
-                      disabled={isSwitchingNetwork}
-                      className={`px-4 py-2 ${isDark ? "border-gray-600 text-gray-400 hover:text-white hover:bg-gray-700" : "border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100"}`}
-                    >
-                      {isSwitchingNetwork ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                      )}
-                      Switch to {NETWORKS[selectedNetwork].name}
-                    </Button>
-                    <span className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                      Ensure your wallet is on the correct network
-                    </span>
+                {/* Current Network Display */}
+                <div className={`flex items-center gap-3 p-4 rounded-lg border ${isDark ? "border-gray-600 bg-gray-700/50" : "border-gray-200 bg-gray-50"}`}>
+                  <div className={`w-3 h-3 rounded-full ${
+                    NETWORKS[selectedNetwork].isTestnet 
+                      ? "bg-orange-500" 
+                      : "bg-green-500"
+                  }`} />
+                  <div className="flex-1">
+                    <div className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
+                      {NETWORKS[selectedNetwork].name}
+                    </div>
+                    <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                      {NETWORKS[selectedNetwork].isTestnet ? "Testnet" : "Mainnet"}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Expanded Network Selection */}
+                {showNetworkSelection && (
+                  <div className="space-y-4 pt-2">
+                    <div className="grid grid-cols-2 gap-3">
+                      {Object.entries(NETWORKS).map(([networkKey, networkInfo]) => (
+                        <Button
+                          key={networkKey}
+                          type="button"
+                          variant={selectedNetwork === networkKey ? "default" : "outline"}
+                          onClick={() => {
+                            handleNetworkChange(networkKey as Network)
+                            setShowNetworkSelection(false)
+                          }}
+                          className={`h-auto p-4 justify-start ${selectedNetwork === networkKey 
+                            ? isDark ? "bg-gray-700 text-white border-gray-500" : "bg-gray-900 text-white border-gray-900"
+                            : isDark ? "border-gray-600 text-gray-300 hover:bg-gray-700" : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 w-full">
+                            <div className={`w-2 h-2 rounded-full ${
+                              networkInfo.isTestnet 
+                                ? "bg-orange-500" 
+                                : "bg-green-500"
+                            }`} />
+                            <div className="text-left">
+                              <div className="font-medium text-sm">{networkInfo.name}</div>
+                              <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                                {networkInfo.isTestnet ? "Testnet" : "Mainnet"}
+                              </div>
+                            </div>
+                          </div>
+                        </Button>
+                      ))}
+                    </div>
+
+                    {/* Network Switch Button */}
+                    {isWalletConnected && (
+                      <div className="flex items-center gap-3 p-3 rounded-lg border border-dashed border-gray-300 dark:border-gray-600">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleSwitchToSelectedNetwork}
+                          disabled={isSwitchingNetwork}
+                          className={`px-4 py-2 ${isDark ? "border-gray-600 text-gray-400 hover:text-white hover:bg-gray-700" : "border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100"}`}
+                        >
+                          {isSwitchingNetwork ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                          )}
+                          Switch to {NETWORKS[selectedNetwork].name}
+                        </Button>
+                        <span className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                          Ensure your wallet is on the correct network
+                        </span>
+                      </div>
+                    )}
+
+                    <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                      Select the blockchain network where you want to receive payments
+                    </p>
                   </div>
                 )}
-
-                <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                  Select the blockchain network where you want to receive payments
-                </p>
               </div>
 
               {/* Server URL */}
