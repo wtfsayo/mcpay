@@ -63,18 +63,31 @@ export function ExplorerLink({
         </Badge>
       )}
       {showCopyButton && (
-        <Button
-          onClick={handleCopy}
-          size="sm"
-          variant="ghost"
-          className="h-5 w-5 p-0 ml-1"
-        >
-          {copied ? (
-            <Check className="h-3 w-3 text-green-600" />
-          ) : (
-            <Copy className="h-3 w-3" />
-          )}
-        </Button>
+        variant === 'button' ? (
+          <span
+            onClick={handleCopy}
+            className="inline-flex items-center justify-center h-5 w-5 p-0 ml-1 cursor-pointer rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          >
+            {copied ? (
+              <Check className="h-3 w-3 text-green-600" />
+            ) : (
+              <Copy className="h-3 w-3" />
+            )}
+          </span>
+        ) : (
+          <Button
+            onClick={handleCopy}
+            size="sm"
+            variant="ghost"
+            className="h-5 w-5 p-0 ml-1"
+          >
+            {copied ? (
+              <Check className="h-3 w-3 text-green-600" />
+            ) : (
+              <Copy className="h-3 w-3" />
+            )}
+          </Button>
+        )
       )}
     </div>
   )
