@@ -77,12 +77,7 @@ export const copyExplorerUrl = async (
  */
 export const getExplorerName = (network: Network): string => {
   const explorerNames: Record<Network, string> = {
-    'base': 'BaseScan',
     'base-sepolia': 'BaseScan Sepolia',
-    'ethereum': 'Etherscan',
-    'arbitrum': 'Arbiscan',
-    'optimism': 'Optimistic Etherscan',
-    'polygon': 'PolygonScan',
     'sei-testnet': 'SeiTrace',
   }
   
