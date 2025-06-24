@@ -532,30 +532,6 @@ export default function RegisterPage() {
                       ))}
                     </div>
 
-                    {/* Network Switch Button */}
-                    {isWalletConnected && (
-                      <div className="flex items-center gap-3 p-3 rounded-lg border border-dashed border-gray-300 dark:border-gray-600">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={handleSwitchToSelectedNetwork}
-                          disabled={isSwitchingNetwork}
-                          className={`px-4 py-2 ${isDark ? "border-gray-600 text-gray-400 hover:text-white hover:bg-gray-700" : "border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100"}`}
-                        >
-                          {isSwitchingNetwork ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          ) : (
-                            <RefreshCw className="h-4 w-4 mr-2" />
-                          )}
-                          Switch to {NETWORKS[selectedNetwork].name}
-                        </Button>
-                        <span className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                          Ensure your wallet is on the correct network
-                        </span>
-                      </div>
-                    )}
-
                     <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
                       Select the blockchain network where you want to receive payments
                     </p>
@@ -615,7 +591,8 @@ export default function RegisterPage() {
                     Authentication Headers
                   </label>
                   <Textarea
-                    placeholder="Authorization: Bearer your-token&#10;X-API-Key: your-api-key"
+                    placeholder={`Authorization: Bearer your-token
+X-API-Key: your-api-key`}
                     value={formData.headers}
                     onChange={(e) => handleInputChange("headers", e.target.value)}
                     rows={3}
