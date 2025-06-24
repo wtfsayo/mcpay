@@ -20,11 +20,10 @@
  */
 
 import { Address } from "viem";
-import { exact } from "x402/schemes";
-import type { ERC20TokenAmount, PaymentPayload, PaymentRequirements, Price, Resource } from "x402/types";
+import type { ERC20TokenAmount, Price, Resource } from "x402/types";
 import { moneySchema } from "x402/types";
-import { useFacilitator } from "x402/verify";
-import { SupportedNetwork, SupportedPaymentRequirements } from "./types.js";
+import { PaymentPayloadSchema, safeBase64Decode, SupportedNetwork, PaymentPayload, SupportedPaymentRequirements, ExtendedPaymentRequirements } from "./types.js";
+import { useFacilitator } from "./types.js";
 
 /**
  * Parses the amount from the given price
@@ -159,6 +158,27 @@ function getFacilitatorForNetwork(network: SupportedNetwork) {
 
 export const x402Version = 1;
 
+export function decodePayment(payment: string): PaymentPayload {
+    const decoded = safeBase64Decode(payment);
+    const parsed = JSON.parse(decoded);
+  
+    const obj = {
+      ...parsed,
+      payload: {
+        signature: parsed.payload.signature,
+        authorization: {
+          ...parsed.payload.authorization,
+          value: parsed.payload.authorization.value,
+          validAfter: parsed.payload.authorization.validAfter,
+          validBefore: parsed.payload.authorization.validBefore,
+        },
+      },
+    };
+  
+    const validated = PaymentPayloadSchema.parse(obj);
+    return validated;
+  }
+
 
 export function createExactPaymentRequirements(
     price: Price,
@@ -216,7 +236,7 @@ export async function verifyPayment(
 
     let decodedPayment: PaymentPayload;
     try {
-        decodedPayment = exact.evm.decodePayment(payment);
+        decodedPayment = decodePayment(payment);
         decodedPayment.x402Version = x402Version;
     } catch (error) {
         c.status(402);
@@ -236,7 +256,7 @@ export async function verifyPayment(
 
         // Get the appropriate facilitator for the network
         const facilitator = getFacilitatorForNetwork(paymentRequirement.network);
-        const response = await facilitator.verify(decodedPayment, paymentRequirement as PaymentRequirements);
+        const response = await facilitator.verify(decodedPayment, paymentRequirement as ExtendedPaymentRequirements);
         if (!response.isValid) {
             c.status(402);
             return c.json({
@@ -270,5 +290,5 @@ export async function settle(
     paymentRequirement: SupportedPaymentRequirements,
 ) {
     const facilitator = getFacilitatorForNetwork(paymentRequirement.network);
-    return facilitator.settle(decodedPayment, paymentRequirement as PaymentRequirements);
+    return facilitator.settle(decodedPayment, paymentRequirement as ExtendedPaymentRequirements);
 }

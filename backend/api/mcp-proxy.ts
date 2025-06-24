@@ -12,10 +12,10 @@
 import { type Context, Hono } from "hono";
 import { cors } from 'hono/cors';
 import { exact } from "x402/schemes";
-import { settleResponseHeader } from 'x402/types';
 import { createExactPaymentRequirements, settle, verifyPayment, x402Version } from "../lib/payments.js"
 import { txOperations } from "../db/actions.js";
 import { withTransaction } from "../db/actions.js";
+import { settleResponseHeader } from "../lib/types.js";
 
 export const runtime = 'nodejs'
 
