@@ -29,6 +29,9 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.79.0
         version: 5.79.0(react@19.1.0)
+      '@vercel/analytics':
+        specifier: ^1.5.0
+        version: 1.5.0(next@15.2.4(@opentelemetry/api@1.9.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react@19.1.0)
       ai:
         specifier: ^4.3.16
         version: 4.3.16(react@19.1.0)(zod@3.25.67)
@@ -1262,6 +1265,32 @@ packages:
     resolution: {integrity: sha512-hHKFx+opG5BA3/owMXon8ypwSotBGTdblG6oda/iOu9+OEYnk0cxD2uIcGyGT8jCK578kV+xMrNxqbn8Zjlpgw==}
     cpu: [x64]
     os: [win32]
+
+  '@vercel/analytics@1.5.0':
+    resolution: {integrity: sha512-MYsBzfPki4gthY5HnYN7jgInhAZ7Ac1cYDoRWFomwGHWEX7odTEzbtg9kf/QSo7XEsEAqlQugA6gJ2WS2DEa3g==}
+    peerDependencies:
+      '@remix-run/react': ^2
+      '@sveltejs/kit': ^1 || ^2
+      next: '>= 13'
+      react: ^18 || ^19 || ^19.0.0-rc
+      svelte: '>= 4'
+      vue: ^3
+      vue-router: ^4
+    peerDependenciesMeta:
+      '@remix-run/react':
+        optional: true
+      '@sveltejs/kit':
+        optional: true
+      next:
+        optional: true
+      react:
+        optional: true
+      svelte:
+        optional: true
+      vue:
+        optional: true
+      vue-router:
+        optional: true
 
   '@wagmi/connectors@5.8.3':
     resolution: {integrity: sha512-U4SJgi91+ny/XDGQWAMmawMafDx1BofcbYkPT/WSU6XrGL+apa7VltscqY7PVmwVGi/CYTqe8nlQiK/wmQ8D3A==}
@@ -5132,6 +5161,11 @@ snapshots:
 
   '@unrs/resolver-binding-win32-x64-msvc@1.7.8':
     optional: true
+
+  '@vercel/analytics@1.5.0(next@15.2.4(@opentelemetry/api@1.9.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react@19.1.0)':
+    optionalDependencies:
+      next: 15.2.4(@opentelemetry/api@1.9.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      react: 19.1.0
 
   '@wagmi/connectors@5.8.3(@types/react@19.1.6)(@wagmi/core@2.17.2(@tanstack/query-core@5.79.0)(@types/react@19.1.6)(react@19.1.0)(typescript@5.8.3)(use-sync-external-store@1.4.0(react@19.1.0))(viem@2.30.5(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.25.67)))(bufferutil@4.0.9)(react@19.1.0)(typescript@5.8.3)(utf-8-validate@5.0.10)(viem@2.30.5(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.25.67))(zod@3.25.67)':
     dependencies:
