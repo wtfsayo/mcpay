@@ -606,13 +606,13 @@ export default function MCPBrowser() {
         {/* Trust bar */}
         <div className="m-16 flex flex-wrap items-center justify-center gap-8 opacity-60 animate-fade-in-up animation-delay-700">
           <a href="https://ethglobal.com/showcase/mcpay-fun-y16d3" target="_blank" rel="noopener noreferrer">
-            <img src="/logos/ethglobal-logo.png" alt="ETHGlobal finalist" className="h-10 grayscale hover:grayscale-0 transition-all duration-300" />
+            <Image src="/logos/ethglobal-logo.png" alt="ETHGlobal finalist" width={120} height={40} className="h-10 grayscale hover:grayscale-0 transition-all duration-300" />
           </a>
           <a href="https://x402.org" target="_blank" rel="noopener noreferrer">
-            <img src="/logos/x402-icon-blue.png" alt="Runs on x402" className="h-10 grayscale hover:grayscale-0 transition-all duration-300" />
+            <Image src="/logos/x402-icon-blue.png" alt="Runs on x402" width={40} height={40} className="h-10 grayscale hover:grayscale-0 transition-all duration-300" />
           </a>
           <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener noreferrer">
-            <img src="/logos/mcp-logo.png" alt="Powered by MCP" className="h-8 grayscale hover:grayscale-0 transition-all duration-300" />
+            <Image src="/logos/mcp-logo.png" alt="Powered by MCP" width={96} height={32} className="h-8 grayscale hover:grayscale-0 transition-all duration-300" />
           </a>
         </div>
 

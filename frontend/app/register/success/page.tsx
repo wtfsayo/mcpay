@@ -555,7 +555,7 @@ function RegisterSuccessContent() {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
               <div>
                 <h3 className={`font-semibold text-lg ${isDark ? 'text-white' : 'text-gray-900'} mb-1`}>
-                  What's Next?
+                  What&apos;s Next?
                 </h3>
                 <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                   Your server is ready to use. View details, register more servers, or return home.
