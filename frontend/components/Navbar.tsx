@@ -14,6 +14,7 @@ import {
 import { useTheme } from "@/context/ThemeContext"
 import { useConnect, useConnectors } from 'wagmi'
 import { ConnectButton } from "./connect-button"
+import { Badge } from "./ui/badge"
 
 interface NavbarProps {
   activeTab?: string
@@ -46,6 +47,7 @@ export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
           <div className="flex items-center">
             <Link href="/" className="flex-shrink-0 flex items-center gap-2">
               <Image src="/mcpay-logo.svg" alt="MCPay Logo" width={72} height={72} />
+              <Badge variant="outline" className="text-xs">Alpha</Badge>
             </Link>
           </div>
 
@@ -71,7 +73,7 @@ export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
                     : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
               }`}
             >
-              <Link href="/register">Register</Link>
+              <Link href="/register">Register Server</Link>
             </Button>
             <ConnectButton />
           </div>
@@ -123,7 +125,7 @@ export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
                       : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                 }`}
               >
-                <Link href="/register">Register</Link>
+                <Link href="/register">Register Server</Link>
               </Button>
 
               {/* Mobile Connect Button */}

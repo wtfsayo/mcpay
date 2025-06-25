@@ -9,7 +9,9 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textArea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Server, Globe, CheckCircle, Loader2, Wallet, RefreshCw, AlertCircle, Lock, Info, ExternalLink, BookOpen } from "lucide-react"
+import { Separator } from "@/components/ui/separator"
+import { Badge } from "@/components/ui/badge"
+import { Server, Globe, CheckCircle, Loader2, Wallet, RefreshCw, AlertCircle, Lock, Info, ExternalLink, BookOpen, Zap, ArrowRight } from "lucide-react"
 import { useAccount, useConnect, useDisconnect } from "wagmi"
 import { api } from "@/lib/utils"
 import { useTheme } from "@/context/ThemeContext"
@@ -142,6 +144,24 @@ export default function RegisterPage() {
           }
         }))
 
+      // Prepare complete tools data for the response (includes both tool info and payment)
+      const completeToolsData = tools.map(tool => ({
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        price: tool.price,
+        ...(tool.price && parseFloat(tool.price) > 0 && {
+          payment: {
+            maxAmountRequired: parseFloat(tool.price || "0"),
+            asset: paymentTokenAddress,
+            network: selectedNetwork,
+            resource: `tool://${tool.name}`,
+            description: `Payment for ${tool.name} tool usage`,
+            payTo: walletAddress,
+          }
+        })
+      }))
+
       // Prepare API request payload
       const payload = {
         mcpOrigin: formData.url,
@@ -165,8 +185,14 @@ export default function RegisterPage() {
       const result = await api.registerServer(payload)
       console.log("Server registration successful:", result)
 
+      // Prepare enhanced result with complete tools data for the success page
+      const enhancedResult = {
+        ...result,
+        tools: completeToolsData
+      }
+
       // Encode the registration result and redirect to success page
-      const encodedData = encodeURIComponent(JSON.stringify(result))
+      const encodedData = encodeURIComponent(JSON.stringify(enhancedResult))
       router.push(`/register/success?data=${encodedData}`)
 
     } catch (error) {
@@ -281,147 +307,164 @@ export default function RegisterPage() {
   const isFormValid = formData.name && formData.description && formData.url && isWalletConnected && tools.length > 0
 
   return (
-    <div className="min-h-screen p-6 md:p-8 lg:p-12">
-      <div className="max-w-2xl mx-auto space-y-8">
-        {/* Registration Form */}
-        <Card className={`${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"} shadow-lg`}>
-          <CardHeader className="px-6 md:px-8 pt-8 pb-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className={`flex items-center gap-3 text-xl ${isDark ? "text-white" : "text-gray-900"}`}>
-                  <Server className="h-6 w-6" />
-                  Server Configuration
-                </CardTitle>
-                <CardDescription className={`text-base mt-2 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                  Connect your wallet and enter your MCP server URL to automatically detect tools.
-                </CardDescription>
+    <div className={`min-h-screen ${isDark ? 'bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950' : 'bg-gradient-to-br from-gray-50 via-white to-gray-50'}`}>
+      {/* Header Section */}
+      <div className={`border-b ${isDark ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white/50'} backdrop-blur-sm sticky top-0 z-10`}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className={`p-3 rounded-xl ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
+                <Server className={`h-8 w-8 ${isDark ? 'text-gray-300' : 'text-gray-700'}`} />
               </div>
-              
-              {/* Getting Started Guide Modal */}
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    className={`px-4 py-2 ${isDark ? "border-gray-600 text-gray-400 hover:text-white hover:bg-gray-700" : "border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-50"}`}
-                  >
-                    <BookOpen className="h-4 w-4 mr-2" />
-                    Getting Started
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className={`max-w-4xl max-h-[90vh] overflow-y-auto ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
-                  <DialogHeader>
-                    <DialogTitle className={`flex items-center gap-3 text-2xl ${isDark ? "text-white" : "text-gray-900"}`}>
-                      <Info className="h-6 w-6 text-blue-500" />
-                      Getting Started Guide
-                    </DialogTitle>
-                    <p className={`text-base mt-2 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                      Everything you need to know about MCP server registration
-                    </p>
-                  </DialogHeader>
-                  
-                  <div className="space-y-6 mt-6">
-                    {/* Quick Start Section */}
-                    <div className={`rounded-xl p-6 border-l-4 border-blue-500 ${isDark ? "bg-blue-500/5 bg-gradient-to-r from-blue-500/10 to-transparent" : "bg-gradient-to-r from-blue-50 to-blue-25"}`}>
-                      <div className="flex items-start gap-4">
-                        <div className={`p-3 rounded-lg ${isDark ? "bg-blue-500/20" : "bg-blue-100"} mt-0.5`}>
-                          <Server className="h-5 w-5 text-blue-600" />
-                        </div>
-                        <div className="flex-1">
-                          <h5 className={`font-semibold mb-3 text-lg ${isDark ? "text-blue-200" : "text-blue-900"}`}>Need to build an MCP server?</h5>
-                          <p className={`text-sm leading-relaxed ${isDark ? "text-blue-200" : "text-blue-800"}`}>
-                            Try{" "}
-                            <a 
-                              href="https://github.com/punkpeye/fastmcp" 
-                              className={`font-semibold underline decoration-2 underline-offset-2 transition-colors ${isDark ? "hover:text-blue-100" : "hover:text-blue-900"}`}
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                            >
-                              fastmcp
-                            </a>
-                            {" "}to create a compliant server quickly with minimal configuration.
-                          </p>
-                        </div>
+              <div>
+                <h1 className={`text-2xl sm:text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  Register MCP Server
+                </h1>
+                <p className={`text-base ${isDark ? 'text-gray-400' : 'text-gray-600'} mt-1`}>
+                  Connect your wallet and configure your MCP server for monetization
+                </p>
+              </div>
+            </div>
+            
+            {/* Getting Started Guide */}
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className={`shrink-0 ${isDark ? "border-gray-600 text-gray-400 hover:text-white hover:bg-gray-700" : "border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-50"}`}
+                >
+                  <BookOpen className="h-4 w-4 mr-2" />
+                  Getting Started
+                </Button>
+              </DialogTrigger>
+              <DialogContent className={`max-w-4xl max-h-[90vh] overflow-y-auto ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
+                <DialogHeader>
+                  <DialogTitle className={`flex items-center gap-3 text-2xl ${isDark ? "text-white" : "text-gray-900"}`}>
+                    <Info className="h-6 w-6 text-blue-500" />
+                    Getting Started Guide
+                  </DialogTitle>
+                  <p className={`text-base mt-2 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                    Everything you need to know about MCP server registration
+                  </p>
+                </DialogHeader>
+                
+                <div className="space-y-6 mt-6">
+                  {/* Quick Start Section */}
+                  <div className={`rounded-xl p-6 border-l-4 border-blue-500 ${isDark ? "bg-blue-500/5 bg-gradient-to-r from-blue-500/10 to-transparent" : "bg-gradient-to-r from-blue-50 to-blue-25"}`}>
+                    <div className="flex items-start gap-4">
+                      <div className={`p-3 rounded-lg ${isDark ? "bg-blue-500/20" : "bg-blue-100"} mt-0.5`}>
+                        <Server className="h-5 w-5 text-blue-600" />
                       </div>
-                    </div>
-
-                    {/* Requirements Section */}
-                    <div className={`rounded-xl p-6 border-l-4 border-amber-500 ${isDark ? "bg-amber-500/5 bg-gradient-to-r from-amber-500/10 to-transparent" : "bg-gradient-to-r from-amber-50 to-amber-25"}`}>
-                      <div className="flex items-start gap-4">
-                        <div className={`p-3 rounded-lg ${isDark ? "bg-amber-500/20" : "bg-amber-100"} mt-0.5`}>
-                          <AlertCircle className="h-5 w-5 text-amber-600" />
-                        </div>
-                        <div className="flex-1">
-                          <h5 className={`font-semibold mb-3 text-lg ${isDark ? "text-amber-200" : "text-amber-900"}`}>Technical Requirements</h5>
-                          <p className={`text-sm leading-relaxed ${isDark ? "text-amber-200" : "text-amber-800"}`}>
-                            MCP servers must implement the{" "}
-                            <a 
-                              href="https://modelcontextprotocol.io/specification/draft/basic/transports#streamable-http" 
-                              className={`font-semibold underline decoration-2 underline-offset-2 transition-colors ${isDark ? "hover:text-amber-100" : "hover:text-amber-900"}`}
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                            >
-                              Streamable HTTP transport
-                            </a>
-                            {" "}as defined in the MCP specification.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* How it Works Section */}
-                    <div className={`rounded-xl border p-6 ${isDark ? "border-gray-600 bg-gradient-to-br from-gray-800/50 to-gray-800/20" : "border-gray-200 bg-gradient-to-br from-gray-50 to-white"}`}>
-                      <div className="flex items-center gap-4 mb-6">
-                        <div className={`p-3 rounded-lg ${isDark ? "bg-gray-700" : "bg-gray-100"}`}>
-                          <CheckCircle className="h-6 w-6 text-green-600" />
-                        </div>
-                        <h4 className={`font-semibold text-xl ${isDark ? "text-white" : "text-gray-900"}`}>How it works</h4>
-                      </div>
-                      <div className="grid gap-4">
-                        {[
-                          "Connect your wallet for payment processing",
-                          "Enter your MCP server URL to auto-detect available tools", 
-                          "Enable authentication if your server requires it",
-                          "Set individual pricing for each tool",
-                          "Server details are auto-filled from tool inspection",
-                          "Your MCP server must use the Streamable HTTP transport"
-                        ].map((step, index) => (
-                          <div key={index} className="flex items-start gap-4 group p-3 rounded-lg transition-colors hover:bg-opacity-50">
-                            <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold mt-0.5 transition-colors ${isDark ? "bg-blue-500/20 text-blue-400 group-hover:bg-blue-500/30" : "bg-blue-100 text-blue-600 group-hover:bg-blue-200"}`}>
-                              {index + 1}
-                            </div>
-                            <p className={`text-sm leading-relaxed ${isDark ? "text-gray-300" : "text-gray-600"} group-hover:${isDark ? "text-gray-200" : "text-gray-700"} transition-colors`}>
-                              {step}
-                            </p>
-                          </div>
-                        ))}
+                      <div className="flex-1">
+                        <h5 className={`font-semibold mb-3 text-lg ${isDark ? "text-blue-200" : "text-blue-900"}`}>Need to build an MCP server?</h5>
+                        <p className={`text-sm leading-relaxed ${isDark ? "text-blue-200" : "text-blue-800"}`}>
+                          Try{" "}
+                          <a 
+                            href="https://github.com/punkpeye/fastmcp" 
+                            className={`font-semibold underline decoration-2 underline-offset-2 transition-colors ${isDark ? "hover:text-blue-100" : "hover:text-blue-900"}`}
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                          >
+                            fastmcp
+                          </a>
+                          {" "}to create a compliant server quickly with minimal configuration.
+                        </p>
                       </div>
                     </div>
                   </div>
-                </DialogContent>
-              </Dialog>
-            </div>
-          </CardHeader>
-          <CardContent className="px-6 md:px-8 pb-8">
-            <form onSubmit={handleSubmit} className="space-y-8">
-              {/* Wallet Connection - Moved to top */}
-              <div className="space-y-4">
-                <label className={`text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                  Payment Wallet *
-                </label>
 
-                {/* Connect Wallet Button */}
-                {!isWalletConnected && (
-                  <ConnectButton />
-                )}
+                  {/* Requirements Section */}
+                  <div className={`rounded-xl p-6 border-l-4 border-amber-500 ${isDark ? "bg-amber-500/5 bg-gradient-to-r from-amber-500/10 to-transparent" : "bg-gradient-to-r from-amber-50 to-amber-25"}`}>
+                    <div className="flex items-start gap-4">
+                      <div className={`p-3 rounded-lg ${isDark ? "bg-amber-500/20" : "bg-amber-100"} mt-0.5`}>
+                        <AlertCircle className="h-5 w-5 text-amber-600" />
+                      </div>
+                      <div className="flex-1">
+                        <h5 className={`font-semibold mb-3 text-lg ${isDark ? "text-amber-200" : "text-amber-900"}`}>Technical Requirements</h5>
+                        <p className={`text-sm leading-relaxed ${isDark ? "text-amber-200" : "text-amber-800"}`}>
+                          MCP servers must implement the{" "}
+                          <a 
+                            href="https://modelcontextprotocol.io/specification/draft/basic/transports#streamable-http" 
+                            className={`font-semibold underline decoration-2 underline-offset-2 transition-colors ${isDark ? "hover:text-amber-100" : "hover:text-amber-900"}`}
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                          >
+                            Streamable HTTP transport
+                          </a>
+                          {" "}as defined in the MCP specification.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
 
-                {/* Wallet Address Display */}
-                {isWalletConnected && walletAddress && (
-                  <div className="space-y-3">
+                  {/* How it Works Section */}
+                  <div className={`rounded-xl border p-6 ${isDark ? "border-gray-600 bg-gradient-to-br from-gray-800/50 to-gray-800/20" : "border-gray-200 bg-gradient-to-br from-gray-50 to-white"}`}>
+                    <div className="flex items-center gap-4 mb-6">
+                      <div className={`p-3 rounded-lg ${isDark ? "bg-gray-700" : "bg-gray-100"}`}>
+                        <CheckCircle className="h-6 w-6 text-green-600" />
+                      </div>
+                      <h4 className={`font-semibold text-xl ${isDark ? "text-white" : "text-gray-900"}`}>How it works</h4>
+                    </div>
+                    <div className="grid gap-4">
+                      {[
+                        "Connect your wallet for payment processing",
+                        "Enter your MCP server URL to auto-detect available tools", 
+                        "Enable authentication if your server requires it",
+                        "Set individual pricing for each tool",
+                        "Server details are auto-filled from tool inspection",
+                        "Your MCP server must use the Streamable HTTP transport"
+                      ].map((step, index) => (
+                        <div key={index} className="flex items-start gap-4 group p-3 rounded-lg transition-colors hover:bg-opacity-50">
+                          <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold mt-0.5 transition-colors ${isDark ? "bg-blue-500/20 text-blue-400 group-hover:bg-blue-500/30" : "bg-blue-100 text-blue-600 group-hover:bg-blue-200"}`}>
+                            {index + 1}
+                          </div>
+                          <p className={`text-sm leading-relaxed ${isDark ? "text-gray-300" : "text-gray-600"} group-hover:${isDark ? "text-gray-200" : "text-gray-700"} transition-colors`}>
+                            {step}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <form onSubmit={handleSubmit} className="space-y-8">
+          {/* Configuration Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Left Column - Wallet & Network */}
+            <div className="space-y-6">
+              {/* Wallet Connection */}
+              <div className={`p-6 rounded-xl border ${isDark ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
+                <div className="flex items-center gap-3 mb-4">
+                  <Wallet className={`h-5 w-5 ${isDark ? 'text-gray-300' : 'text-gray-700'}`} />
+                  <h3 className={`font-semibold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    Payment Wallet
+                  </h3>
+                  <Badge variant="secondary" className="ml-auto">Required</Badge>
+                </div>
+
+                {!isWalletConnected ? (
+                  <div className="space-y-4">
+                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                      Connect your wallet to receive payments from tool usage
+                    </p>
+                    <ConnectButton />
+                  </div>
+                ) : (
+                  <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <Wallet className={`h-5 w-5 ${isDark ? "text-green-400" : "text-green-600"}`} />
-                        <span className={`text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>Connected Wallet</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-green-500" />
+                        <span className={`text-sm font-medium ${isDark ? 'text-green-400' : 'text-green-600'}`}>
+                          Connected
+                        </span>
                       </div>
                       <Button
                         type="button"
@@ -429,59 +472,58 @@ export default function RegisterPage() {
                         size="sm"
                         onClick={handleDisconnectWallet}
                         disabled={isDisconnectingWallet}
-                        className={`px-4 py-2 ${isDark ? "text-gray-400 hover:text-white hover:bg-gray-700" : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"}`}
+                        className={`text-xs ${isDark ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-gray-900"}`}
                       >
                         {isDisconnectingWallet ? (
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                         ) : null}
                         Disconnect
                       </Button>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex gap-2">
                       <Input
-                        value={walletAddress}
+                        value={walletAddress || ''}
                         readOnly
-                        className={`flex-1 font-mono text-sm h-12 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-gray-50 border-gray-300 text-gray-900"}`}
+                        className={`flex-1 font-mono text-xs ${isDark ? "bg-gray-800 border-gray-700 text-gray-300" : "bg-gray-50 border-gray-300 text-gray-700"}`}
                       />
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => openBlockscout(walletAddress)}
-                        className={`px-3 h-12 ${isDark ? "border-gray-600 text-gray-400 hover:text-white hover:bg-gray-700" : "border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-100"}`}
+                        onClick={() => openBlockscout(walletAddress || '')}
+                        className={`px-2 ${isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-300 hover:bg-gray-50"}`}
                         title="View on Blockscout"
                       >
-                        <ExternalLink className="h-4 w-4" />
+                        <ExternalLink className="h-3 w-3" />
                       </Button>
                     </div>
                   </div>
                 )}
-
-                <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                  Connect your wallet to receive payments from tool usage
-                </p>
               </div>
 
-              {/* Payment Network Selection - Compact Version */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <label className={`text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                    Payment Network
-                  </label>
+              {/* Network Selection */}
+              <div className={`p-6 rounded-xl border ${isDark ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <Globe className={`h-5 w-5 ${isDark ? 'text-gray-300' : 'text-gray-700'}`} />
+                    <h3 className={`font-semibold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      Payment Network
+                    </h3>
+                  </div>
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     onClick={() => setShowNetworkSelection(!showNetworkSelection)}
-                    className={`px-3 py-1 ${isDark ? "text-gray-400 hover:text-white hover:bg-gray-700" : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"}`}
+                    className={`text-xs ${isDark ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-gray-900"}`}
                   >
                     {showNetworkSelection ? "Hide" : "Change"}
                   </Button>
                 </div>
 
-                {/* Current Network Display */}
-                <div className={`flex items-center gap-3 p-4 rounded-lg border ${isDark ? "border-gray-600 bg-gray-700/50" : "border-gray-200 bg-gray-50"}`}>
+                {/* Current Network */}
+                <div className={`flex items-center gap-3 p-3 rounded-lg border ${isDark ? "border-gray-700 bg-gray-800/50" : "border-gray-200 bg-gray-50"}`}>
                   <div className={`w-3 h-3 rounded-full ${
                     NETWORKS[selectedNetwork].isTestnet 
                       ? "bg-orange-500" 
@@ -497,53 +539,55 @@ export default function RegisterPage() {
                   </div>
                 </div>
 
-                {/* Expanded Network Selection */}
+                {/* Network Options */}
                 {showNetworkSelection && (
-                  <div className="space-y-4 pt-2">
-                    <div className="grid grid-cols-2 gap-3">
-                      {Object.entries(NETWORKS).map(([networkKey, networkInfo]) => (
-                        <Button
-                          key={networkKey}
-                          type="button"
-                          variant={selectedNetwork === networkKey ? "default" : "outline"}
-                          onClick={() => {
-                            handleNetworkChange(networkKey as Network)
-                            setShowNetworkSelection(false)
-                          }}
-                          className={`h-auto p-4 justify-start ${selectedNetwork === networkKey 
-                            ? isDark ? "bg-gray-700 text-white border-gray-500" : "bg-gray-900 text-white border-gray-900"
-                            : isDark ? "border-gray-600 text-gray-300 hover:bg-gray-700" : "border-gray-300 text-gray-700 hover:bg-gray-50"
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 w-full">
-                            <div className={`w-2 h-2 rounded-full ${
-                              networkInfo.isTestnet 
-                                ? "bg-orange-500" 
-                                : "bg-green-500"
-                            }`} />
-                            <div className="text-left">
-                              <div className="font-medium text-sm">{networkInfo.name}</div>
-                              <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                                {networkInfo.isTestnet ? "Testnet" : "Mainnet"}
-                              </div>
+                  <div className="mt-4 space-y-2">
+                    {Object.entries(NETWORKS).map(([networkKey, networkInfo]) => (
+                      <Button
+                        key={networkKey}
+                        type="button"
+                        variant={selectedNetwork === networkKey ? "default" : "ghost"}
+                        onClick={() => {
+                          handleNetworkChange(networkKey as Network)
+                          setShowNetworkSelection(false)
+                        }}
+                        className={`w-full h-auto p-3 justify-start ${selectedNetwork === networkKey 
+                          ? isDark ? "bg-gray-700 text-white" : "bg-gray-900 text-white"
+                          : isDark ? "text-gray-300 hover:bg-gray-800" : "text-gray-700 hover:bg-gray-50"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 w-full">
+                          <div className={`w-2 h-2 rounded-full ${
+                            networkInfo.isTestnet 
+                              ? "bg-orange-500" 
+                              : "bg-green-500"
+                          }`} />
+                          <div className="text-left">
+                            <div className="font-medium text-sm">{networkInfo.name}</div>
+                            <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                              {networkInfo.isTestnet ? "Testnet" : "Mainnet"}
                             </div>
                           </div>
-                        </Button>
-                      ))}
-                    </div>
-
-                    <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                      Select the blockchain network where you want to receive payments
-                    </p>
+                        </div>
+                      </Button>
+                    ))}
                   </div>
                 )}
               </div>
+            </div>
 
+            {/* Middle Column - Server Configuration */}
+            <div className="lg:col-span-2 space-y-6">
               {/* Server URL */}
-              <div className="space-y-3">
-                <label className={`text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                  MCP Server URL *
-                </label>
+              <div className={`p-6 rounded-xl border ${isDark ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
+                <div className="flex items-center gap-3 mb-4">
+                  <Server className={`h-5 w-5 ${isDark ? 'text-gray-300' : 'text-gray-700'}`} />
+                  <h3 className={`font-semibold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    MCP Server URL
+                  </h3>
+                  <Badge variant="secondary" className="ml-auto">Required</Badge>
+                </div>
+
                 <div className="relative">
                   <Input
                     placeholder="https://your-server.com/mcp/•••••••/sse"
@@ -551,7 +595,7 @@ export default function RegisterPage() {
                     onChange={(e) => handleInputChange("url", e.target.value)}
                     required
                     type="url"
-                    className={`h-12 text-base ${isDark ? "bg-gray-700 border-gray-600 text-white placeholder:text-gray-400" : "bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"}`}
+                    className={`h-12 text-base pr-12 ${isDark ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500" : "bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"}`}
                   />
                   {isLoadingTools && (
                     <Loader2
@@ -559,168 +603,203 @@ export default function RegisterPage() {
                     />
                   )}
                 </div>
+
                 {toolsError && (
-                  <div className={`flex items-center gap-3 text-red-500 text-sm p-3 rounded-lg ${isDark ? "bg-red-900/20" : "bg-red-50"}`}>
-                    <AlertCircle className="h-4 w-4 shrink-0" />
+                  <div className={`flex items-start gap-3 text-red-500 text-sm p-4 mt-4 rounded-lg ${isDark ? "bg-red-900/20 border border-red-800" : "bg-red-50 border border-red-200"}`}>
+                    <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                     <span>{toolsError}</span>
                   </div>
                 )}
-              </div>
 
-              {/* Authentication Headers Toggle */}
-              <div className="flex items-center space-x-3 p-4 rounded-lg border border-dashed border-gray-300 dark:border-gray-600">
-                <Checkbox
-                  id="auth-headers"
-                  checked={showAuthHeaders}
-                  onCheckedChange={(checked) => setShowAuthHeaders(checked === true)}
-                  className={`w-5 h-5 ${isDark ? "border-gray-500 data-[state=checked]:bg-gray-600" : "border-gray-300 data-[state=checked]:bg-gray-900"}`}
-                />
-                <label
-                  htmlFor="auth-headers"
-                  className={`text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center gap-2 ${isDark ? "text-gray-300" : "text-gray-700"}`}
-                >
-                  <Lock className="h-4 w-4" />
-                  Enable Authentication Headers
-                </label>
-              </div>
-
-              {/* Headers - Only shown when toggle is enabled */}
-              {showAuthHeaders && (
-                <div className="space-y-3">
-                  <label className={`text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                    Authentication Headers
-                  </label>
-                  <Textarea
-                    placeholder={`Authorization: Bearer your-token
-X-API-Key: your-api-key`}
-                    value={formData.headers}
-                    onChange={(e) => handleInputChange("headers", e.target.value)}
-                    rows={3}
-                    className={`text-base ${isDark ? "bg-gray-700 border-gray-600 text-white placeholder:text-gray-400" : "bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"}`}
-                  />
-                  <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                    Add required headers for server authentication (one per line)
-                  </p>
-                </div>
-              )}
-
-              {/* Auto-filled Server Details */}
-              <div className="space-y-6">
-                <div className="space-y-3">
-                  <label className={`text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                    Server Name *
-                  </label>
-                  <Input
-                    placeholder="Auto-detected from server"
-                    value={formData.name}
-                    onChange={(e) => handleInputChange("name", e.target.value)}
-                    required
-                    className={`h-12 text-base ${isDark ? "bg-gray-700 border-gray-600 text-white placeholder:text-gray-400" : "bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"} ${!tools.length ? "opacity-50" : ""}`}
-                    disabled={!tools.length}
-                  />
-                </div>
-
-                <div className="space-y-3">
-                  <label className={`text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                    Description *
-                  </label>
-                  <Textarea
-                    placeholder="Auto-generated from detected tools"
-                    value={formData.description}
-                    onChange={(e) => handleInputChange("description", e.target.value)}
-                    required
-                    rows={3}
-                    className={`text-base ${isDark ? "bg-gray-700 border-gray-600 text-white placeholder:text-gray-400" : "bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"} ${!tools.length ? "opacity-50" : ""}`}
-                    disabled={!tools.length}
-                  />
-                </div>
-              </div>
-
-              {/* Auto-detected Tools */}
-              {tools.length > 0 && (
-                <div className="space-y-5">
-                  <div className="flex items-center justify-between">
-                    <label className={`text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                      Detected Tools ({tools.length})
-                    </label>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => fetchMCPTools(formData.url)}
-                      className={`px-4 py-2 ${isDark ? "text-gray-400 hover:text-white hover:bg-gray-700" : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"}`}
+                {/* Authentication Toggle */}
+                <div className="mt-6">
+                  <div className="flex items-center space-x-3 p-4 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600">
+                    <Checkbox
+                      id="auth-headers"
+                      checked={showAuthHeaders}
+                      onCheckedChange={(checked) => setShowAuthHeaders(checked === true)}
+                    />
+                    <label
+                      htmlFor="auth-headers"
+                      className={`text-sm font-medium flex items-center gap-2 ${isDark ? "text-gray-300" : "text-gray-700"}`}
                     >
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Refresh
-                    </Button>
+                      <Lock className="h-4 w-4" />
+                      Enable Authentication Headers
+                    </label>
                   </div>
 
-                  <div className="space-y-4 max-h-80 overflow-y-auto pr-2">
-                    {tools.map((tool) => (
-                      <Card
-                        key={tool.name}
-                        className={`${isDark ? "bg-gray-700 border-gray-600" : "bg-gray-50 border-gray-200"} transition-all hover:shadow-md`}
-                      >
-                        <CardContent className="p-5">
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex-1 min-w-0">
-                              <h4 className={`font-medium text-base ${isDark ? "text-gray-200" : "text-gray-800"} mb-2`}>
-                                {tool.name}
-                              </h4>
-                              <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"} leading-relaxed`}>
-                                {tool.description}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <span className={`text-sm font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>$</span>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value={tool.price || "0.10"}
-                                onChange={(e) => updateToolPrice(tool.name, e.target.value)}
-                                className={`w-24 text-sm h-10 ${isDark ? "bg-gray-600 border-gray-500 text-white" : "bg-white border-gray-300 text-gray-900"}`}
-                              />
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
+                  {showAuthHeaders && (
+                    <div className="mt-4">
+                      <Textarea
+                        placeholder={`Authorization: Bearer your-token
+X-API-Key: your-api-key`}
+                        value={formData.headers}
+                        onChange={(e) => handleInputChange("headers", e.target.value)}
+                        rows={3}
+                        className={`text-sm ${isDark ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500" : "bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"}`}
+                      />
+                      <p className={`text-xs mt-2 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                        Add required headers for server authentication (one per line)
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Server Details */}
+              <div className={`p-6 rounded-xl border ${isDark ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
+                <div className="flex items-center gap-3 mb-6">
+                  <Info className={`h-5 w-5 ${isDark ? 'text-gray-300' : 'text-gray-700'}`} />
+                  <h3 className={`font-semibold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    Server Details
+                  </h3>
+                  <Badge variant="secondary" className="ml-auto">Auto-filled</Badge>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <div className="space-y-3">
+                    <label className={`text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                      Server Name *
+                    </label>
+                    <Input
+                      placeholder="Auto-detected from server"
+                      value={formData.name}
+                      onChange={(e) => handleInputChange("name", e.target.value)}
+                      required
+                      className={`h-11 ${isDark ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500" : "bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"} ${!tools.length ? "opacity-50" : ""}`}
+                      disabled={!tools.length}
+                    />
+                  </div>
+
+                  <div className="space-y-3 sm:col-span-2">
+                    <label className={`text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                      Description *
+                    </label>
+                    <Textarea
+                      placeholder="Auto-generated from detected tools"
+                      value={formData.description}
+                      onChange={(e) => handleInputChange("description", e.target.value)}
+                      required
+                      rows={3}
+                      className={`${isDark ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500" : "bg-white border-gray-300 text-gray-900 placeholder:text-gray-500"} ${!tools.length ? "opacity-50" : ""}`}
+                      disabled={!tools.length}
+                    />
                   </div>
                 </div>
-              )}
+              </div>
+            </div>
+          </div>
 
-              {/* Submit Button */}
+          {/* Tools Section */}
+          {tools.length > 0 && (
+            <div className={`p-6 rounded-xl border ${isDark ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                <div className="flex items-center gap-3">
+                  <Zap className={`h-5 w-5 ${isDark ? 'text-gray-300' : 'text-gray-700'}`} />
+                  <h3 className={`font-semibold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    Detected Tools
+                  </h3>
+                  <Badge variant="outline" className="ml-2">
+                    {tools.length} tool{tools.length !== 1 ? 's' : ''}
+                  </Badge>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fetchMCPTools(formData.url)}
+                  className={`${isDark ? "border-gray-600 text-gray-400 hover:text-white hover:bg-gray-700" : "border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-50"}`}
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh Tools
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {tools.map((tool) => (
+                  <Card
+                    key={tool.name}
+                    className={`${isDark ? "bg-gray-800 border-gray-700" : "bg-gray-50 border-gray-200"} transition-all hover:shadow-lg`}
+                  >
+                    <CardContent className="p-5">
+                      <div className="space-y-4">
+                        <div>
+                          <h4 className={`font-medium text-base ${isDark ? "text-gray-200" : "text-gray-800"} mb-2`}>
+                            {tool.name}
+                          </h4>
+                          <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"} leading-relaxed line-clamp-3`}>
+                            {tool.description}
+                          </p>
+                        </div>
+                        
+                        <Separator className={isDark ? "bg-gray-700" : "bg-gray-200"} />
+                        
+                        <div className="flex items-center justify-between">
+                          <span className={`text-sm font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                            Price per use
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>$</span>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={tool.price || "0.10"}
+                              onChange={(e) => updateToolPrice(tool.name, e.target.value)}
+                              className={`w-20 text-sm h-8 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Submit Section */}
+          <div className={`p-6 rounded-xl border ${isDark ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h3 className={`font-semibold text-lg ${isDark ? 'text-white' : 'text-gray-900'} mb-1`}>
+                  Ready to Register?
+                </h3>
+                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Your MCP server will be registered and available for monetized usage
+                </p>
+              </div>
+              
               <Button
                 type="submit"
-                className={`w-full h-14 text-base font-medium ${
+                size="lg"
+                className={`w-full sm:w-auto min-w-[200px] h-12 text-base font-medium ${
                   isDark ? "bg-gray-700 text-white hover:bg-gray-600" : "bg-gray-900 text-white hover:bg-gray-800"
-                } transition-colors duration-200`}
+                } transition-all duration-200`}
                 disabled={!isFormValid || isSubmitting}
               >
                 {isSubmitting ? (
                   <>
                     <Loader2 className="h-5 w-5 mr-3 animate-spin" />
-                    Registering Server...
+                    Registering...
                   </>
                 ) : (
                   <>
-                    <Globe className="h-5 w-5 mr-3" />
-                    Register MCP Server
+                    Register Server
+                    <ArrowRight className="h-5 w-5 ml-3" />
                   </>
                 )}
               </Button>
+            </div>
 
-              {/* Submit Error Display */}
-              {submitError && (
-                <div className={`flex items-start gap-3 text-red-500 text-sm p-4 rounded-lg ${isDark ? "bg-red-900/20" : "bg-red-50"}`}>
-                  <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
-                  <span className="leading-relaxed">{submitError}</span>
-                </div>
-              )}
-            </form>
-          </CardContent>
-        </Card>
+            {submitError && (
+              <div className={`flex items-start gap-3 text-red-500 text-sm p-4 mt-4 rounded-lg ${isDark ? "bg-red-900/20 border border-red-800" : "bg-red-50 border border-red-200"}`}>
+                <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+                <span className="leading-relaxed">{submitError}</span>
+              </div>
+            )}
+          </div>
+        </form>
       </div>
     </div>
   )

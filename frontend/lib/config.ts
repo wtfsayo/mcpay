@@ -8,7 +8,9 @@ import { baseSepolia, seiTestnet } from 'wagmi/chains'
 export const wagmiConfig = createConfig({
   chains: [baseSepolia, seiTestnet],
   connectors: [
-    porto(),
+    porto({
+      chains: [baseSepolia],
+    }),
     metaMask({
       dappMetadata: {
         name: "MCPay.fun",
