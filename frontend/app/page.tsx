@@ -342,7 +342,7 @@ export default function MCPBrowser() {
         <div className="text-center mb-16 relative">
           <div className="mb-[100px]"></div>
           <h1 className={`text-5xl font-extrabold tracking-tight mb-6 animate-fade-in-up ${isDark ? "text-white" : "text-gray-900"}`}>
-            Monetise your MCP server in <span className="text-[#0052FF]">one&nbsp;click.</span>
+            Monetize your MCP server in <span className="text-[#0052FF]">one&nbsp;click.</span>
           </h1>
 
           <p className={`text-lg max-w-3xl mx-auto leading-relaxed animate-fade-in-up animation-delay-300 ${isDark ? "text-gray-300" : "text-gray-600"}`}>
@@ -356,7 +356,7 @@ export default function MCPBrowser() {
                 className="bg-[#0052FF] hover:bg-[#0052FF]/90 text-white shadow-lg hover:shadow-xl transition-all duration-300"
               >
                 <Rocket className="h-5 w-5 mr-2" />
-                Monetise your server
+                Monetize your server
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
             </Link>
