@@ -191,6 +191,7 @@ export default function ServerDashboard() {
   const [selectedTool, setSelectedTool] = useState<any>(null)
   const [showToolModal, setShowToolModal] = useState(false)
   const [activeTab, setActiveTab] = useState("overview")
+  const [markdownCopied, setMarkdownCopied] = useState(false)
   const { isDark } = useTheme()
 
   // Initialize tab from URL hash
@@ -211,6 +212,125 @@ export default function ServerDashboard() {
     } else {
       window.history.replaceState(null, '', `#${value}`)
     }
+  }
+
+  const copyIntegrationAsMarkdown = () => {
+    const markdown = `# ${serverData?.name} - Integration Guide
+
+${serverData?.description}
+
+## MCP Client Integration
+
+### Claude/Cursor/Windsurf Configuration
+
+Add this to your MCP client config file (e.g., \`claude_desktop_config.json\`). Replace the private key with your actual wallet private key.
+
+\`\`\`json
+${JSON.stringify({
+  "mcpServers": {
+    [serverData?.name || 'server-name']: {
+      "command": "npx",
+      "args": [
+        "mcpay",
+        "proxy",
+        "--urls",
+        urlUtils.getMcpUrl(serverData?.serverId || ''),
+        "--private-key",
+        "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+      ]
+    }
+  }
+}, null, 2)}
+\`\`\`
+
+### MCPay CLI (Direct Connection)
+
+Replace \`YOUR_PRIVATE_KEY\` with your actual wallet private key:
+
+\`\`\`bash
+npx mcpay proxy --urls ${urlUtils.getMcpUrl(serverData?.serverId || '')} --private-key YOUR_PRIVATE_KEY
+\`\`\`
+
+## Direct API Integration
+
+### List Available Tools (cURL)
+
+\`\`\`bash
+curl -X POST "${urlUtils.getMcpUrl(serverData?.serverId || '')}" \\
+  -H "Content-Type: application/json" \\
+  -H "Accept: application/json, text/event-stream" \\
+  -d '{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/list",
+  "params": {}
+}'
+\`\`\`
+
+### JavaScript/TypeScript Integration
+
+Replace \`0x1234567890abcdef...\` with your actual wallet private key. Adjust the \`maxPaymentValue\` as needed.
+
+\`\`\`typescript
+import { Client } from '@modelcontextprotocol/sdk/client'
+import { createPaymentTransport } from 'mcpay'
+import { privateKeyToAccount } from 'viem/accounts'
+
+// Get Account
+const account = privateKeyToAccount('0x1234567890abcdef...')
+const url = new URL('${urlUtils.getMcpUrl(serverData?.serverId || '')}')
+
+// Create payment transport
+// This creates a PaymentStreamableHTTPTransport (extension of StreamableHTTPTransport)
+const transport = createPaymentTransport(url, account, {
+  maxPaymentValue: BigInt(0.1 * 10 ** 6), // 0.1 USDC max payment
+})
+
+// Create MCP Client
+const client = new Client(
+  { name: 'my-mcp-client', version: '1.0.0' },
+  { capabilities: {} }
+)
+
+await client.connect(transport)
+\`\`\`
+
+## MCP Protocol Details
+
+### Integration Methods
+- MCP Client config (Claude/Cursor/Windsurf)
+- Direct HTTP API with event streams
+- TypeScript SDK with payment transport
+- MCPay CLI proxy command
+
+### MCPay Features
+- Automatic payment processing via proxy
+- Multiple token support
+- Cross-chain compatibility
+- Proof verification via vLayer
+- Event stream support for real-time updates
+
+## Security Note
+
+⚠️ **Important**: Never share your private key publicly. The MCPay proxy handles payments securely using your private key locally.
+
+## Quick Links
+
+- [MCPay.fun GitHub](https://github.com/microchipgnu/mcpay.fun)
+- [MCP Documentation](https://modelcontextprotocol.io)
+- [MCP GitHub](https://github.com/modelcontextprotocol)
+- [MCPay Package](https://www.npmjs.com/package/mcpay)
+
+---
+
+*Server ID: \`${serverData?.serverId}\`*  
+*Connection URL: \`${urlUtils.getMcpUrl(serverData?.serverId || '')}\`*
+`;
+
+    navigator.clipboard.writeText(markdown).then(() => {
+      setMarkdownCopied(true);
+      setTimeout(() => setMarkdownCopied(false), 2000);
+    });
   }
 
   useEffect(() => {
@@ -621,11 +741,33 @@ export default function ServerDashboard() {
           <TabsContent value="integration" className="space-y-6">
             <Card className={`${isDark ? "bg-gray-800 border-gray-700" : ""}`}>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Plug className="h-5 w-5" />
-              Integration Guide
-            </CardTitle>
-            <CardDescription>Learn how to integrate this MCP server into your applications</CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Plug className="h-5 w-5" />
+                  Integration Guide
+                </CardTitle>
+                <CardDescription>Learn how to integrate this MCP server into your applications</CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={copyIntegrationAsMarkdown}
+                className={`${isDark ? "border-gray-600 text-gray-300 hover:bg-gray-700" : ""} ${markdownCopied ? "border-green-500 text-green-600" : ""}`}
+              >
+                {markdownCopied ? (
+                  <>
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4 mr-2" />
+                    Copy as Markdown
+                  </>
+                )}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-6 max-w-none overflow-x-auto">
             {/* MCP Client Integration */}
