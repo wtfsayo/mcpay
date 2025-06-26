@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useTheme } from "@/context/ThemeContext"
 import { openExplorer, getExplorerName } from "@/lib/blockscout"
 import { AddressLink, TransactionLink } from "@/components/ExplorerLink"
@@ -34,9 +35,11 @@ import {
   XCircle
 } from "lucide-react"
 import Image from "next/image"
-import { useParams } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { ToolExecutionModal } from "@/components/ToolExecutionModal"
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
 // Types based on the API response structure
 interface ServerData {
@@ -180,13 +183,35 @@ interface ServerData {
 
 export default function ServerDashboard() {
   const params = useParams()
+  const router = useRouter()
   const serverId = params.id as string
   const [serverData, setServerData] = useState<ServerData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedTool, setSelectedTool] = useState<any>(null)
   const [showToolModal, setShowToolModal] = useState(false)
+  const [activeTab, setActiveTab] = useState("overview")
   const { isDark } = useTheme()
+
+  // Initialize tab from URL hash
+  useEffect(() => {
+    const hash = window.location.hash.slice(1) // Remove the #
+    const validTabs = ['overview', 'integration', 'tools', 'analytics']
+    if (hash && validTabs.includes(hash)) {
+      setActiveTab(hash)
+    }
+  }, [])
+
+  // Update URL when tab changes
+  const handleTabChange = (value: string) => {
+    setActiveTab(value)
+    // Don't add hash for default tab to keep URLs clean
+    if (value === 'overview') {
+      window.history.replaceState(null, '', window.location.pathname)
+    } else {
+      window.history.replaceState(null, '', `#${value}`)
+    }
+  }
 
   useEffect(() => {
     const fetchServerData = async () => {
@@ -394,83 +419,98 @@ export default function ServerDashboard() {
           </div>
         </div>
 
-        {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-          <Card className={`${isDark ? "bg-gray-800 border-gray-700" : ""} hover:shadow-md transition-shadow`}>
-            <CardContent className="p-3">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <p className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                    Total Revenue
-                  </p>
-                  <div className="text-base font-bold mt-0.5">${serverData.stats.totalRevenue.toFixed(2)}</div>
-                  <p className={`text-xs mt-0.5 ${isDark ? "text-gray-500" : "text-gray-500"}`}>
-                    {serverData.stats.totalPayments} payments
-                  </p>
-                </div>
-                <div className={`p-1.5 rounded-full ${isDark ? "bg-gray-700" : "bg-gray-100"}`}>
-                  <DollarSign className="h-3.5 w-3.5 text-green-500" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+          <TabsList className={`grid w-full grid-cols-4 mb-6 ${isDark ? "bg-gray-800 border-gray-700" : ""}`}>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="integration">Integration</TabsTrigger>
+            <TabsTrigger value="tools">Tools</TabsTrigger>
+            <TabsTrigger value="analytics">Analytics & Payments</TabsTrigger>
+          </TabsList>
 
-          <Card className={`${isDark ? "bg-gray-800 border-gray-700" : ""} hover:shadow-md transition-shadow`}>
-            <CardContent className="p-3">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <p className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                    Total Usage
-                  </p>
-                  <div className="text-base font-bold mt-0.5">{serverData.stats.totalUsage.toLocaleString()}</div>
-                  <p className={`text-xs mt-0.5 ${isDark ? "text-gray-500" : "text-gray-500"}`}>
-                    {serverData.stats.avgResponseTime.toFixed(0)}ms avg
-                  </p>
-                </div>
-                <div className={`p-1.5 rounded-full ${isDark ? "bg-gray-700" : "bg-gray-100"}`}>
-                  <Activity className="h-3.5 w-3.5 text-blue-500" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Overview Tab */}
+          <TabsContent value="overview" className="space-y-6">
+            {/* Stats Overview */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+              <Card className={`${isDark ? "bg-gray-800 border-gray-700" : ""} hover:shadow-md transition-shadow`}>
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                        Total Revenue
+                      </p>
+                      <div className="text-base font-bold mt-0.5">${serverData.stats.totalRevenue.toFixed(2)}</div>
+                      <p className={`text-xs mt-0.5 ${isDark ? "text-gray-500" : "text-gray-500"}`}>
+                        {serverData.stats.totalPayments} payments
+                      </p>
+                    </div>
+                    <div className={`p-1.5 rounded-full ${isDark ? "bg-gray-700" : "bg-gray-100"}`}>
+                      <DollarSign className="h-3.5 w-3.5 text-green-500" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-          <Card className={`${isDark ? "bg-gray-800 border-gray-700" : ""} hover:shadow-md transition-shadow`}>
-            <CardContent className="p-3">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <p className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                    Unique Users
-                  </p>
-                  <div className="text-base font-bold mt-0.5">{serverData.stats.uniqueUsers}</div>
-                  <p className={`text-xs mt-0.5 ${isDark ? "text-gray-500" : "text-gray-500"}`}>
-                    Active users
-                  </p>
-                </div>
-                <div className={`p-1.5 rounded-full ${isDark ? "bg-gray-700" : "bg-gray-100"}`}>
-                  <Users className="h-3.5 w-3.5 text-purple-500" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              <Card className={`${isDark ? "bg-gray-800 border-gray-700" : ""} hover:shadow-md transition-shadow`}>
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                        Total Usage
+                      </p>
+                      <div className="text-base font-bold mt-0.5">{serverData.stats.totalUsage.toLocaleString()}</div>
+                      <p className={`text-xs mt-0.5 ${isDark ? "text-gray-500" : "text-gray-500"}`}>
+                        {serverData.stats.avgResponseTime.toFixed(0)}ms avg
+                      </p>
+                    </div>
+                    <div className={`p-1.5 rounded-full ${isDark ? "bg-gray-700" : "bg-gray-100"}`}>
+                      <Activity className="h-3.5 w-3.5 text-blue-500" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-          {/* <Card className={isDark ? "bg-gray-800 border-gray-700" : ""}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
-              <CardTitle className="text-sm font-medium">Verification Score</CardTitle>
-              <Shield className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className={`text-xl font-bold ${getReputationColor(serverData.stats.reputationScore)}`}>
-                {(serverData.stats.reputationScore * 100).toFixed(1)}%
-              </div>
-              <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                {serverData.stats.consistentProofs}/{serverData.stats.totalProofs} consistent
-              </p>
-            </CardContent>
-          </Card> */}
-        </div>
+              <Card className={`${isDark ? "bg-gray-800 border-gray-700" : ""} hover:shadow-md transition-shadow`}>
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                        Unique Users
+                      </p>
+                      <div className="text-base font-bold mt-0.5">{serverData.stats.uniqueUsers}</div>
+                      <p className={`text-xs mt-0.5 ${isDark ? "text-gray-500" : "text-gray-500"}`}>
+                        Active users
+                      </p>
+                    </div>
+                    <div className={`p-1.5 rounded-full ${isDark ? "bg-gray-700" : "bg-gray-100"}`}>
+                      <Users className="h-3.5 w-3.5 text-purple-500" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-        {/* Server Connection */}
-        <Card className={`mb-8 ${isDark ? "bg-gray-800 border-gray-700" : ""}`}>
+              <Card className={`${isDark ? "bg-gray-800 border-gray-700" : ""} hover:shadow-md transition-shadow`}>
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                        Tools
+                      </p>
+                      <div className="text-base font-bold mt-0.5">{serverData.stats.totalTools}</div>
+                      <p className={`text-xs mt-0.5 ${isDark ? "text-gray-500" : "text-gray-500"}`}>
+                        {serverData.stats.monetizedTools} monetized
+                      </p>
+                    </div>
+                    <div className={`p-1.5 rounded-full ${isDark ? "bg-gray-700" : "bg-gray-100"}`}>
+                      <Wrench className="h-3.5 w-3.5 text-orange-500" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Server Connection */}
+            <Card className={`${isDark ? "bg-gray-800 border-gray-700" : ""}`}>
           <CardHeader>
             <CardTitle className="text-lg font-medium">Connection & Owner</CardTitle>
             <CardDescription>Essential information for connecting to and trusting this server</CardDescription>
@@ -481,8 +521,8 @@ export default function ServerDashboard() {
               <label className={`text-sm font-medium block mb-2 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
                 MCP Connection URL
               </label>
-              <div className="flex items-center gap-2">
-                <code className={`flex-1 text-sm p-3 rounded-md font-mono ${isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-800"
+              <div className="flex items-start gap-2">
+                <code className={`flex-1 text-sm p-3 rounded-md font-mono break-all overflow-hidden ${isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-800"
                   }`}>
                   {urlUtils.getMcpUrl(serverData.serverId)}
                 </code>
@@ -491,6 +531,7 @@ export default function ServerDashboard() {
                   variant="outline"
                   onClick={() => copyToClipboard(urlUtils.getMcpUrl(serverData.serverId))}
                   title="Copy MCP URL"
+                  className="shrink-0"
                 >
                   <Copy className="h-4 w-4" />
                 </Button>
@@ -502,32 +543,34 @@ export default function ServerDashboard() {
               <label className={`text-sm font-medium block mb-2 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
                 Payment Address
               </label>
-              <div className="flex items-center gap-2">
-                <code className={`flex-1 text-sm p-3 rounded-md font-mono ${isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-800"
+              <div className="flex items-start gap-2">
+                <code className={`flex-1 text-sm p-3 rounded-md font-mono break-all overflow-hidden ${isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-800"
                   }`}>
                   {serverData.receiverAddress}
                 </code>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => copyToClipboard(serverData.receiverAddress)}
-                  title="Copy address"
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => openExplorer(serverData.receiverAddress, 'base-sepolia')}
-                  title={`View on ${getExplorerName('base-sepolia')}`}
-                >
-                  <ExternalLink className="h-4 w-4" />
-                </Button>
+                <div className="flex gap-1 shrink-0">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => copyToClipboard(serverData.receiverAddress)}
+                    title="Copy address"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openExplorer(serverData.receiverAddress, 'base-sepolia')}
+                    title={`View on ${getExplorerName('base-sepolia')}`}
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </div>
 
             {/* Owner & Server ID */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div>
                 <label className={`text-sm font-medium block mb-3 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
                   Server Owner
@@ -547,12 +590,12 @@ export default function ServerDashboard() {
                       <Users className="h-5 w-5" />
                     )}
                   </div>
-                  <div className="flex-1">
-                    <div className="font-medium">{serverData.creator.displayName}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{serverData.creator.displayName}</div>
                     <button
                       onClick={() => openExplorer(serverData.creator.walletAddress, 'base-sepolia')}
-                      className={`text-xs hover:underline ${isDark ? "text-gray-400 hover:text-gray-300" : "text-gray-600 hover:text-gray-700"}`}
-                      title={`View address on ${getExplorerName('base-sepolia')}`}
+                      className={`text-xs hover:underline font-mono ${isDark ? "text-gray-400 hover:text-gray-300" : "text-gray-600 hover:text-gray-700"}`}
+                      title={serverData.creator.walletAddress}
                     >
                       {serverData.creator.walletAddress.slice(0, 6)}...{serverData.creator.walletAddress.slice(-4)}
                     </button>
@@ -564,17 +607,347 @@ export default function ServerDashboard() {
                 <label className={`text-sm font-medium block mb-3 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
                   Server ID
                 </label>
-                <code className={`text-sm font-mono block p-3 rounded-md ${isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-800"
+                <code className={`text-sm font-mono block p-3 rounded-md break-all overflow-hidden ${isDark ? "bg-gray-700 text-gray-300" : "bg-gray-100 text-gray-800"
                   }`}>
                   {serverData.serverId}
                 </code>
               </div>
             </div>
           </CardContent>
-        </Card>
+            </Card>
+          </TabsContent>
 
-        {/* Tools */}
-        <Card className={`mb-8 ${isDark ? "bg-gray-800 border-gray-700" : ""}`}>
+          {/* Integration Tab */}
+          <TabsContent value="integration" className="space-y-6">
+            <Card className={`${isDark ? "bg-gray-800 border-gray-700" : ""}`}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Plug className="h-5 w-5" />
+              Integration Guide
+            </CardTitle>
+            <CardDescription>Learn how to integrate this MCP server into your applications</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6 max-w-none overflow-x-auto">
+            {/* MCP Client Integration */}
+            <div>
+              <h3 className="text-lg font-medium mb-4 flex items-center gap-2">
+                <Plug className="h-4 w-4" />
+                MCP Client Integration
+              </h3>
+              <div className="space-y-4">
+                {/* Claude Desktop */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-medium text-sm">Claude/Cursor/Windsurf Configuration</h4>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => copyToClipboard(JSON.stringify({
+                        "mcpServers": {
+                          [serverData.name]: {
+                            "command": "npx",
+                            "args": [
+                              "mcpay",
+                              "proxy",
+                              "--urls",
+                              urlUtils.getMcpUrl(serverData.serverId),
+                              "--private-key",
+                              "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+                            ]
+                          }
+                        }
+                      }, null, 2))}
+                    >
+                      <Copy className="h-3 w-3 mr-1" />
+                      Copy
+                    </Button>
+                  </div>
+                  <SyntaxHighlighter
+                    language="json"
+                    style={isDark ? oneDark : oneLight}
+                    className="rounded-md text-sm overflow-auto"
+                    wrapLines={true}
+                    wrapLongLines={true}
+                  >
+                    {JSON.stringify({
+                      "mcpServers": {
+                        [serverData.name]: {
+                          "command": "npx",
+                          "args": [
+                            "mcpay",
+                            "proxy",
+                            "--urls",
+                            urlUtils.getMcpUrl(serverData.serverId),
+                            "--private-key",
+                            "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+                          ]
+                        }
+                      }
+                    }, null, 2)}
+                  </SyntaxHighlighter>
+                  <p className={`text-xs mt-2 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                    Add this to your MCP client config file (e.g., <code>claude_desktop_config.json</code>). Replace the private key with your actual wallet private key.
+                  </p>
+                </div>
+
+                {/* MCPay CLI */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-medium text-sm">MCPay CLI (Direct Connection)</h4>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => copyToClipboard(`npx mcpay proxy --urls ${urlUtils.getMcpUrl(serverData.serverId)} --private-key YOUR_PRIVATE_KEY`)}
+                    >
+                      <Copy className="h-3 w-3 mr-1" />
+                      Copy
+                    </Button>
+                  </div>
+                  <SyntaxHighlighter
+                    language="bash"
+                    style={isDark ? oneDark : oneLight}
+                    className="rounded-md text-sm overflow-auto"
+                    wrapLines={true}
+                    wrapLongLines={true}
+                  >
+                    {`npx mcpay proxy --urls ${urlUtils.getMcpUrl(serverData.serverId)} --private-key YOUR_PRIVATE_KEY`}
+                  </SyntaxHighlighter>
+                  <p className={`text-xs mt-2 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                    Replace <code>YOUR_PRIVATE_KEY</code> with your actual wallet private key
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Direct API Integration */}
+            <div>
+              <h3 className="text-lg font-medium mb-4 flex items-center gap-2">
+                <Activity className="h-4 w-4" />
+                Direct API Integration
+              </h3>
+              <div className="space-y-4">
+                {/* cURL Example */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-medium text-sm">List Available Tools (cURL)</h4>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => copyToClipboard(`curl -X POST "${urlUtils.getMcpUrl(serverData.serverId)}" \\
+  -H "Content-Type: application/json" \\
+  -H "Accept: application/json, text/event-stream" \\
+  -d '{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/list",
+  "params": {}
+}'`)}
+                    >
+                      <Copy className="h-3 w-3 mr-1" />
+                      Copy
+                    </Button>
+                  </div>
+                  <SyntaxHighlighter
+                    language="bash"
+                    style={isDark ? oneDark : oneLight}
+                    className="rounded-md text-sm overflow-auto"
+                    wrapLines={true}
+                    wrapLongLines={true}
+                  >
+                    {`curl -X POST "${urlUtils.getMcpUrl(serverData.serverId)}" \\
+  -H "Content-Type: application/json" \\
+  -H "Accept: application/json, text/event-stream" \\
+  -d '{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/list",
+  "params": {}
+}'`}
+                  </SyntaxHighlighter>
+                </div>
+
+                {/* JavaScript/TypeScript */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-medium text-sm">JavaScript/TypeScript Integration</h4>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => copyToClipboard(`import { Client } from '@modelcontextprotocol/sdk/client'
+import { createPaymentTransport } from 'mcpay'
+import { privateKeyToAccount } from 'viem/accounts'
+
+// Get Account
+const account = privateKeyToAccount('0x1234567890abcdef...')
+const url = new URL('${urlUtils.getMcpUrl(serverData.serverId)}')
+
+// Create payment transport
+// This creates a PaymentStreamableHTTPTransport (extension of StreamableHTTPTransport)
+const transport = createPaymentTransport(url, account, {
+  maxPaymentValue: BigInt(0.1 * 10 ** 6), // 0.1 USDC max payment
+})
+
+// Create MCP Client
+const client = new Client(
+  { name: 'my-mcp-client', version: '1.0.0' },
+  { capabilities: {} }
+)
+
+await client.connect(transport)`)}
+                    >
+                      <Copy className="h-3 w-3 mr-1" />
+                      Copy
+                    </Button>
+                  </div>
+                  <SyntaxHighlighter
+                    language="typescript"
+                    style={isDark ? oneDark : oneLight}
+                    className="rounded-md text-sm overflow-auto"
+                    wrapLines={true}
+                    wrapLongLines={true}
+                  >
+                    {`import { Client } from '@modelcontextprotocol/sdk/client'
+import { createPaymentTransport } from 'mcpay'
+import { privateKeyToAccount } from 'viem/accounts'
+
+// Get Account
+const account = privateKeyToAccount('0x1234567890abcdef...')
+const url = new URL('${urlUtils.getMcpUrl(serverData.serverId)}')
+
+// Create payment transport
+// This creates a PaymentStreamableHTTPTransport (extension of StreamableHTTPTransport)
+const transport = createPaymentTransport(url, account, {
+  maxPaymentValue: BigInt(0.1 * 10 ** 6), // 0.1 USDC max payment
+})
+
+// Create MCP Client
+const client = new Client(
+  { name: 'my-mcp-client', version: '1.0.0' },
+  { capabilities: {} }
+)
+
+await client.connect(transport)`}
+                  </SyntaxHighlighter>
+                  <p className={`text-xs mt-2 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                    Replace <code>0x1234567890abcdef...</code> with your actual wallet private key. Adjust the <code>maxPaymentValue</code> as needed.
+                  </p>
+                </div>
+
+
+              </div>
+            </div>
+
+            {/* MCP Protocol Information */}
+            <div>
+              <h3 className="text-lg font-medium mb-4 flex items-center gap-2">
+                <Shield className="h-4 w-4" />
+                MCP Protocol Details
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className={`p-4 rounded-lg border ${isDark ? "bg-gray-700 border-gray-600" : "bg-gray-50 border-gray-200"}`}>
+                  <h4 className="font-medium text-sm mb-2">Integration Methods</h4>
+                  <ul className={`text-xs space-y-1 ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+                    <li>• MCP Client config (Claude/Cursor/Windsurf)</li>
+                    <li>• Direct HTTP API with event streams</li>
+                    <li>• TypeScript SDK with payment transport</li>
+                    <li>• MCPay CLI proxy command</li>
+                  </ul>
+                </div>
+                <div className={`p-4 rounded-lg border ${isDark ? "bg-gray-700 border-gray-600" : "bg-gray-50 border-gray-200"}`}>
+                  <h4 className="font-medium text-sm mb-2">MCPay Features</h4>
+                  <ul className={`text-xs space-y-1 ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+                    <li>• Automatic payment processing via proxy</li>
+                    <li>• Multiple token support</li>
+                    <li>• Cross-chain compatibility</li>
+                    <li>• Proof verification via vLayer</li>
+                    <li>• Event stream support for real-time updates</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* Security Note */}
+            <div className={`p-4 rounded-lg border ${isDark ? "bg-yellow-900/20 border-yellow-700" : "bg-yellow-50 border-yellow-200"}`}>
+              <h4 className="font-medium text-sm mb-2 flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-yellow-500" />
+                Security Note
+              </h4>
+              <p className={`text-xs ${isDark ? "text-yellow-200" : "text-yellow-800"}`}>
+                Never share your private key publicly. The MCPay proxy handles payments securely using your private key locally.
+              </p>
+            </div>
+
+            {/* Quick Links */}
+            <div className={`p-4 rounded-lg border ${isDark ? "bg-gray-700 border-gray-600" : "bg-blue-50 border-blue-200"}`}>
+              <h4 className="font-medium text-sm mb-3">Quick Links</h4>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => handleTabChange("tools")}
+                  className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${isDark 
+                    ? "bg-purple-700 text-purple-200 hover:bg-purple-600" 
+                    : "bg-purple-100 text-purple-700 hover:bg-purple-200"
+                  }`}
+                >
+                  <Wrench className="h-3 w-3" />
+                  View Tools
+                </button>
+                <a
+                  href="https://github.com/microchipgnu/mcpay.fun"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${isDark 
+                    ? "bg-gray-600 text-gray-200 hover:bg-gray-500" 
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  MCPay.fun GitHub
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+                <a
+                  href="https://modelcontextprotocol.io"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${isDark 
+                    ? "bg-blue-700 text-blue-200 hover:bg-blue-600" 
+                    : "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                  }`}
+                >
+                  MCP Documentation
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+                <a
+                  href="https://github.com/modelcontextprotocol"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${isDark 
+                    ? "bg-blue-700 text-blue-200 hover:bg-blue-600" 
+                    : "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                  }`}
+                >
+                  MCP GitHub
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+                <a
+                  href="https://www.npmjs.com/package/mcpay"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${isDark 
+                    ? "bg-orange-700 text-orange-200 hover:bg-orange-600" 
+                    : "bg-orange-100 text-orange-700 hover:bg-orange-200"
+                  }`}
+                >
+                  MCPay Package
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+            </div>
+          </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Tools Tab */}
+          <TabsContent value="tools" className="space-y-6">
+            <Card className={`${isDark ? "bg-gray-800 border-gray-700" : ""}`}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Wrench className="h-5 w-5" />
@@ -677,207 +1050,213 @@ export default function ServerDashboard() {
               </Table>
             </div>
           </CardContent>
-        </Card>
+            </Card>
+          </TabsContent>
 
-        {/* Analytics and Recent Activity */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Analytics Chart */}
-          <Card className={isDark ? "bg-gray-800 border-gray-700" : ""}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <BarChart3 className="h-5 w-5" />
-                Analytics (Last 30 Days)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {serverData.analytics.slice(0, 7).map((day, index) => (
-                  <div key={day.id} className="flex items-center justify-between">
-                    <span className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                      {new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    </span>
-                    <div className="flex items-center gap-4 text-sm">
-                      <span>{day.totalRequests} requests</span>
-                      <span className="text-green-500">${parseFloat(day.totalRevenue).toFixed(2)}</span>
-                      <span>{day.uniqueUsers} users</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Recent Proofs */}
-          <Card className={isDark ? "bg-gray-800 border-gray-700" : ""}>
-            <CardHeader>
-              <CardTitle className="flex justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Shield className="h-5 w-5" />
-                  Recent Proofs
-                </div>
-                <div>
-                  <Badge variant="outline" className={`ml-6 text-xs ${isDark ? "border-gray-500 text-gray-300" : ""}`}>
-                    Powered by <a href="https://www.vlayer.xyz/" target="_blank" rel="noopener noreferrer" className="inline-block ml-1 hover:opacity-80 transition-opacity">
-                      <Image src="/vlayer-logo.svg" alt="vLayer" width={60} height={20} className="inline" />
-                    </a>
-                  </Badge>
-                </div>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {serverData.proofs.length > 0 ? (
-                  serverData.proofs.slice(0, 5).map((proof) => (
-                    <div key={proof.id} className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {proof.isConsistent ? (
-                          <CheckCircle className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <XCircle className="h-4 w-4 text-red-500" />
-                        )}
-                        <div>
-                          <p className="text-sm font-medium">{proof.tool.name}</p>
-                          <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                            <button
-                              onClick={() => openExplorer(proof.user.walletAddress, 'base-sepolia')}
-                              className={`hover:underline ${isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-700"}`}
-                              title={`View address on ${getExplorerName('base-sepolia')}`}
-                            >
-                              {proof.user.displayName}
-                            </button>
-                            {" • "}
-                            {formatDate(proof.createdAt)}
-                          </p>
+          {/* Analytics & Payments Tab */}
+          <TabsContent value="analytics" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Analytics Chart */}
+              <Card className={isDark ? "bg-gray-800 border-gray-700" : ""}>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BarChart3 className="h-5 w-5" />
+                    Analytics (Last 30 Days)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {serverData.analytics.slice(0, 7).map((day, index) => (
+                      <div key={day.id} className="flex items-center justify-between">
+                        <span className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                          {new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </span>
+                        <div className="flex items-center gap-4 text-sm">
+                          <span>{day.totalRequests} requests</span>
+                          <span className="text-green-500">${parseFloat(day.totalRevenue).toFixed(2)}</span>
+                          <span>{day.uniqueUsers} users</span>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-sm font-medium">
-                          {(parseFloat(proof.confidenceScore) * 100).toFixed(1)}%
-                        </p>
-                        {proof.webProofPresentation && (
-                          <Badge variant="outline" className={`text-xs ${isDark ? "border-gray-500 text-gray-300" : ""}`}>
-                            Web Proof
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className={`text-center py-6 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                    <Shield className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">No proofs yet</p>
-                    <p className="text-xs mt-1">Proofs will appear here when users verify this server&apos;s tools</p>
+                    ))}
                   </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                </CardContent>
+              </Card>
 
-        {/* Recent Payments */}
-        <Card className={isDark ? "bg-gray-800 border-gray-700" : ""}>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Coins className="h-5 w-5" />
-              Recent Payments
-            </CardTitle>
-            <CardDescription>
-              Latest payment transactions from tool usage with verified token information
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead></TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>User</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Network</TableHead>
-                    <TableHead className="text-right">Transaction</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {serverData.tools.flatMap(tool => tool.payments)
-                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                    .slice(0, 10).map((payment) => (
-                    <TableRow key={payment.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center ${payment.status === 'completed'
-                              ? 'bg-green-100 text-green-600 dark:bg-green-900 dark:text-green-400'
-                              : 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900 dark:text-yellow-400'
-                            }`}>
-                            {payment.status === 'completed' ? (
-                              <CheckCircle className="h-3 w-3" />
+              {/* Recent Proofs */}
+              <Card className={isDark ? "bg-gray-800 border-gray-700" : ""}>
+                <CardHeader>
+                  <CardTitle className="flex justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Shield className="h-5 w-5" />
+                      Recent Proofs
+                    </div>
+                    <div>
+                      <Badge variant="outline" className={`ml-6 text-xs ${isDark ? "border-gray-500 text-gray-300" : ""}`}>
+                        Powered by <a href="https://www.vlayer.xyz/" target="_blank" rel="noopener noreferrer" className="inline-block ml-1 hover:opacity-80 transition-opacity">
+                          <Image src="/vlayer-logo.svg" alt="vLayer" width={60} height={20} className="inline" />
+                        </a>
+                      </Badge>
+                    </div>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {serverData.proofs.length > 0 ? (
+                      serverData.proofs.slice(0, 5).map((proof) => (
+                        <div key={proof.id} className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            {proof.isConsistent ? (
+                              <CheckCircle className="h-4 w-4 text-green-500" />
                             ) : (
-                              <Clock className="h-3 w-3" />
+                              <XCircle className="h-4 w-4 text-red-500" />
+                            )}
+                            <div>
+                              <p className="text-sm font-medium">{proof.tool.name}</p>
+                              <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                                <button
+                                  onClick={() => openExplorer(proof.user.walletAddress, 'base-sepolia')}
+                                  className={`hover:underline ${isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-700"}`}
+                                  title={`View address on ${getExplorerName('base-sepolia')}`}
+                                >
+                                  {proof.user.displayName}
+                                </button>
+                                {" • "}
+                                {formatDate(proof.createdAt)}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-medium">
+                              {(parseFloat(proof.confidenceScore) * 100).toFixed(1)}%
+                            </p>
+                            {proof.webProofPresentation && (
+                              <Badge variant="outline" className={`text-xs ${isDark ? "border-gray-500 text-gray-300" : ""}`}>
+                                Web Proof
+                              </Badge>
                             )}
                           </div>
                         </div>
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        <TokenDisplay
-                          currency={payment.currency}
-                          network={payment.network}
-                          amount={payment.amount}
-                          showVerification={true}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <AddressLink
-                          address={payment.user.walletAddress}
-                          network={payment.network as Network}
-                          className="text-sm"
-                        >
-                          {payment.user.displayName}
-                        </AddressLink>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <div className="text-sm">{formatDate(payment.createdAt)}</div>
-                          {payment.settledAt && (
-                            <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                              Settled: {formatDate(payment.settledAt)}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col gap-1">
-                          <Badge variant="outline" className="text-xs w-fit">
-                            {payment.network}
-                          </Badge>
-                          <span className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                            {getExplorerName(payment.network as Network)}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {payment.transactionHash ? (
-                          <div className="flex items-center justify-end">
-                            <TransactionLink
-                              txHash={payment.transactionHash}
-                              network={payment.network as Network}
-                              variant="button"
-                              showCopyButton={true}
-                              className="text-xs"
-                            />
-                          </div>
-                        ) : (
-                          <span className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                            Pending
-                          </span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                      ))
+                    ) : (
+                      <div className={`text-center py-6 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                        <Shield className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No proofs yet</p>
+                        <p className="text-xs mt-1">Proofs will appear here when users verify this server&apos;s tools</p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
             </div>
-          </CardContent>
-        </Card>
+
+            {/* Recent Payments */}
+            <Card className={isDark ? "bg-gray-800 border-gray-700" : ""}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Coins className="h-5 w-5" />
+                  Recent Payments
+                </CardTitle>
+                <CardDescription>
+                  Latest payment transactions from tool usage with verified token information
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead></TableHead>
+                        <TableHead>Amount</TableHead>
+                        <TableHead>User</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Network</TableHead>
+                        <TableHead className="text-right">Transaction</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {serverData.tools.flatMap(tool => tool.payments)
+                        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                        .slice(0, 10).map((payment) => (
+                        <TableRow key={payment.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <div className={`w-6 h-6 rounded-full flex items-center justify-center ${payment.status === 'completed'
+                                  ? 'bg-green-100 text-green-600 dark:bg-green-900 dark:text-green-400'
+                                  : 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900 dark:text-yellow-400'
+                                }`}>
+                                {payment.status === 'completed' ? (
+                                  <CheckCircle className="h-3 w-3" />
+                                ) : (
+                                  <Clock className="h-3 w-3" />
+                                )}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            <TokenDisplay
+                              currency={payment.currency}
+                              network={payment.network}
+                              amount={payment.amount}
+                              showVerification={true}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <AddressLink
+                              address={payment.user.walletAddress}
+                              network={payment.network as Network}
+                              className="text-sm"
+                            >
+                              {payment.user.displayName}
+                            </AddressLink>
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <div className="text-sm">{formatDate(payment.createdAt)}</div>
+                              {payment.settledAt && (
+                                <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                                  Settled: {formatDate(payment.settledAt)}
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              <Badge variant="outline" className="text-xs w-fit">
+                                {payment.network}
+                              </Badge>
+                              <span className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                                {getExplorerName(payment.network as Network)}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {payment.transactionHash ? (
+                              <div className="flex items-center justify-end">
+                                <TransactionLink
+                                  txHash={payment.transactionHash}
+                                  network={payment.network as Network}
+                                  variant="button"
+                                  showCopyButton={true}
+                                  className="text-xs"
+                                />
+                              </div>
+                            ) : (
+                              <span className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                                Pending
+                              </span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+
+        </Tabs>
 
         {/* Tool Execution Modal */}
         {serverData && (
