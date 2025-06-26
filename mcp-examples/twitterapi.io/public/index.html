@@ -1,3 +1,419 @@
-<h1>Basic MCP Server</h1>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TwitterAPI.io MCP Server</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+            background-color: #f8f9fa;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #1da1f2;
+            border-bottom: 3px solid #1da1f2;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #14171a;
+            margin-top: 30px;
+            border-left: 4px solid #1da1f2;
+            padding-left: 15px;
+        }
+        h3 {
+            color: #657786;
+            margin-top: 25px;
+        }
+        code {
+            background: #f1f3f4;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        }
+        pre {
+            background: #f8f9fa;
+            border: 1px solid #e1e8ed;
+            border-radius: 6px;
+            padding: 15px;
+            overflow-x: auto;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        }
+        .tool-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .tool-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #1da1f2;
+        }
+        .tool-name {
+            font-weight: bold;
+            color: #1da1f2;
+        }
+        .feature-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+        .example-box {
+            background: #e8f4fd;
+            border: 1px solid #1da1f2;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin: 8px 0;
+        }
+        .highlight {
+            background: #fff3cd;
+            padding: 10px;
+            border-radius: 4px;
+            border-left: 4px solid #ffc107;
+            margin: 15px 0;
+        }
+        .nav-links {
+            background: #1da1f2;
+            color: white;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            margin: 0 15px;
+        }
+        .nav-links a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>TwitterAPI.io MCP Server</h1>
+        
+        <p>A Model Context Protocol (MCP) server that provides access to TwitterAPI.io's comprehensive Twitter data endpoints.</p>
 
-<p>MCP Server - Protocol is mounted at the root.</p>
+        <div class="nav-links">
+            <strong>Quick Links:</strong>
+            <a href="#features">Features</a>
+            <a href="#setup">Setup</a>
+            <a href="#usage">Usage</a>
+            <a href="#examples">Examples</a>
+            <a href="#support">Support</a>
+        </div>
+
+        <h2 id="features">Features</h2>
+        <p>This MCP server provides 15 powerful tools for accessing Twitter data:</p>
+
+        <div class="feature-section">
+            <h3>User Tools</h3>
+            <div class="tool-list">
+                <div class="tool-item">
+                    <div class="tool-name">getUserInfo</div>
+                    Get user profile information by username
+                </div>
+                <div class="tool-item">
+                    <div class="tool-name">getUserTweets</div>
+                    Get recent tweets from a user (with pagination)
+                </div>
+                <div class="tool-item">
+                    <div class="tool-name">getUserFollowers</div>
+                    Get followers list (with pagination)
+                </div>
+                <div class="tool-item">
+                    <div class="tool-name">getUserFollowing</div>
+                    Get following list (with pagination)
+                </div>
+                <div class="tool-item">
+                    <div class="tool-name">getUserMentions</div>
+                    Get tweets mentioning a specific user
+                </div>
+                <div class="tool-item">
+                    <div class="tool-name">searchUsers</div>
+                    Search for users by keyword
+                </div>
+                <div class="tool-item">
+                    <div class="tool-name">checkFollowRelationship</div>
+                    Check if one user follows another
+                </div>
+                <div class="tool-item">
+                    <div class="tool-name">batchGetUsers</div>
+                    Get multiple user profiles in a single request
+                </div>
+            </div>
+
+            <h3>Tweet Tools</h3>
+            <div class="tool-list">
+                <div class="tool-item">
+                    <div class="tool-name">getTweetsByIds</div>
+                    Get tweets by their IDs (batch operation)
+                </div>
+                <div class="tool-item">
+                    <div class="tool-name">getTweetReplies</div>
+                    Get replies to a specific tweet
+                </div>
+                <div class="tool-item">
+                    <div class="tool-name">getTweetQuotes</div>
+                    Get quote tweets for a specific tweet
+                </div>
+                <div class="tool-item">
+                    <div class="tool-name">getTweetThread</div>
+                    Get entire conversation thread context
+                </div>
+                <div class="tool-item">
+                    <div class="tool-name">advancedTweetSearch</div>
+                    Advanced search with filters and operators
+                </div>
+            </div>
+
+            <h3>List & Community Tools</h3>
+            <div class="tool-list">
+                <div class="tool-item">
+                    <div class="tool-name">getListTweets</div>
+                    Get tweets from a Twitter List
+                </div>
+                <div class="tool-item">
+                    <div class="tool-name">getTrends</div>
+                    Get trending topics by location (WOEID)
+                </div>
+            </div>
+        </div>
+
+        <h2 id="setup">Setup</h2>
+
+        <h3>1. Get TwitterAPI.io API Key</h3>
+        <ol>
+            <li>Visit <a href="https://twitterapi.io" target="_blank">TwitterAPI.io</a></li>
+            <li>Sign up for an account</li>
+            <li>Get your API key from the dashboard</li>
+        </ol>
+
+        <h3>2. Environment Configuration</h3>
+        <p>Set up your environment variables:</p>
+        <pre><code># Required: Your TwitterAPI.io API key
+TWITTERAPI_IO_KEY=your_twitterapi_io_api_key
+
+# Optional: For MCP server authentication
+VALID_KEYS=your_mcp_server_api_key_1,your_mcp_server_api_key_2</code></pre>
+
+        <h3>3. Deploy to Vercel</h3>
+        <pre><code># Navigate to the project directory
+cd mcp-examples/twitterapi.io
+
+# Set environment variables in Vercel
+vercel env add TWITTERAPI_IO_KEY
+
+# Deploy to Vercel
+vercel deploy</code></pre>
+
+        <h2 id="usage">Usage</h2>
+        <p>All tools are now configured automatically with your API key from the environment variable. Here are some examples:</p>
+
+        <h3 id="examples">Examples</h3>
+
+        <div class="example-box">
+            <h4>Get User Information</h4>
+            <pre><code>{
+  "tool": "getUserInfo",
+  "parameters": {
+    "userName": "elonmusk"
+  }
+}</code></pre>
+        </div>
+
+        <div class="example-box">
+            <h4>Search Tweets</h4>
+            <pre><code>{
+  "tool": "advancedTweetSearch",
+  "parameters": {
+    "query": "AI OR \"artificial intelligence\" from:elonmusk since:2024-01-01",
+    "queryType": "Latest"
+  }
+}</code></pre>
+        </div>
+
+        <div class="example-box">
+            <h4>Get User's Recent Tweets</h4>
+            <pre><code>{
+  "tool": "getUserTweets",
+  "parameters": {
+    "userName": "elonmusk",
+    "includeReplies": false,
+    "cursor": ""
+  }
+}</code></pre>
+        </div>
+
+        <div class="example-box">
+            <h4>Get Tweet Thread</h4>
+            <pre><code>{
+  "tool": "getTweetThread",
+  "parameters": {
+    "tweetId": "1234567890123456789"
+  }
+}</code></pre>
+        </div>
+
+        <div class="example-box">
+            <h4>Check Follow Relationship</h4>
+            <pre><code>{
+  "tool": "checkFollowRelationship",
+  "parameters": {
+    "sourceUserName": "user1",
+    "targetUserName": "user2"
+  }
+}</code></pre>
+        </div>
+
+        <div class="example-box">
+            <h4>Get User Followers with Pagination</h4>
+            <pre><code>{
+  "tool": "getUserFollowers",
+  "parameters": {
+    "userName": "elonmusk",
+    "pageSize": 200,
+    "cursor": ""
+  }
+}</code></pre>
+        </div>
+
+        <div class="example-box">
+            <h4>Get Trending Topics</h4>
+            <pre><code>{
+  "tool": "getTrends",
+  "parameters": {
+    "woeid": 2418046,
+    "count": 50
+  }
+}</code></pre>
+        </div>
+
+        <h2>Advanced Search Query Examples</h2>
+        <p>The <code>advancedTweetSearch</code> tool supports powerful search operators:</p>
+        
+        <ul>
+            <li><strong>Keywords</strong>: <code>"artificial intelligence"</code> (exact phrase)</li>
+            <li><strong>User tweets</strong>: <code>from:elonmusk</code></li>
+            <li><strong>Mentions</strong>: <code>@openai</code></li>
+            <li><strong>Hashtags</strong>: <code>#AI</code></li>
+            <li><strong>Date ranges</strong>: <code>since:2024-01-01</code> <code>until:2024-12-31</code></li>
+            <li><strong>Boolean operators</strong>: <code>AI OR "machine learning"</code></li>
+            <li><strong>Exclude terms</strong>: <code>AI -bitcoin</code></li>
+            <li><strong>Language</strong>: <code>lang:en</code></li>
+            <li><strong>Minimum metrics</strong>: <code>min_retweets:100</code></li>
+        </ul>
+
+        <div class="example-box">
+            <h4>Example complex query:</h4>
+            <pre><code>("artificial intelligence" OR "machine learning") from:elonmusk since:2024-01-01 -crypto lang:en min_retweets:10</code></pre>
+        </div>
+
+        <h2>Pagination</h2>
+        <p>Many endpoints support pagination using cursors:</p>
+        
+        <ol>
+            <li>First request: Set <code>cursor</code> to empty string <code>""</code></li>
+            <li>Subsequent requests: Use the <code>next_cursor</code> from the previous response</li>
+            <li>Continue until <code>has_next_page</code> is <code>false</code></li>
+        </ol>
+
+        <div class="example-box">
+            <h4>Example pagination workflow:</h4>
+            <pre><code>// First request
+{
+  "tool": "getUserTweets",
+  "parameters": {
+    "userName": "elonmusk",
+    "cursor": ""
+  }
+}
+
+// Subsequent request using next_cursor from previous response
+{
+  "tool": "getUserTweets",
+  "parameters": {
+    "userName": "elonmusk",
+    "cursor": "DAABCgABF__8jQIAAA"
+  }
+}</code></pre>
+        </div>
+
+        <h2>Rate Limits & Pricing</h2>
+        <p>TwitterAPI.io uses a credit-based pricing system:</p>
+        <ul>
+            <li><strong>User profiles</strong>: 18 credits (single), 10 credits (bulk 100+)</li>
+            <li><strong>Tweets</strong>: 15 credits per 1k tweets</li>
+            <li><strong>Followers/Following</strong>: 15 credits per 1k users</li>
+            <li><strong>Advanced search</strong>: Variable based on results</li>
+            <li><strong>Minimum charge</strong>: 0.15 credits per request (even if no data)</li>
+        </ul>
+        
+        <p>See <a href="https://twitterapi.io/pricing" target="_blank">TwitterAPI.io pricing</a> for current rates.</p>
+
+        <h2>Error Handling</h2>
+        <p>The server provides detailed error messages for common issues:</p>
+        <ul>
+            <li>Missing or invalid API keys (<code>TWITTERAPI_IO_KEY not configured</code>)</li>
+            <li>Invalid usernames or tweet IDs</li>
+            <li>Rate limit exceeded</li>
+            <li>Network connectivity issues</li>
+        </ul>
+        
+        <p>All responses include detailed JSON data or error messages to help with debugging.</p>
+
+        <h2>Popular Use Cases</h2>
+        <ol>
+            <li><strong>Social Media Analytics</strong> - Track user engagement and tweet performance</li>
+            <li><strong>Research</strong> - Analyze conversation threads and user relationships</li>
+            <li><strong>Content Discovery</strong> - Find trending topics and influential users</li>
+            <li><strong>Competitive Analysis</strong> - Monitor competitor activity and mentions</li>
+            <li><strong>Academic Research</strong> - Study social media patterns and behaviors</li>
+            <li><strong>Real-time Monitoring</strong> - Track mentions and hashtags</li>
+            <li><strong>Audience Analysis</strong> - Study follower/following relationships</li>
+        </ol>
+
+        <div class="highlight">
+            <h2>Security</h2>
+            <ul>
+                <li>API keys are stored as environment variables (more secure)</li>
+                <li>All requests use HTTPS</li>
+                <li>No user data is cached or stored</li>
+                <li>Follow TwitterAPI.io's terms of service</li>
+                <li>Environment variables are not exposed in tool responses</li>
+            </ul>
+        </div>
+
+        <h2 id="support">Support</h2>
+        <ul>
+            <li>TwitterAPI.io Documentation: <a href="https://docs.twitterapi.io" target="_blank">docs.twitterapi.io</a></li>
+            <li>MCP Protocol: <a href="https://modelcontextprotocol.io" target="_blank">modelcontextprotocol.io</a></li>
+            <li>Issues: Create an issue in this repository</li>
+        </ul>
+
+        <footer style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e1e8ed; text-align: center; color: #657786;">
+            <p>TwitterAPI.io MCP Server - Providing comprehensive Twitter data access through the Model Context Protocol</p>
+        </footer>
+    </div>
+</body>
+</html>
