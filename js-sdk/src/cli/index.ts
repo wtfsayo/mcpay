@@ -5,6 +5,7 @@ import { Command } from "commander";
 import type { Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { createServerConnections, ServerType, startStdioServer } from '../server/stdio/start-stdio-server.js';
+import { scaffoldServer, listTemplates } from './scaffold.js';
 
 config();
 
@@ -14,12 +15,47 @@ interface ServerOptions {
   transport: string;
 }
 
+interface ScaffoldOptions {
+  template: string;
+  name: string;
+  directory?: string;
+  example?: boolean;
+}
+
 const program = new Command();
 
 program
   .name('mcpay')
   .description('MCPay CLI - MCP servers with payment capabilities')
   .version('0.0.2');
+
+program
+  .command('scaffold')
+  .description('Scaffold a new MCP server from templates')
+  .requiredOption('-t, --template <template>', 'Template to use (basic, agent, financialdatasets, pinata, agent-cdp)')
+  .requiredOption('-n, --name <name>', 'Name for the new server project')
+  .option('-d, --directory <directory>', 'Directory to create the project in (defaults to current directory)')
+  .option('-e, --example', 'Use the full example implementation instead of basic template')
+  .action(async (options: ScaffoldOptions) => {
+    try {
+      await scaffoldServer({
+        template: options.template,
+        name: options.name,
+        directory: options.directory,
+        useExample: options.example
+      });
+    } catch (error) {
+      console.error('Failed to scaffold server:', error);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('list')
+  .description('List available MCP server templates')
+  .action(() => {
+    listTemplates();
+  });
 
 program
   .command('server')
