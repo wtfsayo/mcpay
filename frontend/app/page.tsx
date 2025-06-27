@@ -337,7 +337,7 @@ export default function MCPBrowser() {
         <div className={`absolute inset-0 ${isDark ? "bg-gradient-to-br from-gray-900/50 via-transparent to-gray-800/30" : "bg-gradient-to-br from-blue-50/30 via-transparent to-purple-50/20"}`} />
       </div>
 
-      <div className="relative container mx-auto px-4 py-8">
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Enhanced Header */}
         <div className="text-center mb-16 relative">
           <div className="mb-[100px]"></div>
