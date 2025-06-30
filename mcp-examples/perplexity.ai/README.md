@@ -22,9 +22,9 @@ This MCP server provides 8 powerful tools for accessing Perplexity's AI-powered 
 
 - **Real-time Information**: Access current web data and recent developments
 - **Authoritative Sources**: Get properly cited information from reliable sources
-- **Multiple Models**: Choose from sonar-pro, sonar, sonar-small, and sonar-deep-research
+- **Optimized Models**: Each tool uses the best model for its specific purpose
 - **Specialized Modes**: Academic research, news, fact-checking, and comparison tools
-- **Advanced Filtering**: Filter by domain, recency, region, and more
+- **Simplified Interface**: Easy-to-use tools with minimal required parameters
 
 ## Setup
 
@@ -86,8 +86,7 @@ vercel deploy
   "tool": "newsSearch",
   "parameters": {
     "query": "climate change policy updates",
-    "recency": "week",
-    "region": "US"
+    "recency": "week"
   }
 }
 ```
@@ -97,8 +96,7 @@ vercel deploy
 {
   "tool": "quickAnswer",
   "parameters": {
-    "question": "What is the current population of Tokyo?",
-    "model": "sonar-small"
+    "question": "What is the current population of Tokyo?"
   }
 }
 ```
@@ -162,52 +160,36 @@ vercel deploy
 }
 ```
 
-## Available Models
+## Model Usage
 
-### Sonar Models
-- **sonar-pro**: Advanced search with comprehensive results and citations
-- **sonar**: Balanced performance and cost for general queries
-- **sonar-small**: Fast, cost-effective for simple questions
-- **sonar-deep-research**: Specialized for comprehensive research tasks
+Each tool is automatically configured with the optimal model for its purpose:
 
-### Model Selection Guidelines
-- Use **sonar-small** for quick facts and simple questions
-- Use **sonar** for general search and research tasks
-- Use **sonar-pro** for complex queries requiring comprehensive analysis
-- Use **sonar-deep-research** for in-depth research projects
+- **search**: Uses sonar-pro (configurable) for comprehensive web search
+- **quickAnswer**: Uses sonar-small for fast, concise responses
+- **newsSearch**: Uses sonar-pro for current events and news
+- **academicSearch**: Uses sonar-pro for scholarly research
+- **deepResearch**: Uses sonar-pro for comprehensive analysis
+- **conversationalSearch**: Uses sonar-pro for multi-turn conversations
+- **compare**: Uses sonar-pro for detailed comparisons
+- **factCheck**: Uses sonar-pro for authoritative fact-checking
 
-## Advanced Features
+## Built-in Optimizations
 
-### Domain Filtering
-Filter search results to specific domains:
-```json
-{
-  "search_domain_filter": ["edu", "gov", "org"]
-}
-```
+Each tool comes pre-configured with optimal settings:
 
-### Recency Filtering
-Filter by how recent the information should be:
-```json
-{
-  "search_recency_filter": "week"
-}
-```
-Options: `hour`, `day`, `week`, `month`
+### Smart Filtering
+- **academicSearch**: Automatically filters to educational and authoritative domains (.edu, .org, .gov)
+- **newsSearch**: Configured for news websites and current information
+- **factCheck**: Focuses on government, educational, and organizational sources
 
-### Temperature Control
-Control response randomness:
-- `0.0-0.2`: Factual, deterministic responses
-- `0.3-0.5`: Balanced creativity and accuracy
-- `0.6-1.0`: More creative and varied responses
+### Optimized Parameters
+- **Temperature**: Set appropriately for each tool (0.1 for fact-checking, 0.4 for conversations)
+- **Citations**: Enabled by default for all tools to provide source transparency
+- **Token Limits**: Configured per tool (150 for quick answers, 2000 for deep research)
 
-### Citation Control
-Enable/disable citations in responses:
-```json
-{
-  "return_citations": true
-}
-```
+### Recency Control
+- **newsSearch**: Supports recency filtering (`hour`, `day`, `week`, `month`)
+- Other tools use current web data by default
 
 ## Response Format
 

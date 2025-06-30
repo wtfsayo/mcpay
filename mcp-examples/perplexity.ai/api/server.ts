@@ -41,16 +41,9 @@ const handler = createMcpHandler((server) => {
     "Perform a real-time web search using Perplexity's Sonar model",
     {
       query: z.string().describe("The search query or question"),
-      model: z.enum(["sonar-pro", "sonar", "sonar-small"]).optional().default("sonar-pro").describe("The Sonar model to use"),
-      temperature: z.number().min(0).max(1).optional().default(0.2).describe("Controls randomness (0.0-1.0)"),
-      max_tokens: z.number().optional().describe("Maximum tokens in response"),
-      top_p: z.number().min(0).max(1).optional().describe("Controls response diversity"),
-      return_citations: z.boolean().optional().default(true).describe("Whether to return citations"),
-      return_images: z.boolean().optional().default(false).describe("Whether to return images"),
-      search_domain_filter: z.array(z.string()).optional().describe("Filter search to specific domains"),
-      search_recency_filter: z.enum(["month", "week", "day", "hour"]).optional().describe("Filter by recency")
+      model: z.enum(["sonar-pro", "sonar", "sonar-small"]).optional().default("sonar-pro").describe("The Sonar model to use")
     },
-    async ({ query, model, temperature, max_tokens, top_p, return_citations, return_images, search_domain_filter, search_recency_filter }) => {
+    async ({ query, model }) => {
       const messages = [
         {
           role: "system",
@@ -63,15 +56,10 @@ const handler = createMcpHandler((server) => {
       ];
 
       const options: Record<string, any> = {
-        temperature,
-        return_citations,
-        return_images
+        temperature: 0.2,
+        return_citations: true,
+        return_images: false
       };
-
-      if (max_tokens) options.max_tokens = max_tokens;
-      if (top_p) options.top_p = top_p;
-      if (search_domain_filter) options.search_domain_filter = search_domain_filter;
-      if (search_recency_filter) options.search_recency_filter = search_recency_filter;
 
       const data = await makePerplexityRequest(messages, model, options);
       
@@ -90,11 +78,9 @@ const handler = createMcpHandler((server) => {
     "Perform academic research using Perplexity with academic focus",
     {
       query: z.string().describe("The academic research query"),
-      focus: z.enum(["academic", "writing", "math", "programming"]).optional().default("academic").describe("Research focus mode"),
-      model: z.enum(["sonar-pro", "sonar"]).optional().default("sonar-pro").describe("The Sonar model to use"),
-      max_tokens: z.number().optional().describe("Maximum tokens in response")
+      focus: z.enum(["academic", "writing", "math", "programming"]).optional().default("academic").describe("Research focus mode")
     },
-    async ({ query, focus, model, max_tokens }) => {
+    async ({ query, focus }) => {
       const systemPrompts = {
         academic: "You are an academic researcher. Provide scholarly, well-cited information from reputable academic sources. Focus on peer-reviewed papers, academic institutions, and authoritative educational content.",
         writing: "You are a writing research assistant. Help with research for academic writing, providing credible sources, proper citations, and comprehensive information for essays, papers, and articles.",
@@ -119,9 +105,7 @@ const handler = createMcpHandler((server) => {
         search_domain_filter: ["edu", "org", "gov"] // Focus on educational and authoritative domains
       };
 
-      if (max_tokens) options.max_tokens = max_tokens;
-
-      const data = await makePerplexityRequest(messages, model, options);
+      const data = await makePerplexityRequest(messages, "sonar-pro", options);
       
       return { 
         content: [{ 
@@ -138,17 +122,10 @@ const handler = createMcpHandler((server) => {
     "Search for current news and recent events",
     {
       query: z.string().describe("The news query or topic"),
-      recency: z.enum(["hour", "day", "week", "month"]).optional().default("day").describe("How recent the news should be"),
-      model: z.enum(["sonar-pro", "sonar"]).optional().default("sonar-pro").describe("The Sonar model to use"),
-      region: z.string().optional().describe("Geographic region for news (e.g., 'US', 'UK', 'global')"),
-      max_tokens: z.number().optional().describe("Maximum tokens in response")
+      recency: z.enum(["hour", "day", "week", "month"]).optional().default("day").describe("How recent the news should be")
     },
-    async ({ query, recency, model, region, max_tokens }) => {
-      let systemContent = "You are a news research assistant. Provide current, factual news information with proper citations. Focus on recent developments and breaking news.";
-      
-      if (region) {
-        systemContent += ` Focus on news from the ${region} region.`;
-      }
+    async ({ query, recency }) => {
+      const systemContent = "You are a news research assistant. Provide current, factual news information with proper citations. Focus on recent developments and breaking news.";
 
       const messages = [
         {
@@ -168,9 +145,7 @@ const handler = createMcpHandler((server) => {
         search_domain_filter: ["com", "org", "net"] // Include news websites
       };
 
-      if (max_tokens) options.max_tokens = max_tokens;
-
-      const data = await makePerplexityRequest(messages, model, options);
+      const data = await makePerplexityRequest(messages, "sonar-pro", options);
       
       return { 
         content: [{ 
@@ -189,21 +164,15 @@ const handler = createMcpHandler((server) => {
       messages: z.array(z.object({
         role: z.enum(["system", "user", "assistant"]),
         content: z.string()
-      })).describe("Array of conversation messages"),
-      model: z.enum(["sonar-pro", "sonar", "sonar-small"]).optional().default("sonar-pro").describe("The Sonar model to use"),
-      temperature: z.number().min(0).max(1).optional().default(0.4).describe("Controls randomness"),
-      max_tokens: z.number().optional().describe("Maximum tokens in response"),
-      return_citations: z.boolean().optional().default(true).describe("Whether to return citations")
+      })).describe("Array of conversation messages")
     },
-    async ({ messages, model, temperature, max_tokens, return_citations }) => {
+    async ({ messages }) => {
       const options: Record<string, any> = {
-        temperature,
-        return_citations
+        temperature: 0.4,
+        return_citations: true
       };
 
-      if (max_tokens) options.max_tokens = max_tokens;
-
-      const data = await makePerplexityRequest(messages, model, options);
+      const data = await makePerplexityRequest(messages, "sonar-pro", options);
       
       return { 
         content: [{ 
@@ -219,11 +188,9 @@ const handler = createMcpHandler((server) => {
     "quickAnswer",
     "Get a quick, concise answer to a question",
     {
-      question: z.string().describe("The question to answer"),
-      model: z.enum(["sonar-small", "sonar", "sonar-pro"]).optional().default("sonar-small").describe("The Sonar model to use"),
-      max_tokens: z.number().optional().default(150).describe("Maximum tokens (default: 150 for concise answers)")
+      question: z.string().describe("The question to answer")
     },
-    async ({ question, model, max_tokens }) => {
+    async ({ question }) => {
       const messages = [
         {
           role: "system",
@@ -237,11 +204,11 @@ const handler = createMcpHandler((server) => {
 
       const options = {
         temperature: 0.1,
-        max_tokens: max_tokens || 150,
+        max_tokens: 150,
         return_citations: true
       };
 
-      const data = await makePerplexityRequest(messages, model, options);
+      const data = await makePerplexityRequest(messages, "sonar-small", options);
       
       return { 
         content: [{ 
@@ -258,11 +225,9 @@ const handler = createMcpHandler((server) => {
     "Perform comprehensive research on a complex topic",
     {
       topic: z.string().describe("The topic to research in depth"),
-      aspects: z.array(z.string()).optional().describe("Specific aspects or angles to focus on"),
-      model: z.enum(["sonar-pro", "sonar-deep-research"]).optional().default("sonar-pro").describe("The model to use for research"),
-      max_tokens: z.number().optional().default(2000).describe("Maximum tokens for comprehensive response")
+      aspects: z.array(z.string()).optional().describe("Specific aspects or angles to focus on")
     },
-    async ({ topic, aspects, model, max_tokens }) => {
+    async ({ topic, aspects }) => {
       let systemContent = "You are a comprehensive research assistant. Provide detailed, well-structured research with multiple perspectives, key findings, and authoritative sources.";
       
       let userContent = `Research the topic: "${topic}"`;
@@ -286,12 +251,12 @@ const handler = createMcpHandler((server) => {
 
       const options = {
         temperature: 0.2,
-        max_tokens: max_tokens || 2000,
+        max_tokens: 2000,
         return_citations: true,
         return_images: false
       };
 
-      const data = await makePerplexityRequest(messages, model, options);
+      const data = await makePerplexityRequest(messages, "sonar-pro", options);
       
       return { 
         content: [{ 
@@ -308,11 +273,9 @@ const handler = createMcpHandler((server) => {
     "Compare two or more topics, concepts, or entities",
     {
       items: z.array(z.string()).min(2).describe("Items to compare (minimum 2)"),
-      criteria: z.array(z.string()).optional().describe("Specific criteria for comparison"),
-      model: z.enum(["sonar-pro", "sonar"]).optional().default("sonar-pro").describe("The Sonar model to use"),
-      max_tokens: z.number().optional().describe("Maximum tokens in response")
+      criteria: z.array(z.string()).optional().describe("Specific criteria for comparison")
     },
-    async ({ items, criteria, model, max_tokens }) => {
+    async ({ items, criteria }) => {
       let userContent = `Compare the following: ${items.join(" vs ")}`;
       
       if (criteria && criteria.length > 0) {
@@ -337,9 +300,7 @@ const handler = createMcpHandler((server) => {
         return_citations: true
       };
 
-      if (max_tokens) options.max_tokens = max_tokens;
-
-      const data = await makePerplexityRequest(messages, model, options);
+      const data = await makePerplexityRequest(messages, "sonar-pro", options);
       
       return { 
         content: [{ 
@@ -355,11 +316,9 @@ const handler = createMcpHandler((server) => {
     "factCheck",
     "Verify claims and fact-check statements",
     {
-      claim: z.string().describe("The claim or statement to fact-check"),
-      model: z.enum(["sonar-pro", "sonar"]).optional().default("sonar-pro").describe("The Sonar model to use"),
-      max_tokens: z.number().optional().describe("Maximum tokens in response")
+      claim: z.string().describe("The claim or statement to fact-check")
     },
-    async ({ claim, model, max_tokens }) => {
+    async ({ claim }) => {
       const messages = [
         {
           role: "system",
@@ -377,9 +336,7 @@ const handler = createMcpHandler((server) => {
         search_domain_filter: ["gov", "edu", "org"] // Focus on authoritative domains
       };
 
-      if (max_tokens) options.max_tokens = max_tokens;
-
-      const data = await makePerplexityRequest(messages, model, options);
+      const data = await makePerplexityRequest(messages, "sonar-pro", options);
       
       return { 
         content: [{ 
