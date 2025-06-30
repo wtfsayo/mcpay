@@ -1,5 +1,5 @@
 import { experimental_createMCPClient, generateText } from "ai";
-import { createPaymentTransport } from "mcpay/browser";
+import { createPaymentTransport } from "mcpay/client";
 import { Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { openai } from "./ai.js";

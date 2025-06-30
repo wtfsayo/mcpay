@@ -7,13 +7,16 @@ import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } f
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textArea"
 import { useTheme } from "@/context/ThemeContext"
-import { urlUtils } from "@/lib/utils"
 import {
   formatTokenAmount,
+  getNetworkByChainId,
   getTokenInfo,
   getTokenVerification,
+  NETWORKS,
   type Network
 } from "@/lib/tokens"
+import { urlUtils } from "@/lib/utils"
+import { switchToNetwork } from "@/lib/wallet-utils"
 import { experimental_createMCPClient } from "ai"
 import {
   AlertCircle,
@@ -23,16 +26,12 @@ import {
   Loader2,
   Play,
   RefreshCw,
-  Shield,
   Wrench
 } from "lucide-react"
-import { createPaymentTransport, PaymentTransport } from "mcpay/browser"
+import { createPaymentTransport } from "mcpay/client"
 import Image from "next/image"
 import { useEffect, useState } from "react"
-import { useAccount, useWalletClient, useChainId } from "wagmi"
-import type { Account } from "viem"
-import { switchToNetwork, getConnectionStatus } from "@/lib/wallet-utils"
-import { NETWORKS, getNetworkByChainId } from "@/lib/tokens"
+import { useAccount, useChainId, useWalletClient } from "wagmi"
 
 interface InputProperty {
   type: string

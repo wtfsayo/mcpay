@@ -1,7 +1,7 @@
 import { AgentKit, CdpV2WalletProvider } from "@coinbase/agentkit";
 import { getVercelAITools } from "@coinbase/agentkit-vercel-ai-sdk";
 import { experimental_createMCPClient, generateText } from "ai";
-import { createPaymentTransport } from "mcpay/browser";
+import { createPaymentTransport } from "mcpay/client";
 import { createWalletClient, http, WalletClient } from "viem";
 import { toAccount } from "viem/accounts";
 import { baseSepolia } from "viem/chains";

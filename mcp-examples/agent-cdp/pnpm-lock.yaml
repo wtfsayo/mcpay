@@ -39,8 +39,8 @@ importers:
         specifier: ^16.5.0
         version: 16.5.0
       mcpay:
-        specifier: ^0.0.4
-        version: 0.0.4(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)
+        specifier: ^0.0.9
+        version: 0.0.9(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)
       viem:
         specifier: ^2.31.3
         version: 2.31.3(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)(zod@3.25.67)
@@ -1237,8 +1237,8 @@ packages:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
     engines: {node: '>= 0.4'}
 
-  mcpay@0.0.4:
-    resolution: {integrity: sha512-mURA01aWUynvJ/3FtMwwuM6s//9VAMGkpzfF6HjrEPo2NdT/3Y7aZxWIeiHS8CD4rgCRy6mWCjki110BS8vniA==}
+  mcpay@0.0.9:
+    resolution: {integrity: sha512-1SiRgqeUOp+5E+mZEzQANXJiHr+ACV0YKtTgfpHxkNohuiCmIRZfGdAMTxo2nQ4DqVZZzJpZY38V6PGXL/3Zew==}
     engines: {node: '>=18.0.0', pnpm: '>=10.0.0'}
     hasBin: true
 
@@ -3297,7 +3297,7 @@ snapshots:
 
   math-intrinsics@1.1.0: {}
 
-  mcpay@0.0.4(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10):
+  mcpay@0.0.9(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10):
     dependencies:
       '@modelcontextprotocol/sdk': 1.12.3
       commander: 12.1.0
