@@ -120,11 +120,14 @@ const categories = [
 export default function MCPBrowser() {
   const [selectedCategory, setSelectedCategory] = useState("All")
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([])
+  const [allServers, setAllServers] = useState<MCPServer[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
   const [analyticsLoading, setAnalyticsLoading] = useState(true)
   const [analyticsError, setAnalyticsError] = useState<string | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMoreServers, setHasMoreServers] = useState(true)
   const { isDark, toggleTheme } = useTheme()
 
   useEffect(() => {
@@ -152,7 +155,7 @@ export default function MCPBrowser() {
         setLoading(true)
         setError(null)
 
-        const serversResponse = await fetch(urlUtils.getApiUrl('/servers?limit=50&type=trending'))
+        const serversResponse = await fetch(urlUtils.getApiUrl('/servers?limit=9&type=trending'))
         if (!serversResponse.ok) {
           throw new Error(`Failed to fetch servers: ${serversResponse.status}`)
         }
@@ -161,6 +164,8 @@ export default function MCPBrowser() {
         const transformedServers = servers.map(server => transformServerData(server))
 
         setMcpServers(transformedServers)
+        setAllServers(transformedServers)
+        setHasMoreServers(servers.length === 9) // If we got 9 servers, there might be more
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch servers')
       } finally {
@@ -172,9 +177,42 @@ export default function MCPBrowser() {
     fetchServers()
   }, [])
 
+  // Reset servers when category changes
+  useEffect(() => {
+    if (selectedCategory === "All") {
+      setMcpServers(allServers)
+    } else {
+      const filteredServers = allServers.filter((server: MCPServer) => server.category === selectedCategory)
+      setMcpServers(filteredServers)
+    }
+  }, [selectedCategory, allServers])
+
   const filteredServers = mcpServers.filter(server =>
     selectedCategory === "All" || server.category === selectedCategory
   )
+
+  const loadMore = async () => {
+    setLoadingMore(true)
+    try {
+      const currentOffset = mcpServers.length
+      const serversResponse = await fetch(urlUtils.getApiUrl(`/servers?limit=9&offset=${currentOffset}&type=trending`))
+      
+      if (!serversResponse.ok) {
+        throw new Error(`Failed to fetch more servers: ${serversResponse.status}`)
+      }
+
+      const servers: APIServer[] = await serversResponse.json()
+      const transformedServers = servers.map(server => transformServerData(server))
+
+      setMcpServers((prev: MCPServer[]) => [...prev, ...transformedServers])
+      setAllServers((prev: MCPServer[]) => [...prev, ...transformedServers])
+      setHasMoreServers(servers.length === 9) // If we got 9 servers, there might be more
+    } catch (err) {
+      console.error('Error loading more servers:', err)
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
@@ -462,24 +500,7 @@ export default function MCPBrowser() {
           </div>
         </div>
 
-                {/* Results Count with better styling */}
-        <div className="mb-8">
-          {loading ? (
-            <div className={`h-6 w-48 rounded-full animate-pulse ${isDark ? "bg-gray-700" : "bg-gray-200"}`} />
-          ) : error ? (
-            <div className="flex items-center gap-2">
-              <AlertCircle className={`h-5 w-5 ${isDark ? "text-red-400" : "text-red-500"}`} />
-              <p className={`font-medium ${isDark ? "text-red-400" : "text-red-500"}`}>Failed to load servers</p>
-            </div>
-          ) : (
-            <div className="flex items-center gap-3">
-              <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse" />
-              <p className={`text-lg font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                {filteredServers.length} server{filteredServers.length !== 1 ? "s" : ""} available
-              </p>
-            </div>
-          )}
-        </div>
+
 
         {/* Enhanced MCP Server Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">
@@ -512,7 +533,7 @@ export default function MCPBrowser() {
               </p>
             </div>
           ) : (
-            filteredServers.map((server, index) => (
+            filteredServers.map((server: MCPServer, index: number) => (
               <Card key={server.id} className={`group relative overflow-hidden border ${isDark
                 ? "bg-surface-dark backdrop-blur border-white/[0.08] shadow-sm hover:shadow-md"
                 : "bg-surface backdrop-blur border-black/[0.05] shadow-sm hover:shadow-md"
@@ -555,7 +576,7 @@ export default function MCPBrowser() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={(e) => {
+                        onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
                           e.preventDefault();
                           e.stopPropagation();
                           copyToClipboard(urlUtils.getMcpUrl(server.id));
@@ -583,7 +604,7 @@ export default function MCPBrowser() {
                     size="lg"
                     variant="outline"
                     className="w-full hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:border-blue-300 dark:hover:border-blue-600 transition-all duration-300"
-                    onClick={(e) => {
+                    onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
                       e.preventDefault();
                       e.stopPropagation();
                       window.location.href = `/servers/${server.id}`;
@@ -602,6 +623,31 @@ export default function MCPBrowser() {
             ))
           )}
         </div>
+
+        {/* Load More Button */}
+        {hasMoreServers && !loading && (
+          <div className="text-center mb-16">
+            <Button
+              onClick={loadMore}
+              disabled={loadingMore}
+              size="lg"
+              variant="outline"
+              className={`px-8 py-3 ${isDark ? "bg-gray-800/50 hover:bg-gray-700/50 border-gray-600" : "bg-white/50 hover:bg-white/80 border-gray-300"} backdrop-blur transition-all duration-300 hover:shadow-lg`}
+            >
+              {loadingMore ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-current border-t-transparent mr-2" />
+                  Loading...
+                </>
+              ) : (
+                <>
+                  <ArrowRight className="h-4 w-4 mr-2" />
+                  Load More Servers
+                </>
+              )}
+            </Button>
+          </div>
+        )}
 
         {/* Enhanced Footer */}
         <div className={`text-center py-12 border-t ${isDark ? "border-gray-700" : "border-gray-200"}`}>
