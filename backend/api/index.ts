@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from 'hono/cors';
 import api from "./api.js";    
+import facilitator from "./facilitator.js";
 import mcpProxy from "./mcp-proxy.js";
 import mcpProxyV2 from "./monetized-mcp-proxy.js";
 import openmcp from "./openmcp.js";
@@ -18,6 +19,7 @@ app.use('*', cors({
 }));
 
 app.route('/api', api);
+app.route('/facilitator', facilitator);
 app.route('/mcp', mcpProxy);
 app.route('/monetized-mcp', mcpProxyV2);
 app.route('/openmcp', openmcp);
