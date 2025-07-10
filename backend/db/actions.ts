@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import db from "./index.js";
 import {
     analytics,
@@ -458,6 +458,161 @@ export const txOperations = {
             .slice(offset, offset + limit);
 
         return sortedServers;
+    },
+
+    searchMcpServers: (searchTerm: string, limit = 10, offset = 0) => async (tx: TransactionType) => {
+        // Input validation and sanitization
+        if (!searchTerm || typeof searchTerm !== 'string') {
+            throw new Error('Invalid search term');
+        }
+        
+        // Sanitize search term - remove any potentially dangerous characters
+        const sanitizedTerm = searchTerm
+            .trim()
+            .replace(/[%_\\]/g, '\\$&') // Escape SQL wildcards
+            .substring(0, 100); // Limit length to prevent DoS
+            
+        if (sanitizedTerm.length < 1) {
+            throw new Error('Search term too short');
+        }
+        
+        // Validate and sanitize numeric parameters
+        const safeLimitNum = Math.max(1, Math.min(100, Number(limit) || 10)); // Limit between 1-100
+        const safeOffsetNum = Math.max(0, Number(offset) || 0);
+        
+        // Use parameterized search pattern
+        const searchPattern = `%${sanitizedTerm}%`;
+        
+        // Use PostgreSQL's advanced search capabilities with proper parameterization
+        const servers = await tx.query.mcpServers.findMany({
+            where: or(
+                ilike(mcpServers.name, searchPattern),
+                ilike(mcpServers.description, searchPattern),
+                // Use PostgreSQL's full-text search with proper parameterization
+                sql`to_tsvector('english', coalesce(${mcpServers.name}, '') || ' ' || coalesce(${mcpServers.description}, '')) @@ plainto_tsquery('english', ${sanitizedTerm})`
+            ),
+            limit: safeLimitNum,
+            offset: safeOffsetNum,
+            orderBy: [
+                // Prioritize exact matches in name, then description, then by creation date
+                sql`CASE 
+                    WHEN ${mcpServers.name} ILIKE ${searchPattern} THEN 1
+                    WHEN ${mcpServers.description} ILIKE ${searchPattern} THEN 2
+                    ELSE 3
+                END`,
+                desc(mcpServers.createdAt)
+            ],
+            columns: {
+                id: true,
+                serverId: true,
+                name: true,
+                receiverAddress: true,
+                description: true,
+                metadata: true,
+                status: true,
+                createdAt: true,
+                updatedAt: true
+            },
+            with: {
+                creator: {
+                    columns: {
+                        id: true,
+                        walletAddress: true,
+                        displayName: true,
+                        avatarUrl: true
+                    }
+                },
+                tools: {
+                    columns: {
+                        id: true,
+                        name: true,
+                        description: true,
+                        inputSchema: true,
+                        isMonetized: true,
+                        payment: true,
+                        status: true,
+                        createdAt: true,
+                        updatedAt: true
+                    },
+                    orderBy: [mcpTools.name]
+                }
+            }
+        });
+
+        // Also search for servers that have matching tools using safe subquery
+        const serversWithMatchingTools = await tx.query.mcpServers.findMany({
+            where: sql`EXISTS (
+                SELECT 1 FROM ${mcpTools} 
+                WHERE ${mcpTools.serverId} = ${mcpServers.id}
+                AND (
+                    ${mcpTools.name} ILIKE ${searchPattern}
+                    OR ${mcpTools.description} ILIKE ${searchPattern}
+                    OR to_tsvector('english', coalesce(${mcpTools.name}, '') || ' ' || coalesce(${mcpTools.description}, '')) @@ plainto_tsquery('english', ${sanitizedTerm})
+                )
+            )`,
+            limit: safeLimitNum,
+            offset: safeOffsetNum,
+            columns: {
+                id: true,
+                serverId: true,
+                name: true,
+                receiverAddress: true,
+                description: true,
+                metadata: true,
+                status: true,
+                createdAt: true,
+                updatedAt: true
+            },
+            with: {
+                creator: {
+                    columns: {
+                        id: true,
+                        walletAddress: true,
+                        displayName: true,
+                        avatarUrl: true
+                    }
+                },
+                tools: {
+                    columns: {
+                        id: true,
+                        name: true,
+                        description: true,
+                        inputSchema: true,
+                        isMonetized: true,
+                        payment: true,
+                        status: true,
+                        createdAt: true,
+                        updatedAt: true
+                    },
+                    orderBy: [mcpTools.name]
+                }
+            }
+        });
+
+        // Combine results and remove duplicates
+        const allServers = [...servers, ...serversWithMatchingTools];
+        const uniqueServers = allServers.filter((server, index, self) => 
+            index === self.findIndex(s => s.id === server.id)
+        );
+
+        // Sort by relevance (exact name matches first, then description matches, then tool matches)
+        const sortedResults = uniqueServers.sort((a, b) => {
+            const cleanSearchTerm = sanitizedTerm.toLowerCase();
+            const aNameMatch = a.name?.toLowerCase().includes(cleanSearchTerm);
+            const bNameMatch = b.name?.toLowerCase().includes(cleanSearchTerm);
+            const aDescMatch = a.description?.toLowerCase().includes(cleanSearchTerm);
+            const bDescMatch = b.description?.toLowerCase().includes(cleanSearchTerm);
+            
+            if (aNameMatch && !bNameMatch) return -1;
+            if (!aNameMatch && bNameMatch) return 1;
+            if (aDescMatch && !bDescMatch) return -1;
+            if (!aDescMatch && bDescMatch) return 1;
+            
+            // If equal relevance, sort by creation date
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        });
+
+        return sortedResults.slice(0, safeLimitNum); // Additional safety limit
     },
 
     updateMcpServer: (id: string, data: {

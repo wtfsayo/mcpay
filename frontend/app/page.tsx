@@ -4,9 +4,10 @@ import { MCPServer } from "@/components/ToolsModal"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { toast, ToastContainer } from "@/components/ui/toast"
 import { useTheme } from "@/context/ThemeContext"
-import { urlUtils } from "@/lib/utils"
+import { urlUtils, textUtils } from "@/lib/utils"
 import {
   AlertCircle,
   ArrowRight,
@@ -15,11 +16,13 @@ import {
   Globe,
   Moon,
   Rocket,
+  Search,
   Server,
   Sparkles,
   Sun,
   PenToolIcon as Tool,
   TrendingUp,
+  X,
   Zap
 } from "lucide-react"
 import Image from "next/image"
@@ -112,15 +115,10 @@ const transformServerData = (apiServer: APIServer): MCPServer => ({
   })),
 });
 
-const categories = [
-  "All", "General", "Finance", "Automation", "Database",
-  "Development", "Productivity", "Utilities", "Communication", "AI/ML"
-]
+// Categories removed from landing page as requested
 
 export default function MCPBrowser() {
-  const [selectedCategory, setSelectedCategory] = useState("All")
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([])
-  const [allServers, setAllServers] = useState<MCPServer[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
@@ -128,6 +126,14 @@ export default function MCPBrowser() {
   const [analyticsError, setAnalyticsError] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMoreServers, setHasMoreServers] = useState(true)
+  
+  // Search state
+  const [searchTerm, setSearchTerm] = useState("")
+  const [searchResults, setSearchResults] = useState<MCPServer[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [isSearchMode, setIsSearchMode] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
+  
   const { isDark, toggleTheme } = useTheme()
 
   useEffect(() => {
@@ -164,7 +170,6 @@ export default function MCPBrowser() {
         const transformedServers = servers.map(server => transformServerData(server))
 
         setMcpServers(transformedServers)
-        setAllServers(transformedServers)
         setHasMoreServers(servers.length === 9) // If we got 9 servers, there might be more
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch servers')
@@ -177,19 +182,8 @@ export default function MCPBrowser() {
     fetchServers()
   }, [])
 
-  // Reset servers when category changes
-  useEffect(() => {
-    if (selectedCategory === "All") {
-      setMcpServers(allServers)
-    } else {
-      const filteredServers = allServers.filter((server: MCPServer) => server.category === selectedCategory)
-      setMcpServers(filteredServers)
-    }
-  }, [selectedCategory, allServers])
-
-  const filteredServers = mcpServers.filter(server =>
-    selectedCategory === "All" || server.category === selectedCategory
-  )
+  // Show search results when in search mode, otherwise show trending servers
+  const filteredServers = isSearchMode ? searchResults : mcpServers
 
   const loadMore = async () => {
     setLoadingMore(true)
@@ -205,7 +199,6 @@ export default function MCPBrowser() {
       const transformedServers = servers.map(server => transformServerData(server))
 
       setMcpServers((prev: MCPServer[]) => [...prev, ...transformedServers])
-      setAllServers((prev: MCPServer[]) => [...prev, ...transformedServers])
       setHasMoreServers(servers.length === 9) // If we got 9 servers, there might be more
     } catch (err) {
       console.error('Error loading more servers:', err)
@@ -218,6 +211,79 @@ export default function MCPBrowser() {
     navigator.clipboard.writeText(text)
     toast.success("Endpoint copied • paste into `fetch()`")
   }
+
+  // Search functionality with security validations
+  const handleSearch = async (term: string) => {
+    // Use the utility function for validation
+    const validation = textUtils.validateSearchTerm(term)
+    
+    if (!validation.isValid) {
+      if (validation.error) {
+        setSearchError(validation.error)
+        setSearchResults([])
+      } else {
+        setIsSearchMode(false)
+        setSearchResults([])
+        setSearchError(null)
+      }
+      return
+    }
+
+    const trimmedTerm = term.trim()
+    setSearchLoading(true)
+    setSearchError(null)
+    setIsSearchMode(true)
+
+    try {
+      const response = await fetch(urlUtils.getApiUrl(`/servers/search?q=${encodeURIComponent(trimmedTerm)}&limit=20`))
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `Search failed: ${response.status}`)
+      }
+
+      const servers: APIServer[] = await response.json()
+      const transformedServers = servers.map(server => transformServerData(server))
+      
+      setSearchResults(transformedServers)
+    } catch (err) {
+      setSearchError(err instanceof Error ? err.message : 'Search failed')
+      setSearchResults([])
+    } finally {
+      setSearchLoading(false)
+    }
+  }
+
+  const clearSearch = () => {
+    setSearchTerm("")
+    setIsSearchMode(false)
+    setSearchResults([])
+    setSearchError(null)
+  }
+
+  // Handle search term changes - exit search mode when empty
+  const handleSearchTermChange = (value: string) => {
+    setSearchTerm(value)
+    if (!value.trim()) {
+      setIsSearchMode(false)
+      setSearchResults([])
+      setSearchError(null)
+    }
+  }
+
+  // Debounced search - only trigger when user has actually typed something
+  useEffect(() => {
+    // Don't search on initial load or when search term is empty
+    if (!searchTerm.trim()) {
+      return
+    }
+
+    const timeoutId = setTimeout(() => {
+      handleSearch(searchTerm)
+    }, 300)
+
+    return () => clearTimeout(timeoutId)
+  }, [searchTerm])
 
   // Format number with commas
   const formatNumber = (num: number | undefined | null) => {
@@ -479,32 +545,73 @@ export default function MCPBrowser() {
           </div>
         </div>
 
-        {/* Enhanced Category Filter */}
-        <div className="flex justify-center mb-12">
-          <div className="flex gap-2 flex-wrap p-2 rounded-2xl bg-white/50 dark:bg-gray-800/50 backdrop-blur shadow-lg border border-white/20 dark:border-gray-700/20">
-            {categories.map((category) => (
-              <Button
-                key={category}
-                variant={selectedCategory === category ? "default" : "ghost"}
-                onClick={() => setSelectedCategory(category)}
-                size="sm"
-                disabled={loading}
-                className={selectedCategory === category
-                  ? `${isDark ? "bg-blue-600 hover:bg-blue-700" : "bg-blue-600 hover:bg-blue-700"} text-white shadow-lg`
-                  : "hover:bg-white/70 dark:hover:bg-gray-700/70"
-                }
-              >
-                {category}
-              </Button>
-            ))}
+        {/* Enhanced Search Bar */}
+        <div className="flex justify-center mb-8">
+          <div className="relative w-full max-w-md">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className={`h-5 w-5 ${isDark ? "text-gray-400" : "text-gray-500"}`} />
+            </div>
+                         <Input
+               type="text"
+               placeholder="Search servers, tools, or descriptions..."
+               value={searchTerm}
+               onChange={(e) => handleSearchTermChange(e.target.value)}
+               className={`pl-10 pr-10 py-3 w-full rounded-2xl border-0 shadow-lg ${
+                 isDark 
+                   ? "bg-gray-800/50 backdrop-blur text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500" 
+                   : "bg-white/80 backdrop-blur text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-blue-500"
+               }`}
+               maxLength={100}
+               disabled={loading}
+             />
+            {searchTerm && (
+              <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={clearSearch}
+                  className="h-6 w-6 p-0 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  disabled={loading}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </div>
         </div>
+
+                 {/* Search Status */}
+         {isSearchMode && !searchError && (
+           <div className="text-center mb-6">
+             <div className="flex items-center justify-center gap-2 mb-2">
+               {searchLoading && (
+                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+               )}
+               <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                 {searchLoading 
+                   ? "Searching..." 
+                   : `Found ${searchResults.length} server${searchResults.length === 1 ? '' : 's'} matching "${textUtils.sanitizeForDisplay(searchTerm, 50)}"`
+                 }
+               </p>
+             </div>
+             <Button
+               size="sm"
+               variant="outline"
+               onClick={clearSearch}
+               className="text-xs"
+             >
+               Back to trending servers
+             </Button>
+           </div>
+         )}
+
+        
 
 
 
         {/* Enhanced MCP Server Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">
-          {loading ? (
+          {(loading || searchLoading) ? (
             Array.from({ length: 6 }).map((_, index) => (
               <SkeletonCard key={`skeleton-${index}`} delay={index * 100} />
             ))
@@ -522,15 +629,74 @@ export default function MCPBrowser() {
                 Retry Connection
               </Button>
             </div>
+          ) : searchError ? (
+            <div className="col-span-full text-center py-16">
+              <div className="p-6 rounded-2xl bg-gray-100 dark:bg-gray-800 w-fit mx-auto mb-6">
+                <Search className={`h-16 w-16 ${isDark ? "text-gray-500" : "text-gray-400"}`} />
+              </div>
+              <h3 className="text-2xl font-bold mb-4">Couldn&apos;t find anything</h3>
+              <p className={`mb-6 text-lg ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                We couldn&apos;t find any servers matching &quot;{textUtils.sanitizeForDisplay(searchTerm, 50)}&quot;.
+              </p>
+              <div className="flex gap-4 justify-center">
+                <Button onClick={clearSearch} size="lg" variant="outline">
+                  <TrendingUp className="h-4 w-4 mr-2" />
+                  Back to trending servers
+                </Button>
+                                                      <Button 
+                       onClick={() => {
+                         setSearchTerm("")
+                         setSearchError(null)
+                         const inputElement = document.querySelector(`input[type="text"]`) as HTMLInputElement
+                         inputElement?.focus()
+                       }} 
+                       size="lg" 
+                       className={`${isDark ? "bg-blue-600 hover:bg-blue-700" : "bg-blue-600 hover:bg-blue-700"} text-white`}
+                     >
+                       <Search className="h-4 w-4 mr-2" />
+                       Try different search
+                     </Button>
+              </div>
+            </div>
           ) : filteredServers.length === 0 ? (
             <div className="col-span-full text-center py-16">
               <div className="p-6 rounded-2xl bg-gray-100 dark:bg-gray-800 w-fit mx-auto mb-6">
-                <Globe className={`h-16 w-16 ${isDark ? "text-gray-500" : "text-gray-400"}`} />
+                {isSearchMode ? (
+                  <Search className={`h-16 w-16 ${isDark ? "text-gray-500" : "text-gray-400"}`} />
+                ) : (
+                  <Globe className={`h-16 w-16 ${isDark ? "text-gray-500" : "text-gray-400"}`} />
+                )}
               </div>
-              <h3 className="text-2xl font-bold mb-4">No Servers Found</h3>
-              <p className={`text-lg ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                {mcpServers.length === 0 ? "Be the first to register a server!" : "Try exploring a different category."}
+              <h3 className="text-2xl font-bold mb-4">
+                {isSearchMode ? "No results found" : "No Servers Found"}
+              </h3>
+              <p className={`mb-6 text-lg ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                {isSearchMode 
+                  ? `We couldn&apos;t find any servers matching &quot;${textUtils.sanitizeForDisplay(searchTerm, 50)}&quot;.`
+                  : "Be the first to register a server!"
+                }
               </p>
+              {isSearchMode && (
+                <div className="flex gap-4 justify-center">
+                  <Button onClick={clearSearch} size="lg" variant="outline">
+                    <TrendingUp className="h-4 w-4 mr-2" />
+                    Back to trending servers
+                  </Button>
+                  <Button 
+                    onClick={() => {
+                      setSearchTerm("")
+                      setSearchError(null)
+                      const inputElement = document.querySelector(`input[type="text"]`) as HTMLInputElement
+                      inputElement?.focus()
+                    }} 
+                    size="lg" 
+                    className={`${isDark ? "bg-blue-600 hover:bg-blue-700" : "bg-blue-600 hover:bg-blue-700"} text-white`}
+                  >
+                    <Search className="h-4 w-4 mr-2" />
+                    Try different search
+                  </Button>
+                </div>
+              )}
             </div>
           ) : (
             filteredServers.map((server: MCPServer, index: number) => (
