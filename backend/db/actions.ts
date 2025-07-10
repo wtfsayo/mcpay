@@ -483,7 +483,7 @@ export const txOperations = {
         // Use parameterized search pattern
         const searchPattern = `%${sanitizedTerm}%`;
         
-        // Use PostgreSQL's advanced search capabilities with proper parameterization
+        // Search servers by name and description (with activity data for scoring)
         const servers = await tx.query.mcpServers.findMany({
             where: or(
                 ilike(mcpServers.name, searchPattern),
@@ -491,17 +491,6 @@ export const txOperations = {
                 // Use PostgreSQL's full-text search with proper parameterization
                 sql`to_tsvector('english', coalesce(${mcpServers.name}, '') || ' ' || coalesce(${mcpServers.description}, '')) @@ plainto_tsquery('english', ${sanitizedTerm})`
             ),
-            limit: safeLimitNum,
-            offset: safeOffsetNum,
-            orderBy: [
-                // Prioritize exact matches in name, then description, then by creation date
-                sql`CASE 
-                    WHEN ${mcpServers.name} ILIKE ${searchPattern} THEN 1
-                    WHEN ${mcpServers.description} ILIKE ${searchPattern} THEN 2
-                    ELSE 3
-                END`,
-                desc(mcpServers.createdAt)
-            ],
             columns: {
                 id: true,
                 serverId: true,
@@ -533,61 +522,109 @@ export const txOperations = {
                         status: true,
                         createdAt: true,
                         updatedAt: true
+                    },
+                    with: {
+                        payments: {
+                            where: eq(payments.status, 'completed'),
+                            columns: {
+                                id: true,
+                                amount: true,
+                                currency: true,
+                                userId: true,
+                                createdAt: true
+                            }
+                        },
+                        usage: {
+                            columns: {
+                                id: true,
+                                userId: true,
+                                timestamp: true,
+                                responseStatus: true
+                            }
+                        }
                     },
                     orderBy: [mcpTools.name]
                 }
             }
         });
 
-        // Also search for servers that have matching tools using safe subquery
-        const serversWithMatchingTools = await tx.query.mcpServers.findMany({
-            where: sql`EXISTS (
-                SELECT 1 FROM ${mcpTools} 
-                WHERE ${mcpTools.serverId} = ${mcpServers.id}
-                AND (
-                    ${mcpTools.name} ILIKE ${searchPattern}
-                    OR ${mcpTools.description} ILIKE ${searchPattern}
-                    OR to_tsvector('english', coalesce(${mcpTools.name}, '') || ' ' || coalesce(${mcpTools.description}, '')) @@ plainto_tsquery('english', ${sanitizedTerm})
-                )
-            )`,
-            limit: safeLimitNum,
-            offset: safeOffsetNum,
+        // Search for tools that match, then get their servers
+        const matchingTools = await tx.query.mcpTools.findMany({
+            where: or(
+                ilike(mcpTools.name, searchPattern),
+                ilike(mcpTools.description, searchPattern),
+                sql`to_tsvector('english', coalesce(${mcpTools.name}, '') || ' ' || coalesce(${mcpTools.description}, '')) @@ plainto_tsquery('english', ${sanitizedTerm})`
+            ),
             columns: {
-                id: true,
-                serverId: true,
-                name: true,
-                receiverAddress: true,
-                description: true,
-                metadata: true,
-                status: true,
-                createdAt: true,
-                updatedAt: true
-            },
-            with: {
-                creator: {
-                    columns: {
-                        id: true,
-                        walletAddress: true,
-                        displayName: true,
-                        avatarUrl: true
-                    }
-                },
-                tools: {
-                    columns: {
-                        id: true,
-                        name: true,
-                        description: true,
-                        inputSchema: true,
-                        isMonetized: true,
-                        payment: true,
-                        status: true,
-                        createdAt: true,
-                        updatedAt: true
-                    },
-                    orderBy: [mcpTools.name]
-                }
+                serverId: true
             }
         });
+
+        // Get unique server IDs from matching tools
+        const serverIdsFromTools = [...new Set(matchingTools.map(tool => tool.serverId))];
+
+        // Fetch servers that have matching tools (using simple IN clause with individual conditions)
+        let serversWithMatchingTools: any[] = [];
+        if (serverIdsFromTools.length > 0) {
+            serversWithMatchingTools = await tx.query.mcpServers.findMany({
+                where: or(...serverIdsFromTools.map(serverId => eq(mcpServers.id, serverId))),
+                columns: {
+                    id: true,
+                    serverId: true,
+                    name: true,
+                    receiverAddress: true,
+                    description: true,
+                    metadata: true,
+                    status: true,
+                    createdAt: true,
+                    updatedAt: true
+                },
+                with: {
+                    creator: {
+                        columns: {
+                            id: true,
+                            walletAddress: true,
+                            displayName: true,
+                            avatarUrl: true
+                        }
+                    },
+                    tools: {
+                        columns: {
+                            id: true,
+                            name: true,
+                            description: true,
+                            inputSchema: true,
+                            isMonetized: true,
+                            payment: true,
+                            status: true,
+                            createdAt: true,
+                            updatedAt: true
+                        },
+                        with: {
+                            payments: {
+                                where: eq(payments.status, 'completed'),
+                                columns: {
+                                    id: true,
+                                    amount: true,
+                                    currency: true,
+                                    userId: true,
+                                    createdAt: true
+                                }
+                            },
+                            usage: {
+                                columns: {
+                                    id: true,
+                                    userId: true,
+                                    timestamp: true,
+                                    responseStatus: true
+                                }
+                            }
+                        },
+                        orderBy: [mcpTools.name]
+                    }
+                }
+            });
+        }
 
         // Combine results and remove duplicates
         const allServers = [...servers, ...serversWithMatchingTools];
@@ -595,24 +632,98 @@ export const txOperations = {
             index === self.findIndex(s => s.id === server.id)
         );
 
-        // Sort by relevance (exact name matches first, then description matches, then tool matches)
-        const sortedResults = uniqueServers.sort((a, b) => {
+        // Calculate activity metrics and search relevance for each server
+        const serversWithScoring = uniqueServers.map(server => {
             const cleanSearchTerm = sanitizedTerm.toLowerCase();
-            const aNameMatch = a.name?.toLowerCase().includes(cleanSearchTerm);
-            const bNameMatch = b.name?.toLowerCase().includes(cleanSearchTerm);
-            const aDescMatch = a.description?.toLowerCase().includes(cleanSearchTerm);
-            const bDescMatch = b.description?.toLowerCase().includes(cleanSearchTerm);
             
-            if (aNameMatch && !bNameMatch) return -1;
-            if (!aNameMatch && bNameMatch) return 1;
-            if (aDescMatch && !bDescMatch) return -1;
-            if (!aDescMatch && bDescMatch) return 1;
+            // Calculate search relevance score (0-3, higher is better)
+            let relevanceScore = 0;
+            if (server.name?.toLowerCase().includes(cleanSearchTerm)) {
+                relevanceScore += 3; // Exact name match gets highest relevance
+            }
+            if (server.description?.toLowerCase().includes(cleanSearchTerm)) {
+                relevanceScore += 2; // Description match gets medium relevance
+            }
+            // Check if any tools match the search term
+            const hasMatchingTool = server.tools?.some((tool: any) => 
+                tool.name?.toLowerCase().includes(cleanSearchTerm) || 
+                tool.description?.toLowerCase().includes(cleanSearchTerm)
+            );
+            if (hasMatchingTool) {
+                relevanceScore += 1; // Tool match gets lower relevance
+            }
+
+            // Calculate activity metrics (same as trending algorithm)
+            const allPayments = server.tools?.flatMap((tool: any) => tool.payments || []) || [];
+            const allUsage = server.tools?.flatMap((tool: any) => tool.usage || []) || [];
             
-            // If equal relevance, sort by creation date
-            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+            const totalPayments = allPayments.length;
+            const totalRevenue = allPayments.reduce((sum: number, payment: any) => 
+                sum + parseFloat(payment.amount), 0
+            );
+            const totalUsage = allUsage.length;
+            const successfulUsage = allUsage.filter((usage: any) => 
+                usage.responseStatus === 'success' || usage.responseStatus === '200'
+            ).length;
+            
+            // Get unique users from both payments and usage
+            const paymentUserIds = allPayments
+                .map((p: any) => p.userId)
+                .filter(Boolean);
+            const usageUserIds = allUsage
+                .map((u: any) => u.userId)
+                .filter(Boolean);
+            const uniqueUsers = new Set([...paymentUserIds, ...usageUserIds]).size;
+            
+            // Calculate recent activity (last 30 days)
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            
+            const recentPayments = allPayments.filter((p: any) => 
+                new Date(p.createdAt) > thirtyDaysAgo
+            ).length;
+            const recentUsage = allUsage.filter((u: any) => 
+                new Date(u.timestamp) > thirtyDaysAgo
+            ).length;
+            
+            // Calculate activity score (same weights as trending)
+            const activityScore = (
+                totalPayments * 10 +        // High weight for payments
+                totalRevenue * 0.1 +        // Revenue impact (assuming small amounts)
+                totalUsage * 2 +            // Medium weight for usage
+                uniqueUsers * 15 +          // High weight for unique users
+                recentPayments * 20 +       // Higher weight for recent payments
+                recentUsage * 5 +           // Medium weight for recent usage
+                successfulUsage * 1         // Small bonus for successful usage
+            );
+
+            // Combine relevance and activity score
+            // Relevance gets 40% weight, activity gets 60% weight
+            const combinedScore = (relevanceScore * 40) + (activityScore * 0.6);
+
+            return {
+                ...server,
+                activityMetrics: {
+                    totalPayments,
+                    totalRevenue,
+                    totalUsage,
+                    uniqueUsers,
+                    recentPayments,
+                    recentUsage,
+                    successfulUsage,
+                    activityScore,
+                    relevanceScore,
+                    combinedScore
+                }
+            };
         });
 
-        return sortedResults.slice(0, safeLimitNum); // Additional safety limit
+        // Sort by combined score (descending) and apply pagination
+        const sortedResults = serversWithScoring
+            .sort((a, b) => b.activityMetrics.combinedScore - a.activityMetrics.combinedScore)
+            .slice(safeOffsetNum, safeOffsetNum + safeLimitNum);
+
+        return sortedResults;
     },
 
     updateMcpServer: (id: string, data: {
