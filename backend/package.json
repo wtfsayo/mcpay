@@ -17,6 +17,7 @@
     "@vercel/sandbox": "^0.0.12",
     "ai": "5.0.0-alpha.7",
     "ajv": "^8.17.1",
+    "better-auth": "^1.2.12",
     "dotenv": "^16.5.0",
     "drizzle-orm": "^0.44.1",
     "hono": "^4.7.10",

@@ -20,6 +20,8 @@ import { openBlockscout } from "@/lib/blockscout"
 import { useRouter } from "next/navigation"
 import { type Network, getTokensByNetwork, getStablecoins, NETWORKS, type NetworkInfo } from "@/lib/tokens"
 import { switchToNetwork, getConnectionStatus } from "@/lib/wallet-utils"
+import { useChainId } from "wagmi"
+import { getNetworkByChainId } from "@/lib/tokens"
 
 interface MCPTool {
   name: string
@@ -85,6 +87,11 @@ export default function RegisterPage() {
   const { address: walletAddress, isConnected: isWalletConnected } = useAccount()
   const { error: connectError } = useConnect()
   const { disconnect, isPending: isDisconnectingWallet } = useDisconnect()
+  const chainId = useChainId()
+
+  // Get current network and blockchain info
+  const currentNetwork = chainId ? getNetworkByChainId(chainId) : null
+  const currentBlockchain = currentNetwork ? (currentNetwork.startsWith('sei') ? 'sei' : 'ethereum') : 'ethereum'
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -162,7 +169,7 @@ export default function RegisterPage() {
         })
       }))
 
-      // Prepare API request payload
+      // Prepare API request payload with enhanced wallet information
       const payload = {
         mcpOrigin: formData.url,
         receiverAddress: walletAddress,
@@ -171,11 +178,20 @@ export default function RegisterPage() {
         requireAuth: showAuthHeaders && authHeaders && Object.keys(authHeaders).length > 0,
         ...(authHeaders && Object.keys(authHeaders).length > 0 && { authHeaders }),
         ...(toolsWithPayment.length > 0 && { tools: toolsWithPayment }),
+        // Enhanced wallet information for multi-wallet support
+        walletInfo: {
+          blockchain: currentBlockchain,
+          network: currentNetwork || selectedNetwork,
+          walletType: 'external' as const,
+          primaryWallet: true,
+        },
         metadata: {
           registeredFromUI: true,
           timestamp: new Date().toISOString(),
           toolsCount: tools.length,
-          monetizedToolsCount: toolsWithPayment.length
+          monetizedToolsCount: toolsWithPayment.length,
+          registrationNetwork: currentNetwork || selectedNetwork,
+          registrationBlockchain: currentBlockchain,
         }
       }
 

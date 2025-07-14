@@ -9,12 +9,17 @@ import {
   // Moon, 
   // Sun, 
   Menu,
-  X
+  X,
+  User,
+  LogIn
 } from "lucide-react"
 import { useTheme } from "@/context/ThemeContext"
 import { useConnect, useConnectors } from 'wagmi'
 import { ConnectButton } from "./connect-button"
 import { Badge } from "./ui/badge"
+import { AccountModal } from "./AccountModal"
+import { useAccountModal } from "../hooks/useAccountModal"
+import { useSession } from "@/lib/auth"
 
 interface NavbarProps {
   activeTab?: string
@@ -29,6 +34,8 @@ export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
   const connectors = useConnectors()
 
   const { isDark } = useTheme()
+  const { data: session, isPending: sessionLoading } = useSession()
+  const { isOpen, defaultTab, openModal, closeModal } = useAccountModal()
 
   const handleTabChange = (tabId: string) => {
     if (onTabChange) {
@@ -75,7 +82,47 @@ export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
             >
               <Link href="/register">Register Server</Link>
             </Button>
+            
+            {/* Wallet Connection */}
             <ConnectButton />
+            
+            {/* Account Button */}
+            <Button
+              variant="ghost"
+              onClick={() => openModal('profile')}
+              disabled={sessionLoading}
+              className={`flex items-center gap-2 px-3 py-2 text-sm font-medium transition-colors duration-200 ${
+                isDark
+                  ? "text-gray-300 hover:bg-gray-800 hover:text-white"
+                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              }`}
+            >
+              {session?.user ? (
+                <>
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                    isDark ? "bg-gray-700" : "bg-gray-200"
+                  }`}>
+                    {session.user.image ? (
+                      <img 
+                        src={session.user.image} 
+                        alt="Profile" 
+                        className="w-6 h-6 rounded-full object-cover"
+                      />
+                    ) : (
+                      <User className="h-3 w-3" />
+                    )}
+                  </div>
+                  <span className="hidden lg:inline">
+                    {session.user.name?.split(' ')[0] || 'Account'}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <LogIn className="h-4 w-4" />
+                  <span className="hidden lg:inline">Sign In</span>
+                </>
+              )}
+            </Button>
           </div>
 
           {/* Desktop Theme Toggle */}
@@ -150,10 +197,44 @@ export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
                   ))
                 }
               </div>
+
+              {/* Mobile Account Button */}
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setIsMobileMenuOpen(false)
+                  openModal('profile')
+                }}
+                disabled={sessionLoading}
+                className={`w-full justify-start px-3 py-2 text-sm font-medium transition-colors duration-200 ${
+                  isDark
+                    ? "text-gray-300 hover:bg-gray-800 hover:text-white"
+                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                }`}
+              >
+                {session?.user ? (
+                  <>
+                    <User className="h-4 w-4 mr-3" />
+                    {session.user.name?.split(' ')[0] || 'Account'}
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="h-4 w-4 mr-3" />
+                    Sign In
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         )}
       </div>
+      
+      {/* Account Modal */}
+      <AccountModal 
+        isOpen={isOpen} 
+        onClose={closeModal}
+        defaultTab={defaultTab}
+      />
     </nav>
   )
 }

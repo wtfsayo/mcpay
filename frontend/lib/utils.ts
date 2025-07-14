@@ -285,4 +285,29 @@ export const api = {
 
     return await response.json()
   },
+
+  // Wallet management (future functionality)
+  getUserWallets: async (userId: string) => {
+    return apiCall(`/users/${userId}/wallets`)
+  },
+
+  addWalletToUser: async (userId: string, walletData: {
+    walletAddress: string;
+    blockchain: string;
+    walletType: 'external' | 'managed' | 'custodial';
+    provider?: string;
+    isPrimary?: boolean;
+    walletMetadata?: Record<string, unknown>;
+  }) => {
+    return apiCall(`/users/${userId}/wallets`, {
+      method: 'POST',
+      body: JSON.stringify(walletData),
+    })
+  },
+
+  setWalletAsPrimary: async (userId: string, walletId: string) => {
+    return apiCall(`/users/${userId}/wallets/${walletId}/primary`, {
+      method: 'PUT',
+    })
+  },
 }

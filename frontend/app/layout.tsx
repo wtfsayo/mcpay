@@ -8,6 +8,7 @@ import { AppReactQueryProvider } from '../context/providers'
 import Navbar from "@/components/Navbar"
 import ScrollReset from "@/components/scroll-reset"
 import { Analytics } from "@vercel/analytics/next"
+import { authClient } from '../lib/auth'
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

@@ -179,6 +179,11 @@ export function ConnectButton() {
               </div>
               <p className="text-xs text-gray-600 mt-1">
                 {connector?.name} • {currentNetwork ? NETWORKS[currentNetwork].name : 'Unknown Network'}
+                {currentNetwork && (
+                  <span className="ml-1">
+                    ({currentNetwork.startsWith('sei') ? 'Sei' : 'Ethereum'} ecosystem)
+                  </span>
+                )}
               </p>
             </div>
 

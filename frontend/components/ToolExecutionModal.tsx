@@ -107,6 +107,12 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     return chainId ? getNetworkByChainId(chainId) : null
   }
 
+  const getCurrentBlockchain = () => {
+    const network = getCurrentNetwork()
+    if (!network) return 'ethereum'
+    return network.startsWith('sei') ? 'sei' : 'ethereum'
+  }
+
   const isOnCorrectNetwork = () => {
     const requiredNetwork = getRequiredNetwork()
     const currentNetwork = getCurrentNetwork()

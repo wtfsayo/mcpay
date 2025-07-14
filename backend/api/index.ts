@@ -1,10 +1,10 @@
 import { Hono } from "hono";
 import { cors } from 'hono/cors';
-import api from "./api.js";    
-import facilitator from "./facilitator.js";
+import api from "./api.js";
 import mcpProxy from "./mcp-proxy.js";
 import mcpProxyV2 from "./monetized-mcp-proxy.js";
 import openmcp from "./openmcp.js";
+import ping from "./ping.js";
 
 const app = new Hono();
 
@@ -19,10 +19,11 @@ app.use('*', cors({
 }));
 
 app.route('/api', api);
-app.route('/facilitator', facilitator);
+// app.route('/facilitator', facilitator);
 app.route('/mcp', mcpProxy);
-app.route('/monetized-mcp', mcpProxyV2);
-app.route('/openmcp', openmcp);
+// app.route('/monetized-mcp', mcpProxyV2);
+// app.route('/openmcp', openmcp);
+app.route('/ping', ping);
 
 export const GET = app.fetch;
 export const POST = app.fetch;

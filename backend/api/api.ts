@@ -16,6 +16,7 @@ import { txOperations, withTransaction } from "../db/actions.js";
 import db from "../db/index.js";
 import { VLayer, type ExecutionContext } from "../lib/3rd-parties/vlayer.js";
 import { getMcpTools } from "../lib/inspect-mcp.js";
+import { auth } from "../lib/auth.js";
 
 export const runtime = 'nodejs'
 
@@ -256,13 +257,28 @@ app.post('/servers', async (c) => {
             await db.transaction(async (tx) => {
                 // Check if user exists, create if not
                 console.log('Checking if user exists with wallet address:', data.receiverAddress)
+                
+                if (!data.receiverAddress) {
+                    throw new Error('Receiver address is required for wallet-based user creation');
+                }
+                
                 let user = await txOperations.getUserByWalletAddress(data.receiverAddress)(tx)
 
                 if (!user) {
                     console.log('User not found, creating new user with wallet address:', data.receiverAddress)
+                    // Extract wallet info from request if provided
+                    const walletInfo = (data as any).walletInfo
                     user = await txOperations.createUser({
                         walletAddress: data.receiverAddress,
                         displayName: `User ${data.receiverAddress.substring(0, 8)}`,
+                        // Use wallet info from frontend if available
+                        blockchain: walletInfo?.blockchain || 'ethereum',
+                        walletType: walletInfo?.walletType || 'external',
+                        walletProvider: walletInfo?.provider || 'unknown',
+                        walletMetadata: {
+                            registrationNetwork: walletInfo?.network || 'base-sepolia',
+                            ...(walletInfo || {})
+                        }
                     })(tx)
                     console.log('Created new user with ID:', user.id)
                 } else {
@@ -666,6 +682,159 @@ app.get('/servers/:serverId/reputation', async (c) => {
     }
 });
 
+// Wallet Management endpoints
+app.get('/users/:userId/wallets', async (c) => {
+    try {
+        const userId = c.req.param('userId');
+        const includeInactive = c.req.query('includeInactive') === 'true';
+        
+        const wallets = await withTransaction(async (tx) => {
+            return await txOperations.getUserWallets(userId, !includeInactive)(tx);
+        });
+
+        return c.json(wallets);
+    } catch (error) {
+        console.error('Error fetching user wallets:', error);
+        return c.json({ error: (error as Error).message }, 400);
+    }
+});
+
+app.post('/users/:userId/wallets', async (c) => {
+    try {
+        const userId = c.req.param('userId');
+        const data = await c.req.json() as {
+            walletAddress: string;
+            walletType: 'external' | 'managed' | 'custodial';
+            provider?: string;
+            blockchain?: string; // 'ethereum', 'solana', 'near', 'polygon', 'base', etc.
+            isPrimary?: boolean;
+            walletMetadata?: Record<string, unknown>; // Blockchain-specific data like chainId, ensName, etc.
+        };
+
+        const wallet = await withTransaction(async (tx) => {
+            return await txOperations.addWalletToUser({
+                userId,
+                ...data
+            })(tx);
+        });
+
+        return c.json(wallet, 201);
+    } catch (error) {
+        console.error('Error adding wallet to user:', error);
+        return c.json({ error: (error as Error).message }, 400);
+    }
+});
+
+app.put('/users/:userId/wallets/:walletId/primary', async (c) => {
+    try {
+        const userId = c.req.param('userId');
+        const walletId = c.req.param('walletId');
+
+        const wallet = await withTransaction(async (tx) => {
+            return await txOperations.setPrimaryWallet(userId, walletId)(tx);
+        });
+
+        return c.json(wallet);
+    } catch (error) {
+        console.error('Error setting primary wallet:', error);
+        return c.json({ error: (error as Error).message }, 400);
+    }
+});
+
+app.delete('/users/:userId/wallets/:walletId', async (c) => {
+    try {
+        const userId = c.req.param('userId');
+        const walletId = c.req.param('walletId');
+
+        const wallet = await withTransaction(async (tx) => {
+            return await txOperations.removeWallet(userId, walletId)(tx);
+        });
+
+        return c.json(wallet);
+    } catch (error) {
+        console.error('Error removing wallet:', error);
+        return c.json({ error: (error as Error).message }, 400);
+    }
+});
+
+app.post('/users/:userId/wallets/managed', async (c) => {
+    try {
+        const userId = c.req.param('userId');
+        const data = await c.req.json() as {
+            walletAddress: string;
+            provider: string; // 'coinbase-cdp', 'privy', 'magic', etc.
+            blockchain?: string; // 'ethereum', 'solana', 'near', etc.
+            externalWalletId: string; // Reference ID from external service
+            externalUserId?: string; // User ID in external system
+            isPrimary?: boolean;
+            walletMetadata?: Record<string, unknown>; // Blockchain-specific data
+        };
+
+        // Validate required fields
+        if (!data.walletAddress || !data.provider || !data.externalWalletId) {
+            return c.json({ 
+                error: 'Missing required fields: walletAddress, provider, and externalWalletId are required' 
+            }, 400);
+        }
+
+        const wallet = await withTransaction(async (tx) => {
+            return await txOperations.createManagedWallet(userId, data)(tx);
+        });
+
+        return c.json(wallet, 201);
+    } catch (error) {
+        console.error('Error creating managed wallet:', error);
+        return c.json({ error: (error as Error).message }, 400);
+    }
+});
+
+app.get('/wallets/:walletAddress/user', async (c) => {
+    try {
+        const walletAddress = c.req.param('walletAddress');
+        
+        const walletRecord = await withTransaction(async (tx) => {
+            return await txOperations.getWalletByAddress(walletAddress)(tx);
+        });
+
+        if (!walletRecord) {
+            return c.json({ error: 'Wallet not found' }, 404);
+        }
+
+        return c.json({
+            wallet: walletRecord,
+            user: walletRecord.user
+        });
+    } catch (error) {
+        console.error('Error fetching wallet user:', error);
+        return c.json({ error: (error as Error).message }, 400);
+    }
+});
+
+app.post('/users/:userId/migrate-legacy-wallet', async (c) => {
+    try {
+        const userId = c.req.param('userId');
+
+        const wallet = await withTransaction(async (tx) => {
+            return await txOperations.migrateLegacyWallet(userId)(tx);
+        });
+
+        if (!wallet) {
+            return c.json({ message: 'No legacy wallet to migrate' });
+        }
+
+        return c.json(wallet);
+    } catch (error) {
+        console.error('Error migrating legacy wallet:', error);
+        return c.json({ error: (error as Error).message }, 400);
+    }
+});
+
+
+app.on(["POST", "GET"], "/auth/*", (c) => {
+    return auth.handler(c.req.raw)
+});
+
+
 // Catch-all for unmatched routes
 app.all('*', (c) => {
     return c.json({
@@ -689,7 +858,15 @@ app.all('*', (c) => {
             'GET /api/users/:userId/proofs',
             'GET /api/proofs/stats',
             'POST /api/proofs/:id/verify',
-            'GET /api/servers/:serverId/reputation'
+            'GET /api/servers/:serverId/reputation',
+            // Multi-blockchain wallet management (secure - no private key storage)
+            'GET /api/users/:userId/wallets',
+            'POST /api/users/:userId/wallets', // Supports Ethereum, Solana, NEAR, etc.
+            'PUT /api/users/:userId/wallets/:walletId/primary',
+            'DELETE /api/users/:userId/wallets/:walletId',
+            'POST /api/users/:userId/wallets/managed', // External managed wallets (Coinbase CDP, Privy, Magic, etc.)
+            'GET /api/wallets/:walletAddress/user',
+            'POST /api/users/:userId/migrate-legacy-wallet'
         ]
     }, 404);
 });

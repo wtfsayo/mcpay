@@ -12,8 +12,7 @@
 import { type Context, Hono } from "hono";
 import { cors } from 'hono/cors';
 import { createExactPaymentRequirements, decodePayment, settle, verifyPayment, x402Version } from "../lib/payments.js"
-import { txOperations } from "../db/actions.js";
-import { withTransaction } from "../db/actions.js";
+import { txOperations, withTransaction } from "../db/actions.js";
 import { settleResponseHeader } from "../lib/types.js";
 
 export const runtime = 'nodejs'
@@ -232,24 +231,49 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: { name: string, 
     return { toolCall, body };
 }
 
-// Helper function to get or create user from wallet address
-async function getOrCreateUser(walletAddress: string): Promise<User | null> {
-    if (!walletAddress) return null;
+// Helper function to get or create user from wallet address (using new multi-wallet system)
+async function getOrCreateUser(walletAddress: string, provider = 'unknown'): Promise<User | null> {
+    if (!walletAddress || typeof walletAddress !== 'string') return null;
 
     return await withTransaction(async (tx) => {
+        // First check new wallet system
+        const walletRecord = await txOperations.getWalletByAddress(walletAddress)(tx);
+        
+        if (walletRecord?.user) {
+            // Update last login and wallet usage
+            await txOperations.updateUserLastLogin(walletRecord.user.id)(tx);
+            await txOperations.updateWalletMetadata(walletRecord.id, {
+                lastUsedAt: new Date()
+            })(tx);
+            // Create User object with walletAddress from the wallet record
+            return {
+                ...walletRecord.user,
+                walletAddress: walletRecord.walletAddress
+            } as User;
+        }
+
+        // Fallback: check legacy wallet field
         let user = await txOperations.getUserByWalletAddress(walletAddress)(tx);
         
-        if (!user) {
-            console.log(`[${new Date().toISOString()}] Creating new user with wallet ${walletAddress}`);
-            user = await txOperations.createUser({
-                walletAddress,
-                displayName: `User_${walletAddress.substring(0, 8)}`
-            })(tx);
-        } else {
-            // Update last login
+        if (user) {
+            // Migrate legacy wallet to new system
+            console.log(`[${new Date().toISOString()}] Migrating legacy wallet ${walletAddress} to new system`);
+            await txOperations.migrateLegacyWallet(user.id)(tx);
             await txOperations.updateUserLastLogin(user.id)(tx);
+            return user as User;
         }
-        
+
+        // Create new user with wallet
+        console.log(`[${new Date().toISOString()}] Creating new user with wallet ${walletAddress}`);
+        user = await txOperations.createUser({
+            walletAddress,
+            displayName: `User_${walletAddress.substring(0, 8)}`,
+            walletType: 'external',
+            walletProvider: provider,
+            // Default to ethereum blockchain - this can be enhanced later to detect blockchain from address format
+            blockchain: 'ethereum'
+        })(tx);
+
         return user as User;
     });
 }
