@@ -15,21 +15,24 @@ import { txOperations, withTransaction } from "../db/actions.js";
 import db from "../db/index.js";
 import { VLayer, type ExecutionContext } from "../lib/3rd-parties/vlayer.js";
 import { getMcpTools } from "../lib/inspect-mcp.js";
+import { auth, AuthType } from "../lib/auth.js";
 
 export const runtime = 'nodejs'
 
-const app = new Hono();
+const app = new Hono<{ Bindings: AuthType }>({
+    strict: false,
+})
 
 app.get('/', (c) => {
     return c.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
-        service: 'mcpay-api'
+        service: 'mcpay-api',
     });
 });
 
 // Health check endpoint
-app.get('/health', (c) => {
+app.get('/health', async (c) => {
     return c.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
@@ -672,6 +675,8 @@ app.get('/servers/:serverId/reputation', async (c) => {
 
 // Wallet Management endpoints
 app.get('/users/:userId/wallets', async (c) => {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    console.log("session", session)
     try {
         const userId = c.req.param('userId');
         const includeInactive = c.req.query('includeInactive') === 'true';
@@ -688,6 +693,7 @@ app.get('/users/:userId/wallets', async (c) => {
 });
 
 app.post('/users/:userId/wallets', async (c) => {
+    console.log("wallets request", c.req.raw.url);
     try {
         const userId = c.req.param('userId');
         const data = await c.req.json() as {

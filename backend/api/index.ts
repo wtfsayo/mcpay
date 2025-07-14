@@ -1,52 +1,81 @@
 import { Hono } from "hono";
 import { cors } from 'hono/cors';
-import { HTTPException } from 'hono/http-exception';
 import { logger } from 'hono/logger';
 import { prettyJSON } from 'hono/pretty-json';
+import { HTTPException } from 'hono/http-exception';
 import api from "./api.js";
-import auth from "./auth.js";
 import mcpProxy from "./mcp-proxy.js";
 import ping from "./ping.js";
+import auth from "./auth.js";
+import { AuthType } from "../lib/auth.js";
 
-const app = new Hono();
+const app = new Hono<{ Bindings: AuthType }>({
+    strict: false,
+});
 
 // Global middleware
 app.use('*', logger());
 app.use('*', prettyJSON());
 
-// Global CORS configuration - more permissive for non-auth routes
-app.use('*', cors({
-    origin: '*',
-    allowHeaders: ['*'],
-    allowMethods: ['*'],
-    maxAge: 86400, // Longer cache time for non-auth endpoints
-    credentials: true
+// Specific CORS configuration for auth routes - more restrictive
+app.use('/api/auth/*', cors({
+    origin: "http://localhost:3232",
+    allowHeaders: ["Content-Type", "Authorization", "Access-Control-Allow-Origin"],
+    allowMethods: ["POST", "GET", "OPTIONS", "DELETE", "PUT", "PATCH"],
+    exposeHeaders: ["Content-Length"],
+    maxAge: 600,
+    credentials: true,
 }));
 
-// Health check endpoint at root
-app.get('/health', (c) => {
-    return c.json({
-        status: 'ok',
-        timestamp: new Date().toISOString(),
-        service: 'mcpay-backend',
-        version: process.env.npm_package_version || '1.0.0'
+app.use('/api/*', cors({
+    origin: "http://localhost:3232",
+    allowHeaders: ["Content-Type", "Authorization", "Access-Control-Allow-Origin"],
+    allowMethods: ["POST", "GET", "OPTIONS", "DELETE", "PUT", "PATCH"],
+    exposeHeaders: ["Content-Length"],
+    maxAge: 600,
+    credentials: true,
+}));
+
+// Global CORS configuration - very permissive for all NON-auth routes
+app.use('*', async (c, next) => {
+    // Skip global CORS if this is an auth route
+    if (c.req.path.startsWith('/api/auth/')) {
+        await next();
+        return;
+    }
+
+    else if (c.req.path.startsWith('/api/')) {
+        await next();
+        return;
+    }
+
+    // Apply permissive CORS for all other routes
+    const corsMiddleware = cors({
+        origin: '*',
+        allowHeaders: ['*'],
+        allowMethods: ['*'],
+        exposeHeaders: ['*'],
+        maxAge: 86400,
+        credentials: true,
     });
+
+    await corsMiddleware(c, next);
 });
 
-// Route mounting - auth routes will override global CORS with their own
-app.route('/api', api);
-app.route('/mcp', mcpProxy);
-// app.route('/monetized-mcp', mcpProxyV2);
-// app.route('/openmcp', openmcp);
-app.route('/ping', ping);
-app.route('/auth', auth); // This route has its own CORS configuration
 
-// Global error handler
+// Mount routes after middleware
+const routes = [{ logic: auth, basePath: "/api/auth" }, { logic: api, basePath: "/api" }, { logic: mcpProxy, basePath: "/mcp" }, { logic: ping, basePath: "/ping" }] as const;
+
+routes.forEach((route) => {
+    app.basePath("/").route(route.basePath, route.logic);
+});
+
+// // Global error handler
 app.onError((err, c) => {
     if (err instanceof HTTPException) {
         return err.getResponse();
     }
-    
+
     console.error('Unhandled error:', err);
     return c.json({
         error: 'Internal Server Error',

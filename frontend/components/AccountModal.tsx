@@ -1,51 +1,47 @@
 "use client"
 
-import React, { useState, useEffect, useCallback } from "react"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
+  DialogHeader
 } from "@/components/ui/dialog"
 import {
   Drawer,
   DrawerContent,
-  DrawerHeader,
-  DrawerTitle,
+  DrawerHeader
 } from "@/components/ui/drawer"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useTheme } from "@/context/ThemeContext"
+import { signIn, signOut, signUp, useSession } from "@/lib/auth"
+import { openExplorer } from "@/lib/blockscout"
+import type { UserWallet } from "@/lib/types"
+import { api } from "@/lib/utils"
 import {
-  User,
-  Mail,
-  Wallet,
-  Settings,
-  LogOut,
-  Plus,
-  Trash2,
-  Star,
-  Shield,
   AlertCircle,
   CheckCircle,
-  ExternalLink,
   Copy,
+  ExternalLink,
   Eye,
   EyeOff,
-  X,
-  Github
+  Github,
+  LogOut,
+  Plus,
+  Settings,
+  Shield,
+  Star,
+  Trash2,
+  User,
+  Wallet,
+  X
 } from "lucide-react"
-import { useTheme } from "@/context/ThemeContext"
-import { useSession, signIn, signUp, signOut } from "@/lib/auth"
+import React, { useCallback, useEffect, useState } from "react"
 import { useAccount, useDisconnect } from "wagmi"
 import { ConnectButton } from "./connect-button"
-import { api } from "@/lib/utils"
-import { openExplorer, getExplorerName } from "@/lib/blockscout"
-import { formatTokenAmount, getNetworkInfo, type Network } from "@/lib/tokens"
-import type { UserWallet } from "@/lib/types"
 
 interface AccountModalProps {
   isOpen: boolean
@@ -59,6 +55,7 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
   const { isDark } = useTheme()
   const { data: session, isPending: sessionLoading } = useSession()
   const { address: connectedWallet, isConnected } = useAccount()
+
   const { disconnect } = useDisconnect()
 
   const [authView, setAuthView] = useState<AuthView>('signin')
@@ -330,7 +327,7 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
           <Button
             type="button"
             variant="outline"
-            onClick={() => signIn.social({ provider: "github" })}
+            onClick={() => signIn.social({ provider: "github", callbackURL: "http://localhost:3232" })}
             disabled={isLoading}
             className="w-full"
           >

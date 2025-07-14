@@ -13,10 +13,13 @@ import { type Context, Hono } from "hono";
 import { createExactPaymentRequirements, decodePayment, settle, verifyPayment, x402Version } from "../lib/payments.js"
 import { txOperations, withTransaction } from "../db/actions.js";
 import { settleResponseHeader } from "../lib/types.js";
+import { AuthType } from "../lib/auth.js";
 
 export const runtime = 'nodejs'
 
-const app = new Hono();
+const app = new Hono<{ Bindings: AuthType }>({
+    strict: false,
+})
 
 // Define a User type based on what we expect from the database
 type User = {

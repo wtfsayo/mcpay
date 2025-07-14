@@ -3,12 +3,13 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { randomUUID } from "crypto";
 import db from "../db/index.js";
 import * as schema from "../db/schema.js";
- 
+
 export const auth = betterAuth({
+  trustedOrigins: ['http://localhost:3232'],
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: {
-      user: schema.users,
+      users: schema.users,
       session: schema.session,
       account: schema.account,
       verification: schema.verification,
@@ -17,7 +18,7 @@ export const auth = betterAuth({
   socialProviders: {
     github: {
       clientId: process.env.GITHUB_CLIENT_ID as string,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET as string, 
+      clientSecret: process.env.GITHUB_CLIENT_SECRET as string,
     }
   },
   user: {
@@ -27,7 +28,7 @@ export const auth = betterAuth({
         required: false,
       },
       displayName: {
-        type: "string", 
+        type: "string",
         required: false,
       },
       avatarUrl: {
@@ -37,14 +38,24 @@ export const auth = betterAuth({
     },
     modelName: "users", // Use the "users" table name
   },
-  // Generate UUID for user IDs instead of default string IDs
+  // Generate UUID for user IDs instead of default string IDss
   advanced: {
-    generateId: () => randomUUID(),
-    // Configure cross-origin cookie settings
+    database: {
+      generateId: () => randomUUID(),
+    },
+    // crossSubDomainCookies: {
+    //   enabled: true,
+    //   domain: "http://localhost:3232",
+    // },
     defaultCookieAttributes: {
       sameSite: "none",
-      secure: false, // Only secure in production
+      secure: true,
       partitioned: true // New browser standards for foreign cookies
     }
   },
 });
+
+export type AuthType = {
+  user: typeof auth.$Infer.Session.user | null
+  session: typeof auth.$Infer.Session.session | null
+}
