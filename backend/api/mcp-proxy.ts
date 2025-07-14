@@ -10,7 +10,6 @@
  */
 
 import { type Context, Hono } from "hono";
-import { cors } from 'hono/cors';
 import { createExactPaymentRequirements, decodePayment, settle, verifyPayment, x402Version } from "../lib/payments.js"
 import { txOperations, withTransaction } from "../db/actions.js";
 import { settleResponseHeader } from "../lib/types.js";
@@ -18,16 +17,6 @@ import { settleResponseHeader } from "../lib/types.js";
 export const runtime = 'nodejs'
 
 const app = new Hono();
-
-// Enable CORS for all routes
-app.use('*', cors({
-    origin: '*', // Allow all origins
-    allowHeaders: ['*'], // Allow all headers
-    allowMethods: ['*'], // Allow all methods
-    exposeHeaders: ['*'], // Expose all headers
-    maxAge: 86400, // Cache preflight requests for 24 hours
-    credentials: true // Allow credentials
-}));
 
 // Define a User type based on what we expect from the database
 type User = {

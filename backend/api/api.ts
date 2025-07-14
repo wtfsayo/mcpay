@@ -8,7 +8,6 @@
 import { gateway } from "@vercel/ai-sdk-gateway";
 import { generateObject } from "ai";
 import { Hono } from "hono";
-import { cors } from 'hono/cors';
 import { randomUUID } from "node:crypto";
 import { PaymentRequirementsSchema } from "x402/types";
 import { z } from "zod";
@@ -16,21 +15,10 @@ import { txOperations, withTransaction } from "../db/actions.js";
 import db from "../db/index.js";
 import { VLayer, type ExecutionContext } from "../lib/3rd-parties/vlayer.js";
 import { getMcpTools } from "../lib/inspect-mcp.js";
-import { auth } from "../lib/auth.js";
 
 export const runtime = 'nodejs'
 
 const app = new Hono();
-
-// Enable CORS for all routes
-app.use('*', cors({
-    origin: '*', // Allow all origins
-    allowHeaders: ['*'], // Allow all headers
-    allowMethods: ['*'], // Allow all methods
-    exposeHeaders: ['*'], // Expose all headers
-    maxAge: 86400, // Cache preflight requests for 24 hours
-    credentials: true // Allow credentials
-}));
 
 app.get('/', (c) => {
     return c.json({
@@ -828,12 +816,6 @@ app.post('/users/:userId/migrate-legacy-wallet', async (c) => {
         return c.json({ error: (error as Error).message }, 400);
     }
 });
-
-
-app.on(["POST", "GET"], "/auth/*", (c) => {
-    return auth.handler(c.req.raw)
-});
-
 
 // Catch-all for unmatched routes
 app.all('*', (c) => {
