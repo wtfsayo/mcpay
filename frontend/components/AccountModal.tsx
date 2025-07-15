@@ -39,6 +39,7 @@ import {
 import React, { useEffect, useState } from "react"
 import { useAccount, useDisconnect } from "wagmi"
 import { ConnectButton } from "./connect-button"
+import { toast } from "@/components/ui/toast"
 
 interface AccountModalProps {
   isOpen: boolean
@@ -175,6 +176,7 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
+    toast.success("Copied to clipboard")
   }
 
   // GitHub Sign In Component
@@ -605,9 +607,9 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
   if (isMobile) {
     return (
       <Drawer open={isOpen} onOpenChange={onClose}>
-        <DrawerContent className={`max-h-[95vh] ${isDark ? "bg-gray-900 border-gray-800" : ""}`}>
+        <DrawerContent className={`h-[60vh] ${isDark ? "bg-gray-900 border-gray-800" : ""}`}>
           <ModalHeader Component={DrawerHeader} />
-          <div className="overflow-y-auto px-4 pb-6">
+          <div className="flex-1 overflow-y-auto px-4 pb-6">
             {session?.user ? <AuthenticatedInterface /> : <GitHubSignIn />}
           </div>
         </DrawerContent>
@@ -618,9 +620,11 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
   // Desktop dialog
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className={`max-w-2xl max-h-[90vh] overflow-y-auto ${isDark ? "bg-gray-900 border-gray-800" : ""}`}>
+      <DialogContent className={`max-w-2xl h-[60vh] flex flex-col ${isDark ? "bg-gray-900 border-gray-800" : ""}`}>
         <ModalHeader Component={DialogHeader} />
-        {session?.user ? <AuthenticatedInterface /> : <GitHubSignIn />}
+        <div className="flex-1 overflow-y-auto">
+          {session?.user ? <AuthenticatedInterface /> : <GitHubSignIn />}
+        </div>
       </DialogContent>
     </Dialog>
   )

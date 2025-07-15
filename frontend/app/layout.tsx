@@ -8,6 +8,7 @@ import { WagmiProvider } from 'wagmi';
 import { AppReactQueryProvider } from '../context/providers';
 import "../globals.css";
 import { wagmiConfig } from '../lib/config';
+import { ToastContainer } from "@/components/ui/toast";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -59,6 +60,7 @@ export default function RootLayout({
               <ScrollReset />
               <Navbar />
               {children}
+              <ToastContainer />
             </AppReactQueryProvider>
           </WagmiProvider>
         </ThemeProvider>
