@@ -97,6 +97,13 @@ export const getGitHubConfig = () => ({
   clientSecret: env.GITHUB_CLIENT_SECRET,
 });
 
+// Helper for CDP configuration
+export const getCDPConfig = () => ({
+  apiKey: env.CDP_API_KEY,
+  apiSecret: env.CDP_API_SECRET,
+  walletSecret: env.CDP_WALLET_SECRET,
+});
+
 // Helper for facilitator private key (with validation)
 export const getFacilitatorPrivateKey = (): string => {
   if (!env.FACILITATOR_EVM_PRIVATE_KEY) {

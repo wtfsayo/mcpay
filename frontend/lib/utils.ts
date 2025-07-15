@@ -317,4 +317,23 @@ export const api = {
       method: 'DELETE',
     })
   },
+
+  // Coinbase Onramp integration
+  createOnrampUrl: async (userId: string, options: {
+    walletAddress?: string;
+    network?: string;
+    asset?: string;
+    amount?: number;
+    currency?: string;
+    redirectUrl?: string;
+  } = {}) => {
+    return apiCall(`/users/${userId}/onramp/buy-url`, {
+      method: 'POST',
+      body: JSON.stringify(options),
+    })
+  },
+
+  getOnrampConfig: async () => {
+    return apiCall('/onramp/config')
+  }
 }

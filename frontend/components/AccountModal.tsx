@@ -24,6 +24,7 @@ import {
   AlertCircle,
   CheckCircle,
   Copy,
+  CreditCard,
   ExternalLink,
   Github,
   LogOut,
@@ -169,6 +170,28 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
       await loadUserWallets()
     } catch (error) {
       setError(error instanceof Error ? error.message : "Failed to remove wallet")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleBuyCrypto = async () => {
+    if (!session?.user?.id) return
+
+    setIsLoading(true)
+    try {
+      const response = await api.createOnrampUrl(session.user.id, {
+        redirectUrl: window.location.origin
+      })
+      
+      if (response.onrampUrl) {
+        // Open Coinbase Onramp in a new window
+        window.open(response.onrampUrl, '_blank', 'noopener,noreferrer')
+        toast.success("Redirecting to Coinbase to buy crypto...")
+      }
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Failed to create buy crypto URL")
+      toast.error("Failed to open buy crypto flow")
     } finally {
       setIsLoading(false)
     }
@@ -335,16 +358,27 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
                 Manage your blockchain wallets
               </p>
             </div>
-            {isConnected && !userWallets.find(w => w.walletAddress.toLowerCase() === connectedWallet?.toLowerCase()) && (
+            <div className="flex items-center gap-2">
               <Button
                 size="sm"
-                onClick={handleConnectWallet}
-                disabled={isLoading}
+                onClick={handleBuyCrypto}
+                disabled={isLoading || userWallets.length === 0}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
               >
-                <Plus className="h-4 w-4 mr-2" />
-                Connect Current Wallet
+                <CreditCard className="h-4 w-4 mr-2" />
+                Buy Crypto
               </Button>
-            )}
+              {isConnected && !userWallets.find(w => w.walletAddress.toLowerCase() === connectedWallet?.toLowerCase()) && (
+                <Button
+                  size="sm"
+                  onClick={handleConnectWallet}
+                  disabled={isLoading}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Connect Current Wallet
+                </Button>
+              )}
+            </div>
           </div>
 
           {/* Current Connected Wallet (if not linked to account) */}
