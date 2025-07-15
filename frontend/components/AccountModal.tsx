@@ -2,7 +2,7 @@
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible"
 import {
   Dialog,
   DialogContent,
@@ -13,8 +13,8 @@ import {
   DrawerContent,
   DrawerHeader
 } from "@/components/ui/drawer"
-import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { toast } from "@/components/ui/toast"
 import { useTheme } from "@/context/ThemeContext"
 import { signIn, signOut, useSession } from "@/lib/auth"
 import { openExplorer } from "@/lib/blockscout"
@@ -23,6 +23,8 @@ import { api, apiCall } from "@/lib/utils"
 import {
   AlertCircle,
   CheckCircle,
+  ChevronDown,
+  ChevronUp,
   Copy,
   CreditCard,
   ExternalLink,
@@ -33,19 +35,50 @@ import {
   Shield,
   Star,
   Trash2,
+  TrendingUp,
   User,
-  Wallet,
-  X
+  Wallet
 } from "lucide-react"
-import React, { useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import { useAccount, useDisconnect } from "wagmi"
 import { ConnectButton } from "./connect-button"
-import { toast } from "@/components/ui/toast"
 
 interface AccountModalProps {
   isOpen: boolean
   onClose: () => void
   defaultTab?: 'profile' | 'wallets' | 'settings'
+}
+
+interface ChainBalance {
+  chain: string
+  network: string
+  balance: string
+  balanceUsd: number
+  tokens: Array<{
+    symbol: string
+    balance: string
+    balanceUsd: number
+    address?: string
+  }>
+}
+
+interface BalancesByChain {
+  [chainName: string]: Array<{
+    address: string
+    chain: string
+    chainId: number
+    chainName: string
+    architecture: string
+    isTestnet: boolean
+    stablecoin: string
+    stablecoinName: string
+    tokenIdentifier: string
+    balance: string
+    formattedBalance: string
+    decimals: number
+    priceUsd: number
+    fiatValue: number
+  }>
 }
 
 export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: AccountModalProps) {
@@ -72,7 +105,12 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
     mainnetValueUsd: 0,
     testnetValueUsd: 0
   })
-  const [showTestnetBalances, setShowTestnetBalances] = useState(false)
+  
+  // New state for improved UX
+  const [portfolioView, setPortfolioView] = useState<'all' | 'live' | 'test'>('all')
+  const [showDetails, setShowDetails] = useState(false)
+  const [mainnetBalancesByChain, setMainnetBalancesByChain] = useState<BalancesByChain>({})
+  const [testnetBalancesByChain, setTestnetBalancesByChain] = useState<BalancesByChain>({})
   
   // Check for mobile screen size
   useEffect(() => {
@@ -102,12 +140,16 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
         wallets, 
         totalFiatValue, 
         testnetTotalFiatValue,
-        summary 
+        summary,
+        mainnetBalancesByChain,
+        testnetBalancesByChain
       } = response
       
       setUserWallets(wallets)
       setTotalFiatValue(parseFloat(totalFiatValue || '0'))
       setTestnetTotalFiatValue(parseFloat(testnetTotalFiatValue || '0'))
+      setMainnetBalancesByChain(mainnetBalancesByChain || {})
+      setTestnetBalancesByChain(testnetBalancesByChain || {})
       
       // Update balance summary for UI display
       setBalanceSummary({
@@ -122,6 +164,8 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
       setUserWallets([])
       setTotalFiatValue(0)
       setTestnetTotalFiatValue(0)
+      setMainnetBalancesByChain({})
+      setTestnetBalancesByChain({})
       setBalanceSummary({
         hasMainnetBalances: false,
         hasTestnetBalances: false,
@@ -242,6 +286,86 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
     toast.success("Copied to clipboard")
+  }
+
+  // Helper function to transform chain balance data into ChainBalance format
+  const transformChainData = (balancesByChain: BalancesByChain): ChainBalance[] => {
+    const result: ChainBalance[] = []
+    
+    Object.entries(balancesByChain).forEach(([chainKey, balances]) => {
+      if (!balances || balances.length === 0) return
+      
+      // Group by chain name and calculate totals
+      const chainName = balances[0]?.chainName || chainKey
+      const network = balances[0]?.isTestnet ? 'testnet' : 'mainnet'
+      
+      // Group tokens by stablecoin type
+      const tokenGroups: { [symbol: string]: typeof balances } = {}
+      balances.forEach(balance => {
+        if (!tokenGroups[balance.stablecoin]) {
+          tokenGroups[balance.stablecoin] = []
+        }
+        tokenGroups[balance.stablecoin].push(balance)
+      })
+      
+      // Calculate total balance for this chain
+      const totalBalanceUsd = balances.reduce((sum, balance) => sum + balance.fiatValue, 0)
+      
+      // Only include chains with actual balances
+      if (totalBalanceUsd > 0) {
+        const tokens = Object.entries(tokenGroups)
+          .map(([symbol, groupBalances]) => {
+            const totalBalance = groupBalances.reduce((sum, b) => sum + parseFloat(b.formattedBalance), 0)
+            const totalValue = groupBalances.reduce((sum, b) => sum + b.fiatValue, 0)
+            
+            return {
+              symbol,
+              balance: totalBalance.toString(),
+              balanceUsd: totalValue,
+              address: groupBalances[0]?.tokenIdentifier
+            }
+          })
+          .filter(token => parseFloat(token.balance) > 0) // Only include tokens with balance
+        
+        if (tokens.length > 0) {
+          result.push({
+            chain: chainName,
+            network: `${chainKey}${balances[0]?.isTestnet ? '-testnet' : ''}`,
+            balance: totalBalanceUsd.toString(),
+            balanceUsd: totalBalanceUsd,
+            tokens
+          })
+        }
+      }
+    })
+    
+    return result
+  }
+
+  // Helper function to get filtered chains based on current view
+  const getFilteredChains = () => {
+    const mainnetChains = transformChainData(mainnetBalancesByChain)
+    const testnetChains = transformChainData(testnetBalancesByChain)
+    
+    switch (portfolioView) {
+      case 'live':
+        return { chains: mainnetChains, total: totalFiatValue }
+      case 'test':
+        return { chains: testnetChains, total: testnetTotalFiatValue }
+      default:
+        return { 
+          chains: [...mainnetChains, ...testnetChains], 
+          total: totalFiatValue + testnetTotalFiatValue 
+        }
+    }
+  }
+
+  // Helper function to get network type badge color
+  const getNetworkBadgeColor = (isMainnet: boolean) => {
+    if (isMainnet) {
+      return isDark ? "bg-green-900/30 text-green-400 border-green-700" : "bg-green-100 text-green-700 border-green-300"
+    }
+    return isDark ? "bg-orange-900/30 text-orange-400 border-orange-700" : "bg-orange-100 text-orange-700 border-orange-300"
   }
 
   // GitHub Sign In Component
@@ -383,75 +507,143 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
             </div>
           </div>
 
+          {/* Enhanced Portfolio Section */}
           <div className={`rounded-lg border p-4 ${isDark ? "bg-gray-900/50 border-gray-800" : "bg-gray-50/50 border-gray-200"}`}>
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <Wallet className="h-4 w-4" />
+                <TrendingUp className="h-4 w-4" />
                 <h4 className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
-                  Portfolio Value
+                  Your Money
                 </h4>
               </div>
-              {balanceSummary.hasTestnetBalances && (
+              
+              {(balanceSummary.hasMainnetBalances || balanceSummary.hasTestnetBalances) && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setShowTestnetBalances(!showTestnetBalances)}
-                  className="h-6 text-xs px-2"
+                  onClick={() => setShowDetails(!showDetails)}
+                  className="h-7 text-xs px-2 gap-1"
                 >
-                  {showTestnetBalances ? "Hide Test" : "Show Test"}
+                  {showDetails ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                  Details
                 </Button>
               )}
             </div>
             
-            {/* Real Money Balance (Mainnet) */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="w-2 h-2 rounded-full bg-green-500" />
-                    <span className={`text-xs font-medium ${isDark ? "text-gray-300" : "text-gray-600"}`}>
-                      Real Balance
-                    </span>
-                  </div>
-                  <p className={`text-2xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
-                    ${totalFiatValue.toFixed(2)}
-                  </p>
-                  <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                    {balanceSummary.hasMainnetBalances ? "Live on mainnet" : "No real balances"}
-                  </p>
-                </div>
-                <div className={`p-2.5 rounded-lg ${isDark ? "bg-green-900/20" : "bg-green-100"}`}>
-                  <Wallet className="h-4 w-4 text-green-600" />
+            {/* Network Type Tabs */}
+            {(balanceSummary.hasMainnetBalances || balanceSummary.hasTestnetBalances) && (
+              <div className="mb-4">
+                <div className={`inline-flex rounded-lg p-1 ${isDark ? "bg-gray-800/50" : "bg-gray-100"}`}>
+                  <button
+                    onClick={() => setPortfolioView('all')}
+                    className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                      portfolioView === 'all'
+                        ? isDark ? "bg-white text-gray-900" : "bg-white text-gray-900 shadow-sm"
+                        : isDark ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-gray-900"
+                    }`}
+                  >
+                    All
+                  </button>
+                  {balanceSummary.hasMainnetBalances && (
+                    <button
+                      onClick={() => setPortfolioView('live')}
+                      className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                        portfolioView === 'live'
+                          ? isDark ? "bg-white text-gray-900" : "bg-white text-gray-900 shadow-sm"
+                          : isDark ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-gray-900"
+                      }`}
+                    >
+                      Stablecoins
+                    </button>
+                  )}
+                  {balanceSummary.hasTestnetBalances && (
+                    <button
+                      onClick={() => setPortfolioView('test')}
+                      className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                        portfolioView === 'test'
+                          ? isDark ? "bg-white text-gray-900" : "bg-white text-gray-900 shadow-sm"
+                          : isDark ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-gray-900"
+                      }`}
+                    >
+                      Testnet Stablecoins
+                    </button>
+                  )}
                 </div>
               </div>
+            )}
 
-              {/* Test Money Balance (Testnet) - Only show if user toggles it on */}
-              {showTestnetBalances && balanceSummary.hasTestnetBalances && (
+            {/* Portfolio Summary */}
+            <div className="space-y-3">
+              {portfolioView === 'all' && (
                 <>
-                  <div className={`h-px ${isDark ? "bg-gray-800" : "bg-gray-200"}`} />
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className="w-2 h-2 rounded-full bg-orange-500" />
-                        <span className={`text-xs font-medium ${isDark ? "text-gray-300" : "text-gray-600"}`}>
-                          Test Balance
-                        </span>
-                        <Badge variant="outline" className="text-xs px-1.5 py-0">
-                          TESTNET
-                        </Badge>
-                      </div>
-                      <p className={`text-lg font-semibold ${isDark ? "text-orange-300" : "text-orange-600"}`}>
-                        ${testnetTotalFiatValue.toFixed(2)}
-                      </p>
-                      <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                        Test networks only
-                      </p>
-                    </div>
-                    <div className={`p-2.5 rounded-lg ${isDark ? "bg-orange-900/20" : "bg-orange-100"}`}>
-                      <AlertCircle className="h-4 w-4 text-orange-600" />
-                    </div>
+                  {/* Combined View */}
+                  <div className="text-center py-4">
+                    <p className={`text-3xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+                      ${(totalFiatValue + testnetTotalFiatValue).toFixed(2)}
+                    </p>
+                    <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                      Total value
+                    </p>
                   </div>
+                  
+                  {/* Breakdown */}
+                  {balanceSummary.hasMainnetBalances && (
+                    <div className="flex items-center justify-between py-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-green-500" />
+                        <span className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                          Stablecoins
+                        </span>
+                      </div>
+                      <span className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                        ${totalFiatValue.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                  
+                  {balanceSummary.hasTestnetBalances && (
+                    <div className="flex items-center justify-between py-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-orange-500" />
+                        <span className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                          Testnet Stablecoins
+                        </span>
+                      </div>
+                      <span className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                        ${testnetTotalFiatValue.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
                 </>
+              )}
+
+              {portfolioView === 'live' && (
+                <div className="text-center py-4">
+                  <p className={`text-3xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+                    ${totalFiatValue.toFixed(2)}
+                  </p>
+                </div>
+              )}
+
+              {portfolioView === 'test' && (
+                <div className="text-center py-4">
+                  <p className={`text-3xl font-bold text-orange-500`}>
+                    ${testnetTotalFiatValue.toFixed(2)}
+                  </p>
+                </div>
+              )}
+
+              {/* No Balances State */}
+              {!balanceSummary.hasMainnetBalances && !balanceSummary.hasTestnetBalances && (
+                <div className="text-center py-6">
+                  <Wallet className={`h-8 w-8 mx-auto mb-3 ${isDark ? "text-gray-500" : "text-gray-400"}`} />
+                  <p className={`text-lg font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                    $0.00
+                  </p>
+                  <p className={`text-sm ${isDark ? "text-gray-500" : "text-gray-500"}`}>
+                    No money in connected wallets
+                  </p>
+                </div>
               )}
 
               {/* Wallet Count */}
@@ -460,44 +652,74 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
                 <span className={isDark ? "text-gray-400" : "text-gray-600"}>
                   {userWallets.length} wallet{userWallets.length !== 1 ? 's' : ''} connected
                 </span>
-                {(balanceSummary.hasMainnetBalances || balanceSummary.hasTestnetBalances) && (
-                  <span className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                    {balanceSummary.hasMainnetBalances ? "✓ Real money" : ""} 
-                    {balanceSummary.hasMainnetBalances && balanceSummary.hasTestnetBalances ? " • " : ""}
-                    {balanceSummary.hasTestnetBalances ? "⚠️ Test money" : ""}
-                  </span>
-                )}
               </div>
             </div>
-            {/* Helpful Info Section */}
-            {(balanceSummary.hasMainnetBalances || balanceSummary.hasTestnetBalances) && (
-              <div className={`rounded-lg border p-3 mt-3 ${isDark ? "bg-blue-900/20 border-blue-800/50" : "bg-blue-50 border-blue-200"}`}>
-                <div className="flex items-start gap-2">
-                  <div className={`w-4 h-4 rounded-full flex items-center justify-center mt-0.5 ${isDark ? "bg-blue-800/50" : "bg-blue-100"}`}>
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                  </div>
-                  <div>
-                    <h5 className={`text-xs font-medium mb-1 ${isDark ? "text-blue-300" : "text-blue-700"}`}>
-                      Balance Types
+
+            {/* Collapsible Chain Details */}
+            <Collapsible open={showDetails} onOpenChange={setShowDetails}>
+              <CollapsibleContent className="mt-4 space-y-3">
+                <div className={`h-px ${isDark ? "bg-gray-800" : "bg-gray-200"}`} />
+                
+                {getFilteredChains().chains.length > 0 ? (
+                  <div className="space-y-2">
+                    <h5 className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                      Balance by Network
                     </h5>
-                    <div className="space-y-1 text-xs">
-                      {balanceSummary.hasMainnetBalances && (
-                        <div className={`flex items-center gap-1.5 ${isDark ? "text-blue-200" : "text-blue-600"}`}>
-                          <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                          <span>Real Balance: Actual cryptocurrency on live networks</span>
+                    
+                    {getFilteredChains().chains.map((chain, index) => {
+                      const isMainnet = !chain.network.includes('testnet') && !chain.network.includes('sepolia')
+                      
+                      return (
+                        <div 
+                          key={`${chain.chain}-${chain.network}-${index}`}
+                          className={`p-3 rounded-lg border ${isDark ? "bg-gray-800/30 border-gray-700" : "bg-gray-50 border-gray-200"}`}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-2 h-2 rounded-full ${isMainnet ? 'bg-green-500' : 'bg-orange-500'}`} />
+                              <span className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                                {chain.chain}
+                              </span>
+                              <Badge 
+                                variant="outline" 
+                                className={`text-xs px-1.5 py-0 ${getNetworkBadgeColor(isMainnet)}`}
+                              >
+                                {isMainnet ? 'LIVE' : 'TEST'}
+                              </Badge>
+                            </div>
+                            <span className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                              ${chain.balanceUsd?.toFixed(2) || '0.00'}
+                            </span>
+                          </div>
+                          
+                          {/* Token breakdown */}
+                          {chain.tokens && chain.tokens.length > 0 && (
+                            <div className="space-y-1">
+                              {chain.tokens.map((token, tokenIndex) => (
+                                <div key={tokenIndex} className="flex items-center justify-between text-xs">
+                                  <span className={isDark ? "text-gray-400" : "text-gray-600"}>
+                                    {parseFloat(token.balance).toFixed(4)} {token.symbol}
+                                  </span>
+                                  <span className={isDark ? "text-gray-400" : "text-gray-600"}>
+                                    ${token.balanceUsd?.toFixed(2) || '0.00'}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                      )}
-                      {balanceSummary.hasTestnetBalances && (
-                        <div className={`flex items-center gap-1.5 ${isDark ? "text-blue-200" : "text-blue-600"}`}>
-                          <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
-                          <span>Test Balance: Free test tokens for development</span>
-                        </div>
-                      )}
-                    </div>
+                      )
+                    })}
                   </div>
-                </div>
-              </div>
-            )}
+                ) : (
+                  <div className="text-center py-4">
+                    <p className={`text-sm ${isDark ? "text-gray-500" : "text-gray-500"}`}>
+                      No balances found for selected network type
+                    </p>
+                  </div>
+                )}
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         </TabsContent>
 
@@ -518,10 +740,10 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
                 onClick={handleBuyCrypto}
                 disabled={isLoading || userWallets.length === 0}
                 className="bg-blue-600 hover:bg-blue-700 text-white h-8 text-xs px-3"
-                title="Buy real cryptocurrency for your wallets"
+                title="Buy cryptocurrency for your wallets"
               >
                 <CreditCard className="h-3 w-3 mr-1.5" />
-                Buy Real Crypto
+                Buy Crypto
               </Button>
               {isConnected && !userWallets.find(w => w.walletAddress.toLowerCase() === connectedWallet?.toLowerCase()) && (
                 <Button
@@ -542,12 +764,12 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
             <div className={`text-xs px-1 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
               💡 For test tokens, use faucets like{" "}
               <a 
-                href="https://faucet.quicknode.com/base/sepolia" 
+                href="https://faucet.circle.com/" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="text-blue-500 hover:text-blue-400 underline"
               >
-                Base Sepolia faucet
+                Circle faucet
               </a>
             </div>
           )}
