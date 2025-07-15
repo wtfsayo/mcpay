@@ -30,14 +30,31 @@ type User = {
     [key: string]: any; // Allow for additional properties
 };
 
+// Define tool call type for better type safety
+type ToolCall = {
+    name: string;
+    args: any;
+    isPaid: boolean;
+    payment?: any;
+    id?: string;
+    toolId?: string;
+    serverId?: string;
+};
+
 // Headers that must NOT be forwarded (RFC‑7230 §6.1)
 const HOP_BY_HOP = new Set([
     'proxy-authenticate', 'proxy-authorization',
     'te', 'trailer', 'transfer-encoding', 'upgrade'
 ])
 
-
 const verbs = ["post", "get", "delete"] as const;
+
+/**
+ * Helper function to ensure non-undefined values for database operations
+ */
+function ensureString(value: string | undefined, fallback: string = 'unknown'): string {
+    return value !== undefined ? value : fallback;
+}
 
 /**
  * Copies a client request to the upstream, returning the upstream Response.
@@ -55,12 +72,10 @@ const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer, metad
         const mcpOrigin = mcpConfig?.mcpOrigin;
         if (mcpOrigin) {
             targetUpstream = new URL(mcpOrigin);
-        } else {
         }
 
         if (mcpConfig?.authHeaders && mcpConfig?.requireAuth) {
             authHeaders = mcpConfig.authHeaders as Record<string, unknown>;
-        } else {
         }
     }
 
@@ -71,7 +86,6 @@ const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer, metad
     const url = new URL(c.req.url);
     url.host = targetUpstream.host;
     url.protocol = targetUpstream.protocol;
-
 
     // Remove /mcp/:id from path when forwarding to upstream, keeping everything after /:id
     const pathWithoutId = url.pathname.replace(/^\/mcp\/[^\/]+/, '')
@@ -137,8 +151,10 @@ const mirrorRequest = (res: Response) => {
     })
 }
 
-// Helper function to inspect request payload for streamable HTTP requests and identify tool calls
-const inspectRequest = async (c: Context): Promise<{ toolCall?: { name: string, args: any, isPaid: boolean, payment?: any, id?: string, toolId?: string, serverId?: string }, body?: ArrayBuffer }> => {
+/**
+ * Helper function to inspect request payload for streamable HTTP requests and identify tool calls
+ */
+const inspectRequest = async (c: Context): Promise<{ toolCall?: ToolCall, body?: ArrayBuffer }> => {
     const rawRequest = c.req.raw;
 
     let toolCall = undefined;
@@ -236,7 +252,9 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: { name: string, 
     return { toolCall, body };
 }
 
-// Helper function to get or create user from wallet address (using new multi-wallet system)
+/**
+ * Helper function to get or create user from wallet address (using new multi-wallet system)
+ */
 async function getOrCreateUser(walletAddress: string, provider = 'unknown'): Promise<User | null> {
     if (!walletAddress || typeof walletAddress !== 'string') return null;
 
@@ -292,262 +310,316 @@ async function getOrCreateUser(walletAddress: string, provider = 'unknown'): Pro
     });
 }
 
-// Helper function to ensure non-undefined values for database operations
-function ensureString(value: string | undefined, fallback: string = 'unknown'): string {
-    return value !== undefined ? value : fallback;
+/**
+ * Captures response data for analytics logging
+ */
+async function captureResponseData(upstream: Response): Promise<Record<string, unknown> | undefined> {
+    try {
+        const clonedResponse = upstream.clone();
+        const responseText = await clonedResponse.text();
+        if (responseText) {
+            try {
+                return JSON.parse(responseText);
+            } catch {
+                return { response: responseText };
+            }
+        }
+    } catch (e) {
+        console.log(`[${new Date().toISOString()}] Could not capture response data:`, e);
+    }
+    return undefined;
 }
 
+/**
+ * Records analytics and tool usage data in the database
+ */
+async function recordAnalytics(params: {
+    toolCall: ToolCall;
+    user: User | null;
+    startTime: number;
+    upstream: Response;
+    c: Context;
+    responseData?: Record<string, unknown>;
+    paymentAmount?: string;
+}) {
+    const { toolCall, user, startTime, upstream, c, responseData, paymentAmount } = params;
+
+    if (!toolCall.toolId || !toolCall.serverId) {
+        return;
+    }
+
+    await withTransaction(async (tx) => {
+        // Record tool usage
+        await txOperations.recordToolUsage({
+            toolId: ensureString(toolCall.toolId),
+            userId: user?.id,
+            responseStatus: upstream.status.toString(),
+            executionTimeMs: Date.now() - startTime,
+            ipAddress: c.req.header('x-forwarded-for') || c.req.header('x-real-ip'),
+            userAgent: c.req.header('user-agent'),
+            requestData: {
+                toolName: toolCall.name,
+                args: toolCall.args
+            },
+            result: responseData
+        })(tx);
+        
+        // Update daily analytics using internal server ID
+        const today = new Date();
+        const analyticsData = {
+            totalRequests: 1,
+            userId: user?.id,
+            avgResponseTime: Date.now() - startTime,
+            toolUsage: { 
+                [ensureString(toolCall.toolId)]: 1 
+            },
+            ...(upstream.status >= 400 && { errorCount: 1 }),
+            ...(paymentAmount && { totalRevenue: parseFloat(paymentAmount) })
+        };
+
+        await txOperations.updateOrCreateDailyAnalytics(
+            ensureString(toolCall.serverId),
+            today,
+            analyticsData
+        )(tx);
+    });
+}
+
+/**
+ * Processes payment for paid tool calls
+ */
+async function processPayment(params: {
+    toolCall: ToolCall;
+    c: Context;
+    user: User | null;
+    startTime: number;
+}): Promise<{ success: boolean; error?: string; user?: User }> {
+    const { toolCall, c, user, startTime } = params;
+
+    if (!toolCall.isPaid || !toolCall.toolId) {
+        return { success: true, user: user || undefined };
+    }
+
+    console.log(`[${new Date().toISOString()}] Paid tool call detected: ${toolCall.name}`);
+    console.log(`[${new Date().toISOString()}] Payment details: ${JSON.stringify(toolCall.payment, null, 2)}`);
+
+    // Ensure payTo field exists, default to asset address if missing
+    const payTo = toolCall.payment.payTo || toolCall.payment.asset;
+    
+    const paymentRequirements = [
+        createExactPaymentRequirements(
+            toolCall.payment.maxAmountRequired,
+            toolCall.payment.network,
+            toolCall.payment.resource,
+            toolCall.payment.description,
+            payTo
+        ),
+    ];
+    console.log(`[${new Date().toISOString()}] Created payment requirements: ${JSON.stringify(paymentRequirements, null, 2)}`);
+
+    // Get the payment header before verification to extract payer information
+    const paymentHeader = c.req.header("X-PAYMENT");
+    let payerAddress = '';
+    let extractedUser = user;
+
+    if (paymentHeader) {
+        try {
+            const decodedPayment = decodePayment(paymentHeader);
+            // Extract the payer address from decoded payment
+            payerAddress = decodedPayment.payload.authorization.from;
+            console.log(`[${new Date().toISOString()}] Extracted payer address from payment: ${payerAddress}`);
+
+            // Get or create user with the payer address
+            if (payerAddress && !extractedUser) {
+                extractedUser = await getOrCreateUser(payerAddress);
+                console.log(`[${new Date().toISOString()}] User identified: ${extractedUser?.id || 'unknown'}`);
+            }
+        } catch (e) {
+            console.error(`[${new Date().toISOString()}] Error extracting payer from payment:`, e);
+        }
+    }
+
+    const isPaymentValid = await verifyPayment(c, paymentRequirements);
+    console.log(`[${new Date().toISOString()}] Payment verification result: ${JSON.stringify(isPaymentValid, null, 2)}`);
+
+    if (!isPaymentValid) {
+        console.log(`[${new Date().toISOString()}] Payment verification failed, returning early`);
+
+        // Record failed payment attempt in analytics
+        if (toolCall.toolId && toolCall.serverId) {
+            await withTransaction(async (tx) => {
+                // Record tool usage with error status
+                await txOperations.recordToolUsage({
+                    toolId: ensureString(toolCall.toolId),
+                    userId: extractedUser?.id,
+                    responseStatus: 'payment_failed',
+                    executionTimeMs: Date.now() - startTime,
+                    ipAddress: c.req.header('x-forwarded-for') || c.req.header('x-real-ip'),
+                    userAgent: c.req.header('user-agent'),
+                    requestData: {
+                        toolName: toolCall.name,
+                        args: toolCall.args
+                    },
+                    result: {
+                        error: "Payment verification failed",
+                        status: "payment_failed"
+                    }
+                })(tx);
+                
+                // Update daily analytics using internal server ID
+                const today = new Date();
+                await txOperations.updateOrCreateDailyAnalytics(
+                    ensureString(toolCall.serverId),
+                    today,
+                    {
+                        totalRequests: 1,
+                        errorCount: 1,
+                        userId: extractedUser?.id,
+                        avgResponseTime: Date.now() - startTime,
+                        toolUsage: { 
+                            [ensureString(toolCall.toolId)]: 1 
+                        }
+                    }
+                )(tx);
+            });
+        }
+
+        return { 
+            success: false, 
+            error: "Payment verification failed",
+            user: extractedUser || undefined
+        };
+    }
+
+    try {
+        const payment = c.req.header("X-PAYMENT");
+        if (!payment) {
+            console.log(`[${new Date().toISOString()}] No X-PAYMENT header found, returning early`);
+            return { 
+                success: false, 
+                error: "No payment found in X-PAYMENT header",
+                user: extractedUser || undefined
+            };
+        }
+
+        const decodedPayment = decodePayment(payment);
+        const paymentRequirement = paymentRequirements[0];
+
+        if (!paymentRequirement) {
+            console.log(`[${new Date().toISOString()}] No payment requirement available for settlement`);
+            return { 
+                success: false, 
+                error: "No payment requirement available for settlement",
+                user: extractedUser || undefined
+            };
+        }
+
+        console.log(`[${new Date().toISOString()}] About to settle payment with:`);
+        console.log(`[${new Date().toISOString()}] - Decoded payment: ${JSON.stringify(decodedPayment, null, 2)}`);
+        console.log(`[${new Date().toISOString()}] - Payment requirement: ${JSON.stringify(paymentRequirement, null, 2)}`);
+
+        let settleResponse;
+        try {
+            settleResponse = await settle(
+                decodedPayment,
+                paymentRequirement
+            );
+            console.log(`[${new Date().toISOString()}] Settlement successful: ${JSON.stringify(settleResponse, null, 2)}`);
+        } catch (settleError) {
+            console.error(`[${new Date().toISOString()}] Settlement failed:`, settleError);
+            console.error(`[${new Date().toISOString()}] Settlement error details:`, {
+                message: settleError instanceof Error ? settleError.message : String(settleError),
+                stack: settleError instanceof Error ? settleError.stack : undefined
+            });
+            throw settleError; // Re-throw to be caught by the outer try-catch
+        }
+
+        if (settleResponse.success === false) {
+            console.log(`[${new Date().toISOString()}] Settlement returned success=false: ${settleResponse.errorReason}`);
+            return { 
+                success: false, 
+                error: settleResponse.errorReason,
+                user: extractedUser || undefined
+            };
+        }
+
+        // Record successful payment in database
+        if (toolCall.toolId && toolCall.serverId) {
+            await withTransaction(async (tx) => {
+                // Create payment record
+                const paymentRecord = await txOperations.createPayment({
+                    toolId: ensureString(toolCall.toolId),
+                    userId: extractedUser?.id,
+                    amount: (paymentRequirement as any).amount || toolCall.payment.maxAmountRequired,
+                    currency: paymentRequirement.asset,
+                    network: paymentRequirement.network,
+                    transactionHash: settleResponse.transaction || `unknown-${Date.now()}`,
+                    status: 'completed',
+                    signature: payment,
+                    paymentData: {
+                        decodedPayment,
+                        settleResponse
+                    }
+                })(tx);
+                
+                console.log(`[${new Date().toISOString()}] Payment recorded with ID: ${paymentRecord.id}`);
+            });
+        }
+
+        const responseHeader = settleResponseHeader(settleResponse);
+        console.log(`[${new Date().toISOString()}] Setting X-PAYMENT-RESPONSE header: ${responseHeader}`);
+        c.header("X-PAYMENT-RESPONSE", responseHeader);
+
+        return { success: true, user: extractedUser || undefined };
+
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] Error during payment processing:`, error);
+        return { 
+            success: false, 
+            error: "Internal server error during payment processing",
+            user: extractedUser || undefined
+        };
+    }
+}
+
+// Main route handlers
 verbs.forEach(verb => {
     app[verb](`/:id/*`, async (c) => {
         const id = c.req.param('id');
-        console.log(`[${new Date().toISOString()}] Handling ${verb.toUpperCase()} request to ${c.req.url} with ID: ${id}`)
+        console.log(`[${new Date().toISOString()}] Handling ${verb.toUpperCase()} request to ${c.req.url} with ID: ${id}`);
 
         const startTime = Date.now();
-        const { toolCall, body } = await inspectRequest(c)
-        console.log(`[${new Date().toISOString()}] Request payload logged, toolCall: ${toolCall ? 'present' : 'not present'}`)
+        const { toolCall, body } = await inspectRequest(c);
+        console.log(`[${new Date().toISOString()}] Request payload logged, toolCall: ${toolCall ? 'present' : 'not present'}`);
 
-        // No user yet - will be set from payment verification if available
+        // Initialize user - will be populated during payment processing or from headers
         let user: User | null = null;
 
-        if (toolCall && toolCall.isPaid && toolCall.toolId) {
-            console.log(`[${new Date().toISOString()}] Paid tool call detected: ${toolCall.name}`)
-            console.log(`[${new Date().toISOString()}] Payment details: ${JSON.stringify(toolCall.payment, null, 2)}`)
-
-            // Ensure payTo field exists, default to asset address if missing
-            const payTo = toolCall.payment.payTo || toolCall.payment.asset;
+        // Process payment if this is a paid tool call
+        if (toolCall?.isPaid) {
+            const paymentResult = await processPayment({ toolCall, c, user, startTime });
             
-            const paymentRequirements = [
-                createExactPaymentRequirements(
-                    toolCall.payment.maxAmountRequired,
-                    toolCall.payment.network,
-                    toolCall.payment.resource,
-                    toolCall.payment.description,
-                    payTo
-                ),
-            ];
-            console.log(`[${new Date().toISOString()}] Created payment requirements: ${JSON.stringify(paymentRequirements, null, 2)}`)
-
-            // Get the payment header before verification to extract payer information
-            const paymentHeader = c.req.header("X-PAYMENT");
-            let payerAddress = '';
-
-            if (paymentHeader) {
-                try {
-                    const decodedPayment = decodePayment(paymentHeader);
-                    // Extract the payer address from decoded payment
-                    payerAddress = decodedPayment.payload.authorization.from;
-                    console.log(`[${new Date().toISOString()}] Extracted payer address from payment: ${payerAddress}`);
-
-                    // Get or create user with the payer address
-                    if (payerAddress) {
-                        user = await getOrCreateUser(payerAddress);
-                        console.log(`[${new Date().toISOString()}] User identified: ${user?.id || 'unknown'}`);
-                    }
-                } catch (e) {
-                    console.error(`[${new Date().toISOString()}] Error extracting payer from payment:`, e);
-                }
-            }
-
-            const isPaymentValid = await verifyPayment(c, paymentRequirements)
-            console.log(`[${new Date().toISOString()}] Payment verification result: ${JSON.stringify(isPaymentValid, null, 2)}`)
-
-            if (!isPaymentValid) {
-                console.log(`[${new Date().toISOString()}] Payment verification failed, returning early`)
-
-                // Record failed payment attempt in analytics
-                if (toolCall.toolId && toolCall.serverId) {
-                    await withTransaction(async (tx) => {
-                        // Record tool usage with error status
-                        await txOperations.recordToolUsage({
-                            toolId: ensureString(toolCall.toolId),
-                            userId: user?.id,
-                            responseStatus: 'payment_failed',
-                            executionTimeMs: Date.now() - startTime,
-                            ipAddress: c.req.header('x-forwarded-for') || c.req.header('x-real-ip'),
-                            userAgent: c.req.header('user-agent'),
-                            requestData: {
-                                toolName: toolCall.name,
-                                args: toolCall.args
-                            },
-                            result: {
-                                error: "Payment verification failed",
-                                status: "payment_failed"
-                            }
-                        })(tx);
-                        
-                        // Update daily analytics using internal server ID
-                        const today = new Date();
-                        await txOperations.updateOrCreateDailyAnalytics(
-                            ensureString(toolCall.serverId),
-                            today,
-                            {
-                                totalRequests: 1,
-                                errorCount: 1,
-                                userId: user?.id,
-                                avgResponseTime: Date.now() - startTime,
-                                toolUsage: { 
-                                    [ensureString(toolCall.toolId)]: 1 
-                                }
-                            }
-                        )(tx);
-                    });
-                }
-
+            if (!paymentResult.success) {
                 c.status(402);
+                const payTo = toolCall.payment?.payTo || toolCall.payment?.asset;
+                const paymentRequirements = [
+                    createExactPaymentRequirements(
+                        toolCall.payment.maxAmountRequired,
+                        toolCall.payment.network,
+                        toolCall.payment.resource,
+                        toolCall.payment.description,
+                        payTo
+                    ),
+                ];
+                
                 return c.json({
                     x402Version,
-                    error: "Payment verification failed",
+                    error: paymentResult.error,
                     accepts: paymentRequirements,
                 });
             }
 
-            try {
-                const payment = c.req.header("X-PAYMENT");
-                if (!payment) {
-                    console.log(`[${new Date().toISOString()}] No X-PAYMENT header found, returning early`)
-                    c.status(402);
-                    return c.json({
-                        x402Version,
-                        error: "No payment found in X-PAYMENT header",
-                        accepts: paymentRequirements,
-                    });
-                }
-
-                const decodedPayment = decodePayment(payment);
-                const paymentRequirement = paymentRequirements[0];
-
-                if (!paymentRequirement) {
-                    console.log(`[${new Date().toISOString()}] No payment requirement available for settlement`)
-                    c.status(402);
-                    return c.json({
-                        x402Version,
-                        error: "No payment requirement available for settlement",
-                        accepts: paymentRequirements,
-                    });
-                }
-
-                console.log(`[${new Date().toISOString()}] About to settle payment with:`)
-                console.log(`[${new Date().toISOString()}] - Decoded payment: ${JSON.stringify(decodedPayment, null, 2)}`)
-                console.log(`[${new Date().toISOString()}] - Payment requirement: ${JSON.stringify(paymentRequirement, null, 2)}`)
-
-                let settleResponse;
-                try {
-                    settleResponse = await settle(
-                        decodedPayment,
-                        paymentRequirement
-                    );
-                    console.log(`[${new Date().toISOString()}] Settlement successful: ${JSON.stringify(settleResponse, null, 2)}`)
-                } catch (settleError) {
-                    console.error(`[${new Date().toISOString()}] Settlement failed:`, settleError)
-                    console.error(`[${new Date().toISOString()}] Settlement error details:`, {
-                        message: settleError instanceof Error ? settleError.message : String(settleError),
-                        stack: settleError instanceof Error ? settleError.stack : undefined
-                    })
-                    throw settleError; // Re-throw to be caught by the outer try-catch
-                }
-
-                if (settleResponse.success === false) {
-                    console.log(`[${new Date().toISOString()}] Settlement returned success=false: ${settleResponse.errorReason}`)
-                    c.status(402);
-                    return c.json({
-                        x402Version,
-                        error: settleResponse.errorReason,
-                        accepts: paymentRequirements,
-                    });
-                }
-
-                // Record successful payment in database
-                if (toolCall.toolId && toolCall.serverId) {
-                    await withTransaction(async (tx) => {
-                        // Create payment record
-                        const paymentRecord = await txOperations.createPayment({
-                            toolId: ensureString(toolCall.toolId),
-                            userId: user?.id,
-                            amount: (paymentRequirement as any).amount || toolCall.payment.maxAmountRequired,
-                            currency: paymentRequirement.asset,
-                            network: paymentRequirement.network,
-                            transactionHash: settleResponse.transaction || `unknown-${Date.now()}`,
-                            status: 'completed',
-                            signature: payment,
-                            paymentData: {
-                                decodedPayment,
-                                settleResponse
-                            }
-                        })(tx);
-                        
-                        console.log(`[${new Date().toISOString()}] Payment recorded with ID: ${paymentRecord.id}`);
-                    });
-                }
-
-                const responseHeader = settleResponseHeader(settleResponse);
-                console.log(`[${new Date().toISOString()}] Setting X-PAYMENT-RESPONSE header: ${responseHeader}`)
-                c.header("X-PAYMENT-RESPONSE", responseHeader);
-
-                console.log(`[${new Date().toISOString()}] Forwarding request to upstream with ID: ${id}`)
-                const upstream = await forwardRequest(c, id, body, { user: user || undefined })
-                console.log(`[${new Date().toISOString()}] Received upstream response, mirroring back to client`)
-
-                // Capture response data for logging
-                let responseData: Record<string, unknown> | undefined;
-                try {
-                    const clonedResponse = upstream.clone();
-                    const responseText = await clonedResponse.text();
-                    if (responseText) {
-                        try {
-                            responseData = JSON.parse(responseText);
-                        } catch {
-                            responseData = { response: responseText };
-                        }
-                    }
-                } catch (e) {
-                    console.log(`[${new Date().toISOString()}] Could not capture response data:`, e);
-                }
-
-                // Record successful tool usage in database
-                if (toolCall.toolId && toolCall.serverId) {
-                    await withTransaction(async (tx) => {
-                        // Record tool usage
-                        await txOperations.recordToolUsage({
-                            toolId: ensureString(toolCall.toolId),
-                            userId: user?.id,
-                            responseStatus: upstream.status.toString(),
-                            executionTimeMs: Date.now() - startTime,
-                            ipAddress: c.req.header('x-forwarded-for') || c.req.header('x-real-ip'),
-                            userAgent: c.req.header('user-agent'),
-                            requestData: {
-                                toolName: toolCall.name,
-                                args: toolCall.args
-                            },
-                            result: responseData
-                        })(tx);
-                        
-                        // Update daily analytics using internal server ID
-                        const today = new Date();
-                        await txOperations.updateOrCreateDailyAnalytics(
-                            ensureString(toolCall.serverId),
-                            today,
-                            {
-                                totalRequests: 1,
-                                totalRevenue: parseFloat((paymentRequirement as any).amount || toolCall.payment.maxAmountRequired),
-                                userId: user?.id,
-                                avgResponseTime: Date.now() - startTime,
-                                toolUsage: { 
-                                    [ensureString(toolCall.toolId)]: 1 
-                                }
-                            }
-                        )(tx);
-                    });
-                }
-
-                return mirrorRequest(upstream)
-            } catch (error) {
-                console.error(`[${new Date().toISOString()}] Error during payment processing:`, error)
-                c.status(500)
-                return c.json({
-                    error: "Internal server error during payment processing"
-                })
-            }
-
+            user = paymentResult.user || null;
         }
 
         // For non-paid requests, try to get wallet address from header as fallback
@@ -558,65 +630,27 @@ verbs.forEach(verb => {
             }
         }
 
-        console.log(`[${new Date().toISOString()}] Forwarding request to upstream with ID: ${id}`)
-        const upstream = await forwardRequest(c, id, body, { user: user || undefined })
-        console.log(`[${new Date().toISOString()}] Received upstream response, mirroring back to client`)
+        console.log(`[${new Date().toISOString()}] Forwarding request to upstream with ID: ${id}`);
+        const upstream = await forwardRequest(c, id, body, { user: user || undefined });
+        console.log(`[${new Date().toISOString()}] Received upstream response, mirroring back to client`);
 
-        // Capture response data for logging
-        let responseData: Record<string, unknown> | undefined;
-        if (toolCall && toolCall.toolId && toolCall.serverId) {
-            try {
-                const clonedResponse = upstream.clone();
-                const responseText = await clonedResponse.text();
-                if (responseText) {
-                    try {
-                        responseData = JSON.parse(responseText);
-                    } catch {
-                        responseData = { response: responseText };
-                    }
-                }
-            } catch (e) {
-                console.log(`[${new Date().toISOString()}] Could not capture response data:`, e);
-            }
-        }
-
-        // Record tool usage if we have tool information
-        if (toolCall && toolCall.toolId && toolCall.serverId) {
-            await withTransaction(async (tx) => {
-                // Record tool usage
-                await txOperations.recordToolUsage({
-                    toolId: ensureString(toolCall.toolId),
-                    userId: user?.id,
-                    responseStatus: upstream.status.toString(),
-                    executionTimeMs: Date.now() - startTime,
-                    ipAddress: c.req.header('x-forwarded-for') || c.req.header('x-real-ip'),
-                    userAgent: c.req.header('user-agent'),
-                    requestData: {
-                        toolName: toolCall.name,
-                        args: toolCall.args
-                    },
-                    result: responseData
-                })(tx);
-                
-                // Update daily analytics using internal server ID
-                const today = new Date();
-                await txOperations.updateOrCreateDailyAnalytics(
-                    ensureString(toolCall.serverId),
-                    today,
-                    {
-                        totalRequests: 1,
-                        userId: user?.id,
-                        avgResponseTime: Date.now() - startTime,
-                        toolUsage: { 
-                            [ensureString(toolCall.toolId)]: 1 
-                        }
-                    }
-                )(tx);
+        // Capture response data and record analytics if we have tool information
+        if (toolCall) {
+            const responseData = await captureResponseData(upstream);
+            
+            await recordAnalytics({
+                toolCall,
+                user,
+                startTime,
+                upstream,
+                c,
+                responseData,
+                paymentAmount: toolCall.isPaid ? toolCall.payment?.maxAmountRequired : undefined
             });
         }
 
-        return mirrorRequest(upstream)
-    })
-})
+        return mirrorRequest(upstream);
+    });
+});
 
 export default app;
