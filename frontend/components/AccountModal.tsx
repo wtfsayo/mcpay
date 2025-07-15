@@ -59,7 +59,8 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
   const [error, setError] = useState<string>("")
   const [userWallets, setUserWallets] = useState<UserWallet[]>([])
   const [isMobile, setIsMobile] = useState(false)
-
+  const [totalFiatValue, setTotalFiatValue] = useState<number>(0)
+  
   // Check for mobile screen size
   useEffect(() => {
     const checkMobile = () => {
@@ -82,8 +83,9 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
     if (!session?.user?.id) return
     
     try {
-      const wallets = await api.getUserWallets(session.user.id)
+      const { wallets, totalFiatValue } = await api.getUserWallets(session.user.id)
       setUserWallets(wallets)
+      setTotalFiatValue(totalFiatValue)
     } catch (error) {
       console.error('Failed to load user wallets:', error)
     }
@@ -204,24 +206,24 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
 
   // GitHub Sign In Component
   const GitHubSignIn = () => (
-    <div className="space-y-6">
+    <div className="space-y-5 p-1">
       <div className="text-center">
-        <div className={`w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center ${
-          isDark ? "bg-gray-800" : "bg-gray-100"
+        <div className={`w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center ${
+          isDark ? "bg-gray-800/50" : "bg-gray-50"
         }`}>
-          <Github className={`h-8 w-8 ${isDark ? "text-gray-300" : "text-gray-600"}`} />
+          <Github className={`h-6 w-6 ${isDark ? "text-gray-300" : "text-gray-600"}`} />
         </div>
-        <h2 className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
-          Connect with GitHub
+        <h2 className={`text-xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+          Sign in to MCPay
         </h2>
-        <p className={`text-sm mt-2 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-          Sign in to your MCPay account using GitHub
+        <p className={`text-sm mt-1 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+          Connect with your GitHub account
         </p>
       </div>
 
       {error && (
         <div className={`p-3 rounded-lg border ${
-          isDark ? "bg-red-900/20 border-red-800 text-red-400" : "bg-red-50 border-red-200 text-red-700"
+          isDark ? "bg-red-950/50 border-red-800/50 text-red-400" : "bg-red-50 border-red-200 text-red-700"
         }`}>
           <div className="flex items-center gap-2">
             <AlertCircle className="h-4 w-4" />
@@ -234,14 +236,14 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
         type="button"
         onClick={handleGitHubSignIn}
         disabled={isLoading}
-        className="w-full"
+        className="w-full h-11 text-[15px] font-medium"
         size="lg"
       >
-        <Github className="h-5 w-5 mr-3" />
+        <Github className="h-4 w-4 mr-3" />
         {isLoading ? "Connecting..." : "Continue with GitHub"}
       </Button>
 
-      <div className={`text-center text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+      <div className={`text-center text-xs ${isDark ? "text-gray-500" : "text-gray-500"}`}>
         By continuing, you agree to our Terms of Service and Privacy Policy
       </div>
     </div>
@@ -249,25 +251,25 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
 
   // Authenticated User Interface
   const AuthenticatedInterface = () => (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* User Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between px-1">
         <div className="flex items-center gap-3">
-          <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-            isDark ? "bg-gray-800" : "bg-gray-100"
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+            isDark ? "bg-gray-800/50" : "bg-gray-50"
           }`}>
             {session?.user?.image ? (
               <img 
                 src={session.user.image} 
                 alt="Profile" 
-                className="w-12 h-12 rounded-full object-cover"
+                className="w-10 h-10 rounded-full object-cover"
               />
             ) : (
-              <User className={`h-6 w-6 ${isDark ? "text-gray-300" : "text-gray-600"}`} />
+              <User className={`h-5 w-5 ${isDark ? "text-gray-300" : "text-gray-600"}`} />
             )}
           </div>
           <div>
-            <h3 className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+            <h3 className={`font-medium text-[15px] ${isDark ? "text-white" : "text-gray-900"}`}>
               {session?.user?.name || "User"}
             </h3>
             <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
@@ -280,81 +282,98 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
           size="sm"
           onClick={handleSignOut}
           disabled={isLoading}
-          className={isDark ? "text-gray-400 hover:text-white" : ""}
+          className={`h-8 w-8 p-0 ${isDark ? "text-gray-400 hover:text-white hover:bg-gray-800" : "hover:bg-gray-100"}`}
         >
           <LogOut className="h-4 w-4" />
         </Button>
       </div>
 
-      <Separator />
+      <div className={`h-px ${isDark ? "bg-gray-800" : "bg-gray-200"}`} />
 
       {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'profile' | 'wallets' | 'settings')} className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="profile">
-            <User className="h-4 w-4 mr-2" />
+        <TabsList className={`grid w-full grid-cols-3 h-9 ${isDark ? "bg-gray-800/50" : "bg-gray-100"}`}>
+          <TabsTrigger value="profile" className="text-sm">
+            <User className="h-3.5 w-3.5 mr-1.5" />
             Profile
           </TabsTrigger>
-          <TabsTrigger value="wallets">
-            <Wallet className="h-4 w-4 mr-2" />
+          <TabsTrigger value="wallets" className="text-sm">
+            <Wallet className="h-3.5 w-3.5 mr-1.5" />
             Wallets
           </TabsTrigger>
-          <TabsTrigger value="settings">
-            <Settings className="h-4 w-4 mr-2" />
+          <TabsTrigger value="settings" className="text-sm">
+            <Settings className="h-3.5 w-3.5 mr-1.5" />
             Settings
           </TabsTrigger>
         </TabsList>
 
         {/* Profile Tab */}
-        <TabsContent value="profile" className="space-y-4 mt-6">
-          <Card className={isDark ? "bg-gray-800 border-gray-700" : ""}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-5 w-5" />
+        <TabsContent value="profile" className="space-y-3 mt-4">
+          <div className={`rounded-lg border p-4 ${isDark ? "bg-gray-900/50 border-gray-800" : "bg-gray-50/50 border-gray-200"}`}>
+            <div className="flex items-center gap-2 mb-3">
+              <User className="h-4 w-4" />
+              <h4 className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
                 Profile Information
-              </CardTitle>
-              <CardDescription>
-                Your account details and preferences
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className={`text-sm font-medium block mb-1 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                    Name
-                  </label>
-                  <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                    {session?.user?.name || "Not set"}
+              </h4>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={`text-xs font-medium block mb-1 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                  Name
+                </label>
+                <p className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                  {session?.user?.name || "Not set"}
+                </p>
+              </div>
+              <div>
+                <label className={`text-xs font-medium block mb-1 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                  Email
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <p className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                    {session?.user?.email?.slice(0, 20)}...
                   </p>
-                </div>
-                <div>
-                  <label className={`text-sm font-medium block mb-1 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                    Email
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                      {session?.user?.email}
-                    </p>
-                    {session?.user?.emailVerified ? (
-                      <CheckCircle className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <AlertCircle className="h-4 w-4 text-orange-500" />
-                    )}
-                  </div>
+                  {session?.user?.emailVerified ? (
+                    <CheckCircle className="h-3 w-3 text-green-500" />
+                  ) : (
+                    <AlertCircle className="h-3 w-3 text-orange-500" />
+                  )}
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
+
+          <div className={`rounded-lg border p-4 ${isDark ? "bg-gray-900/50 border-gray-800" : "bg-gray-50/50 border-gray-200"}`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Wallet className="h-4 w-4" />
+                  <h4 className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Portfolio Value
+                  </h4>
+                </div>
+                <p className={`text-2xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                  ${parseFloat(String(totalFiatValue || 0)).toFixed(2)}
+                </p>
+                <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                  {userWallets.length} wallet{userWallets.length !== 1 ? 's' : ''}
+                </p>
+              </div>
+              <div className={`p-2.5 rounded-lg ${isDark ? "bg-green-900/20" : "bg-green-100"}`}>
+                <Wallet className="h-4 w-4 text-green-600" />
+              </div>
+            </div>
+          </div>
         </TabsContent>
 
         {/* Wallets Tab */}
-        <TabsContent value="wallets" className="space-y-4 mt-6">
+        <TabsContent value="wallets" className="space-y-3 mt-4">
           <div className="flex items-center justify-between">
             <div>
-              <h4 className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+              <h4 className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
                 Connected Wallets
               </h4>
-              <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+              <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                 Manage your blockchain wallets
               </p>
             </div>
@@ -363,9 +382,9 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
                 size="sm"
                 onClick={handleBuyCrypto}
                 disabled={isLoading || userWallets.length === 0}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
+                className="bg-blue-600 hover:bg-blue-700 text-white h-8 text-xs px-3"
               >
-                <CreditCard className="h-4 w-4 mr-2" />
+                <CreditCard className="h-3 w-3 mr-1.5" />
                 Buy Crypto
               </Button>
               {isConnected && !userWallets.find(w => w.walletAddress.toLowerCase() === connectedWallet?.toLowerCase()) && (
@@ -373,9 +392,10 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
                   size="sm"
                   onClick={handleConnectWallet}
                   disabled={isLoading}
+                  className="h-8 text-xs px-3"
                 >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Connect Current Wallet
+                  <Plus className="h-3 w-3 mr-1.5" />
+                  Link Wallet
                 </Button>
               )}
             </div>
@@ -383,222 +403,215 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
 
           {/* Current Connected Wallet (if not linked to account) */}
           {isConnected && !userWallets.find(w => w.walletAddress.toLowerCase() === connectedWallet?.toLowerCase()) && (
-            <Card className={`border-2 border-dashed ${isDark ? "border-gray-600 bg-gray-800/50" : "border-gray-300 bg-gray-50"}`}>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Wallet className="h-5 w-5 text-blue-500" />
-                    <div>
-                      <p className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
-                        Connected Wallet
-                      </p>
-                      <p className={`text-xs font-mono ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                        {connectedWallet?.slice(0, 6)}...{connectedWallet?.slice(-4)}
-                      </p>
-                    </div>
+            <div className={`border border-dashed rounded-lg p-3 ${isDark ? "border-gray-700 bg-gray-800/30" : "border-gray-300 bg-gray-50"}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <Wallet className="h-4 w-4 text-blue-500" />
+                  <div>
+                    <p className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                      Connected Wallet
+                    </p>
+                    <p className={`text-xs font-mono ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                      {connectedWallet?.slice(0, 6)}...{connectedWallet?.slice(-4)}
+                    </p>
                   </div>
-                  <Badge variant="outline">Not Linked</Badge>
                 </div>
-              </CardContent>
-            </Card>
+                <Badge variant="outline" className="text-xs">Not Linked</Badge>
+              </div>
+            </div>
           )}
 
           {/* Wallet Connection Component */}
-          <Card className={isDark ? "bg-gray-800 border-gray-700" : ""}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h4 className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
-                    Native Wallet Connection
-                  </h4>
-                  <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                    Connect wallets like MetaMask, Coinbase Wallet, etc.
-                  </p>
-                </div>
+          <div className={`rounded-lg border p-4 ${isDark ? "bg-gray-900/50 border-gray-800" : "bg-gray-50/50 border-gray-200"}`}>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h4 className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Native Wallet
+                </h4>
+                <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                  Connect MetaMask, Coinbase Wallet, etc.
+                </p>
               </div>
-              
-              {!isConnected ? (
-                <div className="text-center py-4">
-                  <Wallet className={`h-8 w-8 mx-auto mb-3 ${isDark ? "text-gray-400" : "text-gray-600"}`} />
-                  <p className={`text-sm mb-4 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                    No native wallet connected
-                  </p>
+            </div>
+            
+            {!isConnected ? (
+              <div className="text-center py-3">
+                <Wallet className={`h-6 w-6 mx-auto mb-2 ${isDark ? "text-gray-500" : "text-gray-400"}`} />
+                <p className={`text-xs mb-3 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                  No native wallet connected
+                </p>
+                <ConnectButton />
+              </div>
+            ) : (
+              <div className="flex items-center justify-between p-3 rounded-lg border border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/20">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-2 h-2 rounded-full bg-green-500" />
+                  <div>
+                    <p className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                      Connected
+                    </p>
+                    <p className={`text-xs font-mono ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                      {connectedWallet?.slice(0, 6)}...{connectedWallet?.slice(-4)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {!userWallets.find(w => w.walletAddress.toLowerCase() === connectedWallet?.toLowerCase()) && (
+                    <Button
+                      size="sm"
+                      onClick={handleConnectWallet}
+                      disabled={isLoading}
+                      className="h-7 text-xs px-2"
+                    >
+                      Link
+                    </Button>
+                  )}
                   <ConnectButton />
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 rounded-lg border border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/20">
-                    <div className="flex items-center gap-3">
-                      <div className="w-2 h-2 rounded-full bg-green-500" />
-                      <div>
-                        <p className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
-                          Connected Wallet
-                        </p>
-                        <p className={`text-xs font-mono ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                          {connectedWallet?.slice(0, 6)}...{connectedWallet?.slice(-4)}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {!userWallets.find(w => w.walletAddress.toLowerCase() === connectedWallet?.toLowerCase()) && (
-                        <Button
-                          size="sm"
-                          onClick={handleConnectWallet}
-                          disabled={isLoading}
-                        >
-                          Link to Account
-                        </Button>
-                      )}
-                      <ConnectButton />
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+              </div>
+            )}
+          </div>
 
           {/* User's Linked Wallets */}
-          <div className="space-y-3">
+          <div className="space-y-2">
             {userWallets.map((wallet) => (
-              <Card key={wallet.id} className={isDark ? "bg-gray-800 border-gray-700" : ""}>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="relative">
-                        <Wallet className="h-5 w-5" />
+              <div key={wallet.id} className={`rounded-lg border p-3 ${isDark ? "bg-gray-900/50 border-gray-800" : "bg-white border-gray-200"}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="relative">
+                      <Wallet className="h-4 w-4" />
+                      {wallet.isPrimary && (
+                        <Star className="h-2.5 w-2.5 text-yellow-500 absolute -top-0.5 -right-0.5" />
+                      )}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                          {wallet.walletAddress.slice(0, 6)}...{wallet.walletAddress.slice(-4)}
+                        </p>
                         {wallet.isPrimary && (
-                          <Star className="h-3 w-3 text-yellow-500 absolute -top-1 -right-1" />
+                          <Badge variant="secondary" className="text-xs px-1.5 py-0">Primary</Badge>
                         )}
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
-                            {wallet.walletAddress.slice(0, 6)}...{wallet.walletAddress.slice(-4)}
-                          </p>
-                          {wallet.isPrimary && (
-                            <Badge variant="secondary" className="text-xs">Primary</Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Badge variant="outline" className="text-xs">
-                            {wallet.blockchain}
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <Badge variant="outline" className="text-xs px-1.5 py-0">
+                          {wallet.blockchain}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs px-1.5 py-0">
+                          {wallet.walletType}
+                        </Badge>
+                        {wallet.provider && (
+                          <Badge variant="outline" className="text-xs px-1.5 py-0">
+                            {wallet.provider}
                           </Badge>
-                          <Badge variant="outline" className="text-xs">
-                            {wallet.walletType}
-                          </Badge>
-                          {wallet.provider && (
-                            <Badge variant="outline" className="text-xs">
-                              {wallet.provider}
-                            </Badge>
-                          )}
-                        </div>
+                        )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => copyToClipboard(wallet.walletAddress)}
-                        className="h-8 w-8 p-0"
-                      >
-                        <Copy className="h-3 w-3" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openExplorer(wallet.walletAddress, 'base-sepolia')}
-                        className="h-8 w-8 p-0"
-                      >
-                        <ExternalLink className="h-3 w-3" />
-                      </Button>
-                      {!wallet.isPrimary && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleSetPrimaryWallet(wallet.id)}
-                          disabled={isLoading}
-                          className="h-8 px-2"
-                        >
-                          <Star className="h-3 w-3 mr-1" />
-                          Set Primary
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRemoveWallet(wallet.id, wallet.isPrimary)}
-                        disabled={isLoading}
-                        className="h-8 px-2 text-red-500 hover:text-red-400"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
                   </div>
-                </CardContent>
-              </Card>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => copyToClipboard(wallet.walletAddress)}
+                      className="h-7 w-7 p-0"
+                    >
+                      <Copy className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openExplorer(wallet.walletAddress, 'base-sepolia')}
+                      className="h-7 w-7 p-0"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </Button>
+                    {!wallet.isPrimary && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleSetPrimaryWallet(wallet.id)}
+                        disabled={isLoading}
+                        className="h-7 px-2 text-xs"
+                      >
+                        <Star className="h-3 w-3 mr-1" />
+                        Primary
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemoveWallet(wallet.id, wallet.isPrimary)}
+                      disabled={isLoading}
+                      className="h-7 w-7 p-0 text-red-500 hover:text-red-400"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         </TabsContent>
 
         {/* Settings Tab */}
-        <TabsContent value="settings" className="space-y-4 mt-6">
-          <Card className={isDark ? "bg-gray-800 border-gray-700" : ""}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Settings className="h-5 w-5" />
+        <TabsContent value="settings" className="space-y-3 mt-4">
+          <div className={`rounded-lg border p-4 ${isDark ? "bg-gray-900/50 border-gray-800" : "bg-gray-50/50 border-gray-200"}`}>
+            <div className="flex items-center gap-2 mb-3">
+              <Settings className="h-4 w-4" />
+              <h4 className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
                 Account Settings
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+              </h4>
+            </div>
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                  <p className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
                     Email Verification
                   </p>
-                  <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                  <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                     {session?.user?.emailVerified ? "Your email is verified" : "Please verify your email"}
                   </p>
                 </div>
                 {session?.user?.emailVerified ? (
-                  <CheckCircle className="h-5 w-5 text-green-500" />
+                  <CheckCircle className="h-4 w-4 text-green-500" />
                 ) : (
-                  <Button variant="outline" size="sm">
-                    Send Verification
+                  <Button variant="outline" size="sm" className="h-7 text-xs px-3">
+                    Verify
                   </Button>
                 )}
               </div>
-              <Separator />
+              <div className={`h-px ${isDark ? "bg-gray-800" : "bg-gray-200"}`} />
               <div className="flex items-center justify-between">
                 <div>
-                  <p className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                  <p className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
                     Two-Factor Authentication
                   </p>
-                  <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                  <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                     Add an extra layer of security
                   </p>
                 </div>
-                <Button variant="outline" size="sm">
-                  <Shield className="h-4 w-4 mr-2" />
-                  Enable 2FA
+                <Button variant="outline" size="sm" className="h-7 text-xs px-3">
+                  <Shield className="h-3 w-3 mr-1.5" />
+                  Enable
                 </Button>
               </div>
-              <Separator />
+              <div className={`h-px ${isDark ? "bg-gray-800" : "bg-gray-200"}`} />
               <div className="flex items-center justify-between">
                 <div>
-                  <p className={`font-medium text-red-600`}>
+                  <p className={`font-medium text-sm text-red-600`}>
                     Delete Account
                   </p>
-                  <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                  <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                     Permanently delete your account and all data
                   </p>
                 </div>
-                <Button variant="destructive" size="sm">
-                  <Trash2 className="h-4 w-4 mr-2" />
+                <Button variant="destructive" size="sm" className="h-7 text-xs px-3">
+                  <Trash2 className="h-3 w-3 mr-1.5" />
                   Delete
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
     </div>
@@ -606,7 +619,7 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
 
   const LoadingSpinner = () => (
     <div className="flex items-center justify-center py-8">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
     </div>
   )
 
@@ -641,7 +654,7 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
   if (isMobile) {
     return (
       <Drawer open={isOpen} onOpenChange={onClose}>
-        <DrawerContent className={`h-[60vh] ${isDark ? "bg-gray-900 border-gray-800" : ""}`}>
+        <DrawerContent className={`h-[65vh] ${isDark ? "bg-gray-900 border-gray-800" : ""}`}>
           <ModalHeader Component={DrawerHeader} />
           <div className="flex-1 overflow-y-auto px-4 pb-6">
             {session?.user ? <AuthenticatedInterface /> : <GitHubSignIn />}
@@ -654,9 +667,9 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
   // Desktop dialog
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className={`max-w-2xl h-[60vh] flex flex-col ${isDark ? "bg-gray-900 border-gray-800" : ""}`}>
+      <DialogContent className={`max-w-lg h-[70vh] flex flex-col ${isDark ? "bg-gray-900 border-gray-800" : ""}`}>
         <ModalHeader Component={DialogHeader} />
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto px-1">
           {session?.user ? <AuthenticatedInterface /> : <GitHubSignIn />}
         </div>
       </DialogContent>

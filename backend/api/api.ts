@@ -18,6 +18,7 @@ import { CDP, type CDPNetwork, createCDPAccount, type CreateCDPWalletOptions } f
 import { createOneClickBuyUrl, getSupportedNetworks, getSupportedAssets } from "../lib/3rd-parties/onramp.js";
 import { getMcpTools } from "../lib/inspect-mcp.js";
 import { auth, ensureUserHasCDPWallet } from "../lib/auth.js";
+import { getBlockchainArchitecture, getStablecoinBalances, type BlockchainArchitecture } from "../lib/crypto-accounts.js";
 import type { InferSelectModel } from "drizzle-orm";
 import { users, userWallets, session } from "../db/schema.js";
 
@@ -815,8 +816,14 @@ app.get('/users/:userId/wallets', authMiddleware, async (c) => {
         const wallets = await withTransaction(async (tx) => {
             return await txOperations.getUserWallets(userId, !includeInactive)(tx);
         });
+        const stablecoinBalances = await getStablecoinBalances(wallets.map(w => w.walletAddress));
 
-        return c.json(wallets);
+        const response = {
+            wallets,
+            totalFiatValue: stablecoinBalances.totalFiatValue?.toString() // Convert BigInt to string
+        };
+
+        return c.json(response);
     } catch (error) {
         console.error('Error fetching user wallets:', error);
         return c.json({ error: (error as Error).message }, 400);
@@ -839,14 +846,19 @@ app.post('/users/:userId/wallets', authMiddleware, async (c) => {
             walletType: 'external' | 'managed' | 'custodial';
             provider?: string;
             blockchain?: string; // 'ethereum', 'solana', 'near', 'polygon', 'base', etc.
+            architecture?: BlockchainArchitecture; // 'evm', 'solana', 'near', 'cosmos', 'bitcoin'
             isPrimary?: boolean;
             walletMetadata?: Record<string, unknown>; // Blockchain-specific data like chainId, ensName, etc.
         };
 
+        // Auto-determine architecture if not provided
+        const architecture = data.architecture || getBlockchainArchitecture(data.blockchain);
+
         const wallet = await withTransaction(async (tx) => {
             return await txOperations.addWalletToUser({
                 userId,
-                ...data
+                ...data,
+                architecture
             })(tx);
         });
 
@@ -915,6 +927,7 @@ app.post('/users/:userId/wallets/managed', authMiddleware, async (c) => {
             walletAddress: string;
             provider: string; // 'coinbase-cdp', 'privy', 'magic', etc.
             blockchain?: string; // 'ethereum', 'solana', 'near', etc.
+            architecture?: BlockchainArchitecture; // 'evm', 'solana', 'near', 'cosmos', 'bitcoin'
             externalWalletId: string; // Reference ID from external service
             externalUserId?: string; // User ID in external system
             isPrimary?: boolean;
@@ -928,8 +941,14 @@ app.post('/users/:userId/wallets/managed', authMiddleware, async (c) => {
             }, 400);
         }
 
+        // Auto-determine architecture if not provided
+        const architecture = data.architecture || getBlockchainArchitecture(data.blockchain);
+
         const wallet = await withTransaction(async (tx) => {
-            return await txOperations.createManagedWallet(userId, data)(tx);
+            return await txOperations.createManagedWallet(userId, {
+                ...data,
+                architecture
+            })(tx);
         });
 
         return c.json(wallet, 201);
@@ -1053,7 +1072,12 @@ app.post('/users/:userId/wallets/cdp', authMiddleware, async (c) => {
 
         return c.json({
             message: 'CDP wallets created successfully',
-            wallets,
+            wallets: wallets.map(w => ({
+                ...w,
+                // Include architecture information in response
+                architecture: w.architecture,
+                blockchain: w.blockchain
+            })),
             cdpAccountInfo: cdpResult
         }, 201);
     } catch (error) {
@@ -1341,6 +1365,29 @@ app.get('/onramp/config', async (c) => {
     }
 });
 
+// Add new endpoint to get supported architectures and blockchain mappings
+app.get('/wallets/architectures', async (c) => {
+    try {
+        const { getBlockchainsForArchitecture, isSupportedBlockchain } = await import('../lib/crypto-accounts.js');
+        
+        return c.json({
+            supportedArchitectures: ['evm', 'solana', 'near', 'cosmos', 'bitcoin'],
+            blockchainsByArchitecture: {
+                evm: getBlockchainsForArchitecture('evm'),
+                solana: getBlockchainsForArchitecture('solana'),
+                near: getBlockchainsForArchitecture('near'),
+                cosmos: getBlockchainsForArchitecture('cosmos'),
+                bitcoin: getBlockchainsForArchitecture('bitcoin'),
+            },
+            // Helper function endpoint
+            validateBlockchain: (blockchain: string) => isSupportedBlockchain(blockchain)
+        });
+    } catch (error) {
+        console.error('Error fetching architecture information:', error);
+        return c.json({ error: (error as Error).message }, 500);
+    }
+});
+
 // Catch-all for unmatched routes
 app.all('*', (c) => {
     return c.json({
@@ -1367,7 +1414,7 @@ app.all('*', (c) => {
             'GET /api/servers/:serverId/reputation',
             // Multi-blockchain wallet management (secure - no private key storage)
             'GET /api/users/:userId/wallets',
-            'POST /api/users/:userId/wallets', // Supports Ethereum, Solana, NEAR, etc.
+            'POST /api/users/:userId/wallets', // Supports Ethereum, Solana, NEAR, etc. (now with architecture support)
             'PUT /api/users/:userId/wallets/:walletId/primary',
             'DELETE /api/users/:userId/wallets/:walletId',
             'POST /api/users/:userId/wallets/managed', // External managed wallets (Coinbase CDP, Privy, Magic, etc.)
@@ -1382,7 +1429,9 @@ app.all('*', (c) => {
             'GET /api/cdp/networks', // Get supported CDP networks
             // Coinbase Onramp endpoints
             'POST /api/users/:userId/onramp/buy-url', // Generate onramp buy URL for user
-            'GET /api/onramp/config' // Get onramp configuration (networks, assets, defaults)
+            'GET /api/onramp/config', // Get onramp configuration (networks, assets, defaults)
+            // Blockchain Architecture endpoints
+            'GET /api/wallets/architectures', // Get supported blockchain architectures and mappings
         ]
     }, 404);
 });

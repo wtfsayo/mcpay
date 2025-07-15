@@ -260,13 +260,22 @@ async function getOrCreateUser(walletAddress: string, provider = 'unknown'): Pro
 
         // Create new user with wallet
         console.log(`[${new Date().toISOString()}] Creating new user with wallet ${walletAddress}`);
+        
+        // Determine blockchain from address format (simple heuristic)
+        let blockchain = 'ethereum'; // Default
+        if (walletAddress.length === 44 && !walletAddress.startsWith('0x')) {
+            blockchain = 'solana';
+        } else if (walletAddress.endsWith('.near') || walletAddress.length === 64) {
+            blockchain = 'near';
+        }
+        
         user = await txOperations.createUser({
             walletAddress,
             displayName: `User_${walletAddress.substring(0, 8)}`,
             walletType: 'external',
             walletProvider: provider,
-            // Default to ethereum blockchain - this can be enhanced later to detect blockchain from address format
-            blockchain: 'ethereum'
+            blockchain,
+            // Architecture will be auto-determined from blockchain in createUser
         })(tx);
 
         return user as User;

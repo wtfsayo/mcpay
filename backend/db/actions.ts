@@ -42,6 +42,7 @@ import {
     verification
 } from "./schema.js";
 import { createCDPAccount } from '../lib/3rd-parties/cdp.js';
+import { getBlockchainArchitecture, type BlockchainArchitecture } from '../lib/crypto-accounts.js';
 
 // Define proper transaction type
 export type TransactionType = Parameters<Parameters<typeof db['transaction']>[0]>[0];
@@ -883,6 +884,7 @@ export const txOperations = {
         walletType?: 'external' | 'managed' | 'custodial';
         walletProvider?: string;
         blockchain?: string; // 'ethereum', 'solana', 'near', etc.
+        architecture?: BlockchainArchitecture; // 'evm', 'solana', 'near', 'cosmos', 'bitcoin'
         walletMetadata?: Record<string, unknown>; // Blockchain-specific data
         externalWalletId?: string; // For managed services
         externalUserId?: string; // User ID in external system
@@ -911,12 +913,16 @@ export const txOperations = {
 
         // If wallet address provided, add it to the new wallet system
         if (data.walletAddress) {
+            // Determine architecture if not provided
+            const architecture = data.architecture || getBlockchainArchitecture(data.blockchain);
+            
             await txOperations.addWalletToUser({
                 userId: user.id,
                 walletAddress: data.walletAddress,
                 walletType: data.walletType || 'external',
                 provider: data.walletProvider || 'unknown',
                 blockchain: data.blockchain,
+                architecture,
                 isPrimary: true, // First wallet is always primary
                 walletMetadata: data.walletMetadata,
                 externalWalletId: data.externalWalletId,
@@ -981,6 +987,7 @@ export const txOperations = {
         walletType: 'external' | 'managed' | 'custodial';
         provider?: string;
         blockchain?: string; // 'ethereum', 'solana', 'near', 'polygon', 'base', etc.
+        architecture?: BlockchainArchitecture; // 'evm', 'solana', 'near', 'cosmos', 'bitcoin'
         isPrimary?: boolean;
         walletMetadata?: Record<string, unknown>; // Blockchain-specific data like chainId, ensName, etc.
         externalWalletId?: string; // For managed services like Coinbase CDP, Privy
@@ -996,12 +1003,16 @@ export const txOperations = {
                 ));
         }
 
+        // Determine architecture if not provided
+        const architecture = data.architecture || getBlockchainArchitecture(data.blockchain);
+
         const result = await tx.insert(userWallets).values({
             userId: data.userId,
             walletAddress: data.walletAddress,
             walletType: data.walletType,
             provider: data.provider,
             blockchain: data.blockchain,
+            architecture,
             isPrimary: data.isPrimary || false,
             walletMetadata: data.walletMetadata,
             externalWalletId: data.externalWalletId,
@@ -1162,17 +1173,22 @@ export const txOperations = {
         walletAddress: string;
         provider: string; // 'coinbase-cdp', 'privy', 'magic', etc.
         blockchain?: string; // 'ethereum', 'solana', 'near', etc.
+        architecture?: BlockchainArchitecture; // 'evm', 'solana', 'near', 'cosmos', 'bitcoin'
         externalWalletId: string; // Reference ID from external service
         externalUserId?: string; // User ID in external system
         isPrimary?: boolean;
         walletMetadata?: Record<string, unknown>;
     }) => async (tx: TransactionType) => {
+        // Determine architecture if not provided
+        const architecture = data.architecture || getBlockchainArchitecture(data.blockchain);
+        
         return await txOperations.addWalletToUser({
             userId,
             walletAddress: data.walletAddress,
             walletType: 'managed',
             provider: data.provider,
             blockchain: data.blockchain,
+            architecture,
             isPrimary: data.isPrimary,
             externalWalletId: data.externalWalletId,
             externalUserId: data.externalUserId,
@@ -1195,12 +1211,17 @@ export const txOperations = {
         ownerAccountId?: string; // For smart accounts
         isPrimary?: boolean;
     }) => async (tx: TransactionType) => {
+        // Determine blockchain and architecture for CDP wallets
+        const blockchain = data.network.includes('base') ? 'base' : 'ethereum';
+        const architecture = getBlockchainArchitecture(blockchain);
+        
         return await txOperations.addWalletToUser({
             userId,
             walletAddress: data.walletAddress,
             walletType: 'managed',
             provider: 'coinbase-cdp',
-            blockchain: data.network.includes('base') ? 'base' : 'ethereum',
+            blockchain,
+            architecture,
             isPrimary: data.isPrimary,
             externalWalletId: data.accountId,
             externalUserId: userId,
@@ -1406,12 +1427,14 @@ export const txOperations = {
             return existingWallet; // Already migrated
         }
 
-        // Migrate legacy wallet
+        // Migrate legacy wallet - assume EVM architecture as default for legacy wallets
         const migratedWallet = await txOperations.addWalletToUser({
             userId,
             walletAddress: user.walletAddress,
             walletType: 'external',
             provider: 'legacy',
+            blockchain: 'ethereum', // Default to ethereum for legacy wallets
+            architecture: 'evm', // Default to EVM for legacy wallets
             isPrimary: true,
             walletMetadata: {
                 migratedFromLegacy: true,

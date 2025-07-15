@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { boolean, check, decimal, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
+import type { BlockchainArchitecture } from "../lib/crypto-accounts.js";
 
 // Enhanced Users table - supporting both wallet and traditional auth
 export const users = pgTable('users', {
@@ -37,6 +38,7 @@ export const userWallets = pgTable('user_wallets', {
   walletType: text('wallet_type').notNull(), // 'external', 'managed', 'custodial'
   provider: text('provider'), // 'metamask', 'phantom', 'coinbase-cdp', 'privy', 'magic', 'near-wallet', etc.
   blockchain: text('blockchain'), // 'ethereum', 'solana', 'near', 'polygon', 'base', etc.
+  architecture: text('architecture').$type<BlockchainArchitecture>(), // 'evm', 'solana', 'near', 'cosmos', 'bitcoin'
   isPrimary: boolean('is_primary').default(false).notNull(),
   isActive: boolean('is_active').default(true).notNull(),
   
@@ -56,6 +58,7 @@ export const userWallets = pgTable('user_wallets', {
   index('user_wallets_wallet_address_idx').on(table.walletAddress),
   index('user_wallets_type_idx').on(table.walletType),
   index('user_wallets_blockchain_idx').on(table.blockchain),
+  index('user_wallets_architecture_idx').on(table.architecture),
   index('user_wallets_primary_idx').on(table.isPrimary),
   index('user_wallets_active_idx').on(table.isActive),
   index('user_wallets_provider_idx').on(table.provider),
