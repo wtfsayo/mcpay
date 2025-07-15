@@ -15,6 +15,7 @@ import { txOperations, withTransaction } from "../db/actions.js";
 import db from "../db/index.js";
 import { VLayer, type ExecutionContext } from "../lib/3rd-parties/vlayer.js";
 import { CDP, type CDPNetwork, createCDPAccount, type CreateCDPWalletOptions } from "../lib/3rd-parties/cdp.js";
+import { createOneClickBuyUrl, getSupportedNetworks, getSupportedAssets } from "../lib/3rd-parties/onramp.js";
 import { getMcpTools } from "../lib/inspect-mcp.js";
 import { auth, ensureUserHasCDPWallet } from "../lib/auth.js";
 import type { InferSelectModel } from "drizzle-orm";
@@ -1260,6 +1261,86 @@ app.post('/users/:userId/wallets/cdp/ensure', authMiddleware, async (c) => {
     }
 });
 
+// Coinbase Onramp endpoints
+app.post('/users/:userId/onramp/buy-url', authMiddleware, async (c) => {
+    try {
+        const userId = c.req.param('userId');
+        const user = c.get('requireUser')();
+        
+        // Check if user is generating URL for their own account
+        if (user.id !== userId) {
+            return c.json({ error: 'Forbidden - Cannot generate onramp URL for another user' }, 403);
+        }
+
+        const data = await c.req.json() as {
+            walletAddress?: string;
+            network?: string;
+            asset?: string;
+            amount?: number;
+            currency?: string;
+            redirectUrl?: string;
+        };
+
+        // Get user's primary wallet if no address specified
+        let walletAddress = data.walletAddress;
+        if (!walletAddress) {
+            const primaryWallet = await withTransaction(async (tx) => {
+                return await txOperations.getUserPrimaryWallet(userId)(tx);
+            });
+
+            if (!primaryWallet) {
+                return c.json({ error: 'No wallet address provided and no primary wallet found' }, 400);
+            }
+
+            walletAddress = primaryWallet.walletAddress;
+        }
+
+        try {
+            const onrampUrl = await createOneClickBuyUrl(walletAddress, {
+                network: data.network || 'base',
+                asset: data.asset || 'USDC',
+                amount: data.amount || 20,
+                currency: data.currency || 'USD',
+                userId: user.id,
+                redirectUrl: data.redirectUrl
+            });
+
+            return c.json({
+                onrampUrl,
+                walletAddress,
+                network: data.network || 'base',
+                asset: data.asset || 'USDC',
+                amount: data.amount || 20,
+                currency: data.currency || 'USD'
+            });
+        } catch (onrampError) {
+            console.error('Error creating onramp URL:', onrampError);
+            return c.json({ 
+                error: `Failed to create onramp URL: ${onrampError instanceof Error ? onrampError.message : 'Unknown error'}` 
+            }, 500);
+        }
+    } catch (error) {
+        console.error('Error in onramp buy-url endpoint:', error);
+        return c.json({ error: (error as Error).message }, 400);
+    }
+});
+
+app.get('/onramp/config', async (c) => {
+    try {
+        return c.json({
+            supportedNetworks: getSupportedNetworks(),
+            supportedAssets: getSupportedAssets(),
+            defaultNetwork: 'base',
+            defaultAsset: 'USDC',
+            defaultAmount: 20,
+            defaultCurrency: 'USD'
+        });
+    } catch (error) {
+        console.error('Error fetching onramp config:', error);
+        return c.json({ error: (error as Error).message }, 500);
+    }
+});
+
 // Catch-all for unmatched routes
 app.all('*', (c) => {
     return c.json({
@@ -1298,7 +1379,10 @@ app.all('*', (c) => {
             'POST /api/users/:userId/wallets/cdp/ensure', // Manually ensure user has CDP wallet
             'POST /api/users/:userId/wallets/cdp/:accountId/faucet', // Request testnet funds
             'GET /api/users/:userId/wallets/cdp/:accountId/balances', // Get CDP wallet balances
-            'GET /api/cdp/networks' // Get supported CDP networks
+            'GET /api/cdp/networks', // Get supported CDP networks
+            // Coinbase Onramp endpoints
+            'POST /api/users/:userId/onramp/buy-url', // Generate onramp buy URL for user
+            'GET /api/onramp/config' // Get onramp configuration (networks, assets, defaults)
         ]
     }, 404);
 });
