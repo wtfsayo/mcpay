@@ -1135,8 +1135,8 @@ app.post('/users/:userId/wallets/cdp', authMiddleware, async (c) => {
             wallets: wallets.map(w => ({
                 ...w,
                 // Include architecture information in response
-                architecture: w.architecture,
-                blockchain: w.blockchain
+                architecture: w?.architecture || 'evm',
+                blockchain: w?.blockchain || 'base'
             })),
             cdpAccountInfo: cdpResult
         }, 201);

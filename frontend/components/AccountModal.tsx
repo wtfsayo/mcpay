@@ -288,6 +288,32 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
     toast.success("Copied to clipboard")
   }
 
+  // Helper function to get friendly chain display names
+  const getChainDisplayName = (chainKey: string, chainName: string): string => {
+    const chainMap: { [key: string]: string } = {
+      'base': 'Base',
+      'baseSepolia': 'Base Sepolia',
+      'avalanche': 'Avalanche',
+      'avalancheFuji': 'Avalanche Fuji',
+      'iotex': 'IoTeX',
+      'seiTestnet': 'Sei Testnet',
+      'ethereum': 'Ethereum',
+      'polygon': 'Polygon',
+    }
+    
+    return chainMap[chainKey] || chainName || chainKey
+  }
+
+  // Helper function to format balance numbers nicely
+  const formatBalance = (balance: number): string => {
+    if (balance === 0) return '0.00'
+    if (balance < 0.01) return '< 0.01'
+    if (balance < 1) return balance.toFixed(4).replace(/\.?0+$/, '')
+    if (balance < 1000) return balance.toFixed(2).replace(/\.?0+$/, '')
+    if (balance < 1000000) return (balance / 1000).toFixed(1).replace(/\.?0+$/, '') + 'K'
+    return (balance / 1000000).toFixed(1).replace(/\.?0+$/, '') + 'M'
+  }
+
   // Helper function to transform chain balance data into ChainBalance format
   const transformChainData = (balancesByChain: BalancesByChain): ChainBalance[] => {
     const result: ChainBalance[] = []
@@ -295,42 +321,41 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
     Object.entries(balancesByChain).forEach(([chainKey, balances]) => {
       if (!balances || balances.length === 0) return
       
-      // Group by chain name and calculate totals
-      const chainName = balances[0]?.chainName || chainKey
-      const network = balances[0]?.isTestnet ? 'testnet' : 'mainnet'
+      // Get friendly chain name
+      const chainName = getChainDisplayName(chainKey, balances[0]?.chainName)
+      const isTestnet = balances[0]?.isTestnet || false
       
-      // Group tokens by stablecoin type
-      const tokenGroups: { [symbol: string]: typeof balances } = {}
+      // Group tokens by stablecoin type and sum balances across all addresses
+      const tokenGroups: { [symbol: string]: { balance: number; value: number; addresses: Set<string> } } = {}
+      
       balances.forEach(balance => {
         if (!tokenGroups[balance.stablecoin]) {
-          tokenGroups[balance.stablecoin] = []
+          tokenGroups[balance.stablecoin] = { balance: 0, value: 0, addresses: new Set() }
         }
-        tokenGroups[balance.stablecoin].push(balance)
+        tokenGroups[balance.stablecoin].balance += parseFloat(balance.formattedBalance)
+        tokenGroups[balance.stablecoin].value += balance.fiatValue
+        tokenGroups[balance.stablecoin].addresses.add(balance.tokenIdentifier)
       })
       
       // Calculate total balance for this chain
-      const totalBalanceUsd = balances.reduce((sum, balance) => sum + balance.fiatValue, 0)
+      const totalBalanceUsd = Object.values(tokenGroups).reduce((sum, group) => sum + group.value, 0)
       
-      // Only include chains with actual balances
-      if (totalBalanceUsd > 0) {
+      // Only include chains with actual balances > $0.001
+      if (totalBalanceUsd > 0.001) {
         const tokens = Object.entries(tokenGroups)
-          .map(([symbol, groupBalances]) => {
-            const totalBalance = groupBalances.reduce((sum, b) => sum + parseFloat(b.formattedBalance), 0)
-            const totalValue = groupBalances.reduce((sum, b) => sum + b.fiatValue, 0)
-            
-            return {
-              symbol,
-              balance: totalBalance.toString(),
-              balanceUsd: totalValue,
-              address: groupBalances[0]?.tokenIdentifier
-            }
-          })
-          .filter(token => parseFloat(token.balance) > 0) // Only include tokens with balance
+          .map(([symbol, group]) => ({
+            symbol,
+            balance: group.balance.toString(),
+            balanceUsd: group.value,
+            address: Array.from(group.addresses)[0] // Use first address as reference
+          }))
+          .filter(token => token.balanceUsd > 0.001) // Only include tokens with meaningful value
+          .sort((a, b) => b.balanceUsd - a.balanceUsd) // Sort by value, highest first
         
         if (tokens.length > 0) {
           result.push({
             chain: chainName,
-            network: `${chainKey}${balances[0]?.isTestnet ? '-testnet' : ''}`,
+            network: chainKey,
             balance: totalBalanceUsd.toString(),
             balanceUsd: totalBalanceUsd,
             tokens
@@ -339,7 +364,8 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
       }
     })
     
-    return result
+    // Sort chains by balance value, highest first
+    return result.sort((a, b) => b.balanceUsd - a.balanceUsd)
   }
 
   // Helper function to get filtered chains based on current view
@@ -507,153 +533,149 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
             </div>
           </div>
 
-          {/* Enhanced Portfolio Section */}
-          <div className={`rounded-lg border p-4 ${isDark ? "bg-gray-900/50 border-gray-800" : "bg-gray-50/50 border-gray-200"}`}>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <TrendingUp className="h-4 w-4" />
-                <h4 className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
-                  Your Money
-                </h4>
-              </div>
-              
-              {(balanceSummary.hasMainnetBalances || balanceSummary.hasTestnetBalances) && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowDetails(!showDetails)}
-                  className="h-7 text-xs px-2 gap-1"
-                >
-                  {showDetails ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                  Details
-                </Button>
-              )}
-            </div>
-            
-            {/* Network Type Tabs */}
-            {(balanceSummary.hasMainnetBalances || balanceSummary.hasTestnetBalances) && (
-              <div className="mb-4">
-                <div className={`inline-flex rounded-lg p-1 ${isDark ? "bg-gray-800/50" : "bg-gray-100"}`}>
-                  <button
-                    onClick={() => setPortfolioView('all')}
-                    className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                      portfolioView === 'all'
-                        ? isDark ? "bg-white text-gray-900" : "bg-white text-gray-900 shadow-sm"
-                        : isDark ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-gray-900"
-                    }`}
-                  >
-                    All
-                  </button>
-                  {balanceSummary.hasMainnetBalances && (
-                    <button
-                      onClick={() => setPortfolioView('live')}
-                      className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                        portfolioView === 'live'
-                          ? isDark ? "bg-white text-gray-900" : "bg-white text-gray-900 shadow-sm"
-                          : isDark ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-gray-900"
-                      }`}
-                    >
-                      Stablecoins
-                    </button>
-                  )}
-                  {balanceSummary.hasTestnetBalances && (
-                    <button
-                      onClick={() => setPortfolioView('test')}
-                      className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                        portfolioView === 'test'
-                          ? isDark ? "bg-white text-gray-900" : "bg-white text-gray-900 shadow-sm"
-                          : isDark ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-gray-900"
-                      }`}
-                    >
-                      Testnet Stablecoins
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Portfolio Summary */}
-            <div className="space-y-3">
-              {portfolioView === 'all' && (
-                <>
-                  {/* Combined View */}
-                  <div className="text-center py-4">
-                    <p className={`text-3xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
-                      ${(totalFiatValue + testnetTotalFiatValue).toFixed(2)}
-                    </p>
+          {/* Revolut-style Money Section */}
+          <div className={`rounded-2xl border-0 ${
+            isDark ? "bg-gradient-to-br from-gray-900 to-gray-800 shadow-xl" : "bg-gradient-to-br from-white to-gray-50 shadow-lg"
+          } overflow-hidden`}>
+            {/* Main Balance Display - The Real Meat */}
+            <div className="p-6 pb-4">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                    isDark ? "bg-gradient-to-br from-green-500 to-green-600" : "bg-gradient-to-br from-green-500 to-green-600"
+                  } shadow-lg`}>
+                    <TrendingUp className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className={`font-semibold text-lg ${isDark ? "text-white" : "text-gray-900"}`}>
+                      Your Funds
+                    </h3>
                     <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                      Total value
+                      Available balance
                     </p>
                   </div>
-                  
-                  {/* Breakdown */}
-                  {balanceSummary.hasMainnetBalances && (
-                    <div className="flex items-center justify-between py-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-green-500" />
-                        <span className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                          Stablecoins
-                        </span>
-                      </div>
-                      <span className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
-                        ${totalFiatValue.toFixed(2)}
-                      </span>
-                    </div>
-                  )}
-                  
-                  {balanceSummary.hasTestnetBalances && (
-                    <div className="flex items-center justify-between py-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-orange-500" />
-                        <span className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                          Testnet Stablecoins
-                        </span>
-                      </div>
-                      <span className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
-                        ${testnetTotalFiatValue.toFixed(2)}
-                      </span>
-                    </div>
-                  )}
-                </>
-              )}
+                </div>
+                
+                {(balanceSummary.hasMainnetBalances || balanceSummary.hasTestnetBalances) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowDetails(!showDetails)}
+                    className={`h-8 text-xs px-3 rounded-lg ${
+                      isDark ? "hover:bg-gray-700/50" : "hover:bg-gray-100/50"
+                    }`}
+                  >
+                    {showDetails ? <ChevronUp className="h-4 w-4 mr-1" /> : <ChevronDown className="h-4 w-4 mr-1" />}
+                    Details
+                  </Button>
+                )}
+              </div>
 
-              {portfolioView === 'live' && (
-                <div className="text-center py-4">
-                  <p className={`text-3xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
-                    ${totalFiatValue.toFixed(2)}
-                  </p>
+              {/* The Big Money Display */}
+              {balanceSummary.hasMainnetBalances ? (
+                <div className="space-y-1 mb-6">
+                  <div className={`text-5xl font-bold tracking-tight ${isDark ? "text-white" : "text-gray-900"}`}>
+                    ${formatBalance(totalFiatValue)}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-green-500" />
+                    <span className={`text-sm font-medium ${isDark ? "text-green-400" : "text-green-600"}`}>
+                      Live on {transformChainData(mainnetBalancesByChain).length} network{transformChainData(mainnetBalancesByChain).length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1 mb-6">
+                  <div className={`text-5xl font-bold tracking-tight ${isDark ? "text-gray-500" : "text-gray-400"}`}>
+                    $0.00
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-gray-400" />
+                    <span className={`text-sm font-medium ${isDark ? "text-gray-500" : "text-gray-500"}`}>
+                      No real funds yet
+                    </span>
+                  </div>
                 </div>
               )}
 
-              {portfolioView === 'test' && (
-                <div className="text-center py-4">
-                  <p className={`text-3xl font-bold text-orange-500`}>
-                    ${testnetTotalFiatValue.toFixed(2)}
-                  </p>
+              {/* Test Money - Developer's Glimpse */}
+              {balanceSummary.hasTestnetBalances && (
+                <div className={`rounded-xl p-4 ${
+                  isDark ? "bg-orange-900/20 border border-orange-800/30" : "bg-orange-50 border border-orange-200/50"
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                        isDark ? "bg-orange-900/40" : "bg-orange-100"
+                      }`}>
+                        <div className="w-2 h-2 rounded-full bg-orange-500" />
+                      </div>
+                      <div>
+                        <p className={`font-semibold text-sm ${isDark ? "text-orange-300" : "text-orange-800"}`}>
+                          Developer Balance
+                        </p>
+                        <p className={`text-xs ${isDark ? "text-orange-400" : "text-orange-600"}`}>
+                          Test funds for development
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className={`text-xl font-bold ${isDark ? "text-orange-300" : "text-orange-700"}`}>
+                        ${formatBalance(testnetTotalFiatValue)}
+                      </div>
+                      <div className={`text-xs ${isDark ? "text-orange-400" : "text-orange-600"}`}>
+                        {transformChainData(testnetBalancesByChain).length} testnet{transformChainData(testnetBalancesByChain).length !== 1 ? 's' : ''}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
               {/* No Balances State */}
               {!balanceSummary.hasMainnetBalances && !balanceSummary.hasTestnetBalances && (
-                <div className="text-center py-6">
-                  <Wallet className={`h-8 w-8 mx-auto mb-3 ${isDark ? "text-gray-500" : "text-gray-400"}`} />
-                  <p className={`text-lg font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                <div className="text-center py-8">
+                  <Wallet className={`h-12 w-12 mx-auto mb-4 ${isDark ? "text-gray-500" : "text-gray-400"}`} />
+                  <div className={`text-5xl font-bold tracking-tight mb-2 ${isDark ? "text-gray-500" : "text-gray-400"}`}>
                     $0.00
-                  </p>
-                  <p className={`text-sm ${isDark ? "text-gray-500" : "text-gray-500"}`}>
-                    No money in connected wallets
+                  </div>
+                  <p className={`text-sm font-medium ${isDark ? "text-gray-500" : "text-gray-500"}`}>
+                    No funds in connected wallets
                   </p>
                 </div>
               )}
+            </div>
 
-              {/* Wallet Count */}
-              <div className={`h-px ${isDark ? "bg-gray-800" : "bg-gray-200"}`} />
-              <div className="flex items-center justify-between text-xs">
+            {/* Wallet Count Footer */}
+            <div className={`px-6 py-3 border-t ${
+              isDark ? "border-gray-700/50 bg-gray-800/30" : "border-gray-200/50 bg-gray-50/50"
+            }`}>
+              <div className="flex items-center justify-between text-sm">
                 <span className={isDark ? "text-gray-400" : "text-gray-600"}>
                   {userWallets.length} wallet{userWallets.length !== 1 ? 's' : ''} connected
                 </span>
+                <div className="flex items-center gap-4">
+                  {balanceSummary.hasMainnetBalances && (
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                      <span className={`text-xs font-medium ${isDark ? "text-green-400" : "text-green-600"}`}>
+                        LIVE
+                      </span>
+                    </div>
+                  )}
+                  {balanceSummary.hasTestnetBalances && (
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+                      <span className={`text-xs font-medium ${isDark ? "text-orange-400" : "text-orange-600"}`}>
+                        TEST
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
+            
+
+
 
             {/* Collapsible Chain Details */}
             <Collapsible open={showDetails} onOpenChange={setShowDetails}>
@@ -661,60 +683,118 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
                 <div className={`h-px ${isDark ? "bg-gray-800" : "bg-gray-200"}`} />
                 
                 {getFilteredChains().chains.length > 0 ? (
-                  <div className="space-y-2">
-                    <h5 className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                  <div className="space-y-3 px-6 pb-4">
+                    <h5 className={`text-xs font-semibold tracking-wide uppercase ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                       Balance by Network
                     </h5>
                     
-                    {getFilteredChains().chains.map((chain, index) => {
-                      const isMainnet = !chain.network.includes('testnet') && !chain.network.includes('sepolia')
-                      
-                      return (
-                        <div 
-                          key={`${chain.chain}-${chain.network}-${index}`}
-                          className={`p-3 rounded-lg border ${isDark ? "bg-gray-800/30 border-gray-700" : "bg-gray-50 border-gray-200"}`}
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <div className={`w-2 h-2 rounded-full ${isMainnet ? 'bg-green-500' : 'bg-orange-500'}`} />
-                              <span className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
-                                {chain.chain}
-                              </span>
-                              <Badge 
-                                variant="outline" 
-                                className={`text-xs px-1.5 py-0 ${getNetworkBadgeColor(isMainnet)}`}
-                              >
-                                {isMainnet ? 'LIVE' : 'TEST'}
-                              </Badge>
-                            </div>
-                            <span className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
-                              ${chain.balanceUsd?.toFixed(2) || '0.00'}
-                            </span>
-                          </div>
-                          
-                          {/* Token breakdown */}
-                          {chain.tokens && chain.tokens.length > 0 && (
-                            <div className="space-y-1">
-                              {chain.tokens.map((token, tokenIndex) => (
-                                <div key={tokenIndex} className="flex items-center justify-between text-xs">
-                                  <span className={isDark ? "text-gray-400" : "text-gray-600"}>
-                                    {parseFloat(token.balance).toFixed(4)} {token.symbol}
-                                  </span>
-                                  <span className={isDark ? "text-gray-400" : "text-gray-600"}>
-                                    ${token.balanceUsd?.toFixed(2) || '0.00'}
-                                  </span>
+                    <div className="space-y-2">
+                      {getFilteredChains().chains.map((chain, index) => {
+                        const isMainnet = !chain.network.includes('Sepolia') && !chain.network.includes('Fuji') && !chain.network.includes('Testnet')
+                        
+                        return (
+                          <div 
+                            key={`${chain.chain}-${chain.network}-${index}`}
+                            className={`group relative overflow-hidden rounded-xl border ${
+                              isDark 
+                                ? "bg-gray-800/30 border-gray-700/30 hover:bg-gray-800/50" 
+                                : "bg-white/80 border-gray-200/50 hover:bg-gray-50/80"
+                            } transition-all duration-200 hover:shadow-md`}
+                          >
+                            {/* Network type indicator bar */}
+                            <div className={`absolute left-0 top-0 w-1 h-full ${
+                              isMainnet ? 'bg-green-500' : 'bg-orange-500'
+                            }`} />
+                            
+                            <div className="p-4 pl-5">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3 min-w-0 flex-1">
+                                  <div className="flex-shrink-0">
+                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                                      isMainnet 
+                                        ? isDark 
+                                          ? "bg-green-900/40 text-green-400" 
+                                          : "bg-green-100 text-green-600"
+                                        : isDark 
+                                          ? "bg-orange-900/40 text-orange-400" 
+                                          : "bg-orange-100 text-orange-600"
+                                    }`}>
+                                      <div className={`w-2 h-2 rounded-full ${isMainnet ? 'bg-green-500' : 'bg-orange-500'}`} />
+                                    </div>
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2 mb-0.5">
+                                      <h6 className={`font-semibold text-sm ${isDark ? "text-white" : "text-gray-900"} truncate`}>
+                                        {chain.chain}
+                                      </h6>
+                                      <div className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold tracking-wide ${
+                                        isMainnet 
+                                          ? isDark 
+                                            ? "bg-green-900/50 text-green-400 border border-green-700/50"
+                                            : "bg-green-100 text-green-700 border border-green-200"
+                                          : isDark 
+                                            ? "bg-orange-900/50 text-orange-400 border border-orange-700/50"
+                                            : "bg-orange-100 text-orange-700 border border-orange-200"
+                                      }`}>
+                                        {isMainnet ? 'LIVE' : 'TEST'}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      {chain.tokens && chain.tokens.length > 0 && (
+                                        <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                                          {chain.tokens.length} token{chain.tokens.length !== 1 ? 's' : ''}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
-                              ))}
+                                <div className="text-right flex-shrink-0">
+                                  <div className={`text-lg font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
+                                    ${formatBalance(chain.balanceUsd)}
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {/* Token breakdown - clean and minimal */}
+                              {chain.tokens && chain.tokens.length > 0 && (
+                                <div className="mt-3 pt-3 border-t border-gray-200/30 dark:border-gray-700/30">
+                                  <div className="grid gap-1">
+                                    {chain.tokens.slice(0, 3).map((token, tokenIndex) => (
+                                      <div key={tokenIndex} className="flex items-center justify-between py-1">
+                                        <span className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                                          {formatBalance(parseFloat(token.balance))} {token.symbol}
+                                        </span>
+                                        <span className={`text-xs font-bold ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                                          ${formatBalance(token.balanceUsd)}
+                                        </span>
+                                      </div>
+                                    ))}
+                                    {chain.tokens.length > 3 && (
+                                      <div className={`text-xs mt-1 ${isDark ? "text-gray-500" : "text-gray-500"}`}>
+                                        +{chain.tokens.length - 3} more token{chain.tokens.length - 3 !== 1 ? 's' : ''}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      )
-                    })}
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
                 ) : (
-                  <div className="text-center py-4">
-                    <p className={`text-sm ${isDark ? "text-gray-500" : "text-gray-500"}`}>
-                      No balances found for selected network type
+                  <div className="text-center py-8 px-6">
+                    <div className={`w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center ${
+                      isDark ? "bg-gray-800/40" : "bg-gray-100"
+                    }`}>
+                      <Wallet className={`h-6 w-6 ${isDark ? "text-gray-500" : "text-gray-400"}`} />
+                    </div>
+                    <p className={`text-sm font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                      No balances found
+                    </p>
+                    <p className={`text-xs mt-1 ${isDark ? "text-gray-500" : "text-gray-500"}`}>
+                      Connect wallets with funds to see them here
                     </p>
                   </div>
                 )}
@@ -952,36 +1032,6 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
                     Verify
                   </Button>
                 )}
-              </div>
-              <div className={`h-px ${isDark ? "bg-gray-800" : "bg-gray-200"}`} />
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
-                    Two-Factor Authentication
-                  </p>
-                  <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                    Add an extra layer of security
-                  </p>
-                </div>
-                <Button variant="outline" size="sm" className="h-7 text-xs px-3">
-                  <Shield className="h-3 w-3 mr-1.5" />
-                  Enable
-                </Button>
-              </div>
-              <div className={`h-px ${isDark ? "bg-gray-800" : "bg-gray-200"}`} />
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className={`font-medium text-sm text-red-600`}>
-                    Delete Account
-                  </p>
-                  <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                    Permanently delete your account and all data
-                  </p>
-                </div>
-                <Button variant="destructive" size="sm" className="h-7 text-xs px-3">
-                  <Trash2 className="h-3 w-3 mr-1.5" />
-                  Delete
-                </Button>
               </div>
             </div>
           </div>
