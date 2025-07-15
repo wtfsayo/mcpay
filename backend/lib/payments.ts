@@ -24,6 +24,7 @@ import type { ERC20TokenAmount, Price, Resource } from "x402/types";
 import { moneySchema } from "x402/types";
 import { PaymentPayloadSchema, safeBase64Decode, SupportedNetwork, PaymentPayload, SupportedPaymentRequirements, ExtendedPaymentRequirements } from "./types.js";
 import { useFacilitator } from "./types.js";
+import { getFacilitatorUrl } from "./env.js";
 
 /**
  * Parses the amount from the given price
@@ -135,12 +136,12 @@ export type ChainConfig = {
 
 // Network-specific facilitator URLs
 const FACILITATOR_URLS: Partial<Record<SupportedNetwork, Resource>> = {
-    "base-sepolia": process.env.BASE_SEPOLIA_FACILITATOR_URL as Resource || "https://x402.org/facilitator",
-    "sei-testnet": process.env.SEI_TESTNET_FACILITATOR_URL as Resource || "https://6y3cdqj5s3.execute-api.us-west-2.amazonaws.com/prod",
+    "base-sepolia": getFacilitatorUrl("base-sepolia") as Resource,
+    "sei-testnet": getFacilitatorUrl("sei-testnet") as Resource,
 } as const;
 
 // Fallback facilitator URL
-const DEFAULT_FACILITATOR_URL = process.env.FACILITATOR_URL as Resource || "https://x402.org/facilitator";
+const DEFAULT_FACILITATOR_URL = getFacilitatorUrl("base-sepolia") as Resource;
 
 console.log(`[PAYMENTS] Facilitator URLs configured:`, FACILITATOR_URLS);
 

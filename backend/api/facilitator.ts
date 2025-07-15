@@ -10,6 +10,8 @@ import {
   PaymentPayloadSchema,
 } from "x402/types";
 
+import { getFacilitatorPrivateKey } from "../lib/env.js";
+
 config();
 
 export const runtime = 'nodejs';
@@ -27,10 +29,10 @@ app.use('*', cors({
 }));
 
 // Environment variables
-const FACILITATOR_EVM_PRIVATE_KEY = process.env.FACILITATOR_EVM_PRIVATE_KEY;
+const FACILITATOR_PRIVATE_KEY = getFacilitatorPrivateKey();
 
-if (!FACILITATOR_EVM_PRIVATE_KEY) {
-  console.error("Missing required environment variables: FACILITATOR_EVM_PRIVATE_KEY");
+if (!FACILITATOR_PRIVATE_KEY) {
+  console.error("Missing required environment variables: FACILITATOR_PRIVATE_KEY");
   process.exit(1); 
 }
 
@@ -121,7 +123,7 @@ app.get('/supported', (c) => {
 // Settle payment endpoint
 app.post('/settle', async (c) => {
   try {
-    const signer = createSignerSepolia(FACILITATOR_EVM_PRIVATE_KEY as `0x${string}`);
+    const signer = createSignerSepolia(FACILITATOR_PRIVATE_KEY as `0x${string}`);
     const body: SettleRequest = await c.req.json();
     const paymentRequirements = PaymentRequirementsSchema.parse(body.paymentRequirements);
     const paymentPayload = PaymentPayloadSchema.parse(body.paymentPayload);
