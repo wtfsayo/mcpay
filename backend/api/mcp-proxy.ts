@@ -36,7 +36,6 @@ const HOP_BY_HOP = new Set([
     'te', 'trailer', 'transfer-encoding', 'upgrade'
 ])
 
-const DEFAULT_UPSTREAM = new URL(process.env.MCP_TARGET ?? 'http://localhost:3050/stream');
 
 const verbs = ["post", "get", "delete"] as const;
 
@@ -45,7 +44,7 @@ const verbs = ["post", "get", "delete"] as const;
  * Works for POST, GET, DELETE – anything the MCP spec allows.
  */
 const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer, metadata?: {user?: User}) => {
-    let targetUpstream = DEFAULT_UPSTREAM;
+    let targetUpstream = new URL("");
     let authHeaders: Record<string, unknown> | undefined = undefined;
 
     if (id) {
@@ -61,6 +60,10 @@ const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer, metad
         if (mcpConfig?.authHeaders && mcpConfig?.requireAuth) {
             authHeaders = mcpConfig.authHeaders as Record<string, unknown>;
         }
+    }
+
+    if (!targetUpstream) {
+        throw new Error("No target upstream found");
     }
 
     const url = new URL(c.req.url);

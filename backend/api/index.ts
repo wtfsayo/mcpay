@@ -8,8 +8,7 @@ import mcpProxy from "./mcp-proxy.js";
 import ping from "./ping.js";
 import auth from "./auth.js";
 import { AuthType } from "../lib/auth.js";
-
-const trustedOrigins = process.env.CLIENT_AUTH_TRUSTED_ORIGINS?.split(',') || []
+import { getTrustedOrigins } from "../lib/env.js";
 
 const app = new Hono<{ Bindings: AuthType }>({
     strict: false,
@@ -21,7 +20,7 @@ app.use('*', prettyJSON());
 
 // Specific CORS configuration for auth routes - more restrictive
 app.use('/api/auth/*', cors({
-    origin: trustedOrigins,
+    origin: getTrustedOrigins(),
     allowHeaders: ["Content-Type", "Authorization", "Access-Control-Allow-Origin"],
     allowMethods: ["POST", "GET", "OPTIONS", "DELETE", "PUT", "PATCH"],
     exposeHeaders: ["Content-Length"],
@@ -30,7 +29,7 @@ app.use('/api/auth/*', cors({
 }));
 
 app.use('/api/*', cors({
-    origin: trustedOrigins,
+    origin: getTrustedOrigins(),
     allowHeaders: ["Content-Type", "Authorization", "Access-Control-Allow-Origin"],
     allowMethods: ["POST", "GET", "OPTIONS", "DELETE", "PUT", "PATCH"],
     exposeHeaders: ["Content-Length"],
