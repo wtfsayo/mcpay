@@ -49,6 +49,33 @@ const app = new Hono<AppContext>({
 })
 
 /**
+ * Helper function to recursively convert BigInt values to strings for JSON serialization
+ */
+function serializeBigInts(obj: any): any {
+    if (obj === null || obj === undefined) {
+        return obj;
+    }
+    
+    if (typeof obj === 'bigint') {
+        return obj.toString();
+    }
+    
+    if (Array.isArray(obj)) {
+        return obj.map(serializeBigInts);
+    }
+    
+    if (typeof obj === 'object') {
+        const serialized: any = {};
+        for (const [key, value] of Object.entries(obj)) {
+            serialized[key] = serializeBigInts(value);
+        }
+        return serialized;
+    }
+    
+    return obj;
+}
+
+/**
  * Authentication Middlewares with Type Safety
  * 
  * Usage Examples:
@@ -812,18 +839,51 @@ app.get('/users/:userId/wallets', authMiddleware, async (c) => {
         }
         
         const includeInactive = c.req.query('includeInactive') === 'true';
+        const includeTestnet = c.req.query('includeTestnet') === 'true';
         
         const wallets = await withTransaction(async (tx) => {
             return await txOperations.getUserWallets(userId, !includeInactive)(tx);
         });
+
+        // Get stablecoin balances across all chains (separated by testnet/mainnet)
         const stablecoinBalances = await getStablecoinBalances(wallets.map(w => w.walletAddress));
 
         const response = {
             wallets,
-            totalFiatValue: stablecoinBalances.totalFiatValue?.toString() // Convert BigInt to string
+            // Real money balances (mainnet only)
+            totalFiatValue: stablecoinBalances.totalFiatValue?.toString(), // Convert BigInt to string
+            mainnetBalances: stablecoinBalances.mainnetBalances,
+            mainnetBalancesByChain: stablecoinBalances.mainnetBalancesByChain,
+            mainnetBalancesByStablecoin: stablecoinBalances.mainnetBalancesByStablecoin,
+            
+            // Include testnet balances if requested
+            ...(includeTestnet && {
+                testnetTotalFiatValue: stablecoinBalances.testnetTotalFiatValue?.toString(),
+                testnetBalances: stablecoinBalances.testnetBalances,
+                testnetBalancesByChain: stablecoinBalances.testnetBalancesByChain,
+                testnetBalancesByStablecoin: stablecoinBalances.testnetBalancesByStablecoin,
+            }),
+            
+            // Summary information
+            summary: {
+                ...stablecoinBalances.summary,
+                hasMainnetBalances: stablecoinBalances.mainnetBalances.length > 0,
+                hasTestnetBalances: stablecoinBalances.testnetBalances.length > 0,
+                mainnetValueUsd: stablecoinBalances.totalFiatValue,
+                testnetValueUsd: stablecoinBalances.testnetTotalFiatValue,
+            },
+
+            // All balances (if needed for debugging or advanced UI)
+            ...(includeTestnet && {
+                allBalances: stablecoinBalances.balances,
+                balancesByChain: stablecoinBalances.balancesByChain,
+                balancesByStablecoin: stablecoinBalances.balancesByStablecoin,
+            })
         };
 
-        return c.json(response);
+        // Serialize all BigInt values to strings before sending JSON response
+        const serializedResponse = serializeBigInts(response);
+        return c.json(serializedResponse);
     } catch (error) {
         console.error('Error fetching user wallets:', error);
         return c.json({ error: (error as Error).message }, 400);
@@ -1388,6 +1448,94 @@ app.get('/wallets/architectures', async (c) => {
     }
 });
 
+// Add new endpoint to get only mainnet balances (real money)
+app.get('/users/:userId/wallets/mainnet-balances', authMiddleware, async (c) => {
+    try {
+        const userId = c.req.param('userId');
+        const user = c.get('requireUser')();
+        
+        // Check if user is accessing their own wallets
+        if (user.id !== userId) {
+            return c.json({ error: 'Forbidden - Cannot access other user\'s mainnet balances' }, 403);
+        }
+        
+        const includeInactive = c.req.query('includeInactive') === 'true';
+        
+        const wallets = await withTransaction(async (tx) => {
+            return await txOperations.getUserWallets(userId, !includeInactive)(tx);
+        });
+
+        // Get only mainnet stablecoin balances (real money)
+        const { getMainnetStablecoinBalances } = await import('../lib/crypto-accounts.js');
+        const stablecoinBalances = await getMainnetStablecoinBalances(wallets.map(w => w.walletAddress));
+
+        const response = {
+            wallets,
+            totalFiatValue: stablecoinBalances.totalFiatValue?.toString(),
+            balances: stablecoinBalances.balances,
+            balancesByChain: stablecoinBalances.balancesByChain,
+            balancesByStablecoin: stablecoinBalances.balancesByStablecoin,
+            summary: {
+                ...stablecoinBalances.summary,
+                hasBalances: stablecoinBalances.balances.length > 0,
+                valueUsd: stablecoinBalances.totalFiatValue,
+                networkType: 'mainnet'
+            }
+        };
+
+        // Serialize all BigInt values to strings before sending JSON response
+        const serializedResponse = serializeBigInts(response);
+        return c.json(serializedResponse);
+    } catch (error) {
+        console.error('Error fetching user mainnet balances:', error);
+        return c.json({ error: (error as Error).message }, 400);
+    }
+});
+
+// Add new endpoint to get only testnet balances
+app.get('/users/:userId/wallets/testnet-balances', authMiddleware, async (c) => {
+    try {
+        const userId = c.req.param('userId');
+        const user = c.get('requireUser')();
+        
+        // Check if user is accessing their own wallets
+        if (user.id !== userId) {
+            return c.json({ error: 'Forbidden - Cannot access other user\'s testnet balances' }, 403);
+        }
+        
+        const includeInactive = c.req.query('includeInactive') === 'true';
+        
+        const wallets = await withTransaction(async (tx) => {
+            return await txOperations.getUserWallets(userId, !includeInactive)(tx);
+        });
+
+        // Get only testnet stablecoin balances
+        const { getTestnetStablecoinBalances } = await import('../lib/crypto-accounts.js');
+        const stablecoinBalances = await getTestnetStablecoinBalances(wallets.map(w => w.walletAddress));
+
+        const response = {
+            wallets,
+            totalFiatValue: stablecoinBalances.totalFiatValue?.toString(),
+            balances: stablecoinBalances.balances,
+            balancesByChain: stablecoinBalances.balancesByChain,
+            balancesByStablecoin: stablecoinBalances.balancesByStablecoin,
+            summary: {
+                ...stablecoinBalances.summary,
+                hasBalances: stablecoinBalances.balances.length > 0,
+                valueUsd: stablecoinBalances.totalFiatValue,
+                networkType: 'testnet'
+            }
+        };
+
+        // Serialize all BigInt values to strings before sending JSON response
+        const serializedResponse = serializeBigInts(response);
+        return c.json(serializedResponse);
+    } catch (error) {
+        console.error('Error fetching user testnet balances:', error);
+        return c.json({ error: (error as Error).message }, 400);
+    }
+});
+
 // Catch-all for unmatched routes
 app.all('*', (c) => {
     return c.json({
@@ -1413,7 +1561,7 @@ app.all('*', (c) => {
             'POST /api/proofs/:id/verify',
             'GET /api/servers/:serverId/reputation',
             // Multi-blockchain wallet management (secure - no private key storage)
-            'GET /api/users/:userId/wallets',
+            'GET /api/users/:userId/wallets', // Get user wallets with separated mainnet/testnet balances. Query params: ?includeInactive=true&includeTestnet=true
             'POST /api/users/:userId/wallets', // Supports Ethereum, Solana, NEAR, etc. (now with architecture support)
             'PUT /api/users/:userId/wallets/:walletId/primary',
             'DELETE /api/users/:userId/wallets/:walletId',
@@ -1432,6 +1580,9 @@ app.all('*', (c) => {
             'GET /api/onramp/config', // Get onramp configuration (networks, assets, defaults)
             // Blockchain Architecture endpoints
             'GET /api/wallets/architectures', // Get supported blockchain architectures and mappings
+            // Mainnet/Testnet balance endpoints
+            'GET /api/users/:userId/wallets/mainnet-balances', // Get mainnet balances for a user
+            'GET /api/users/:userId/wallets/testnet-balances', // Get testnet balances for a user
         ]
     }, 404);
 });

@@ -152,6 +152,7 @@ export interface BaseChainConfig {
   name: string
   architecture: BlockchainArchitecture
   rpcUrl: string
+  isTestnet: boolean // Add flag to distinguish testnet from mainnet
   nativeCurrency: {
     symbol: string
     decimals: number
@@ -189,6 +190,7 @@ export const SUPPORTED_CHAINS: Record<string, ChainConfig> = {
     chainId: 84532,
     name: 'Base Sepolia',
     rpcUrl: 'https://sepolia.base.org',
+    isTestnet: true,
     nativeCurrency: { symbol: 'ETH', decimals: 18 },
     stablecoins: [
       { address: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', symbol: 'USDC' },
@@ -201,6 +203,7 @@ export const SUPPORTED_CHAINS: Record<string, ChainConfig> = {
     chainId: 8453,
     name: 'Base',
     rpcUrl: 'https://mainnet.base.org',
+    isTestnet: false,
     nativeCurrency: { symbol: 'ETH', decimals: 18 },
     stablecoins: [
       { address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', symbol: 'USDC' },
@@ -213,6 +216,7 @@ export const SUPPORTED_CHAINS: Record<string, ChainConfig> = {
     chainId: 43113,
     name: 'Avalanche Fuji',
     rpcUrl: 'https://api.avax-test.network/ext/bc/C/rpc',
+    isTestnet: true,
     nativeCurrency: { symbol: 'AVAX', decimals: 18 },
     stablecoins: [
       { address: '0x5425890298aed601595a70AB815c96711a31Bc65', symbol: 'USDC' },
@@ -223,6 +227,7 @@ export const SUPPORTED_CHAINS: Record<string, ChainConfig> = {
     chainId: 43114,
     name: 'Avalanche',
     rpcUrl: 'https://api.avax.network/ext/bc/C/rpc',
+    isTestnet: false,
     nativeCurrency: { symbol: 'AVAX', decimals: 18 },
     stablecoins: [
       { address: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', symbol: 'USDC' },
@@ -235,6 +240,7 @@ export const SUPPORTED_CHAINS: Record<string, ChainConfig> = {
     chainId: 4689,
     name: 'IoTeX Network',
     rpcUrl: 'https://babel-api.mainnet.iotex.io',
+    isTestnet: false,
     nativeCurrency: { symbol: 'IOTX', decimals: 18 },
     stablecoins: [
       { address: '0xcdf79194c6c285077a58da47641d4dbe51f63542', symbol: 'USDC' },
@@ -245,6 +251,7 @@ export const SUPPORTED_CHAINS: Record<string, ChainConfig> = {
     chainId: 1328,
     name: 'Sei Testnet',
     rpcUrl: 'https://evm-rpc-testnet.sei-apis.com',
+    isTestnet: true,
     nativeCurrency: { symbol: 'SEI', decimals: 18 },
     stablecoins: [
       { address: '0xeAcd10aaA6f362a94823df6BBC3C536841870772', symbol: 'USDC' },
@@ -257,6 +264,7 @@ export const SUPPORTED_CHAINS: Record<string, ChainConfig> = {
     chainId: 'mainnet-beta',
     name: 'Solana Mainnet',
     rpcUrl: 'https://api.mainnet-beta.solana.com',
+    isTestnet: false,
     nativeCurrency: { symbol: 'SOL', decimals: 9 },
     stablecoins: [
       { mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', symbol: 'USDC' },
@@ -268,6 +276,7 @@ export const SUPPORTED_CHAINS: Record<string, ChainConfig> = {
     chainId: 'devnet',
     name: 'Solana Devnet',
     rpcUrl: 'https://api.devnet.solana.com',
+    isTestnet: true,
     nativeCurrency: { symbol: 'SOL', decimals: 9 },
     stablecoins: [
       { mint: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU', symbol: 'USDC' },
@@ -280,6 +289,7 @@ export const SUPPORTED_CHAINS: Record<string, ChainConfig> = {
     chainId: 'mainnet',
     name: 'NEAR Mainnet',
     rpcUrl: 'https://rpc.mainnet.near.org',
+    isTestnet: false,
     nativeCurrency: { symbol: 'NEAR', decimals: 24 },
     stablecoins: [
       { contract: 'a0b86991c431e3a7e3cd0c6b8b3a5e3b4e3a7e3cd0c.near', symbol: 'USDC' },
@@ -291,6 +301,7 @@ export const SUPPORTED_CHAINS: Record<string, ChainConfig> = {
     chainId: 'testnet',
     name: 'NEAR Testnet',
     rpcUrl: 'https://rpc.testnet.near.org',
+    isTestnet: true,
     nativeCurrency: { symbol: 'NEAR', decimals: 24 },
     stablecoins: [
       { contract: 'usdc.testnet', symbol: 'USDC' },
@@ -353,6 +364,7 @@ export interface StablecoinBalance {
   chainId: string | number
   chainName: string
   architecture: BlockchainArchitecture
+  isTestnet: boolean // Add flag to indicate if this balance is on a testnet
   stablecoin: StablecoinSymbol
   stablecoinName: string
   tokenIdentifier: string // Contract address, mint address, etc.
@@ -360,7 +372,7 @@ export interface StablecoinBalance {
   formattedBalance: string
   decimals: number
   priceUsd: number
-  fiatValue: number // USD value of the balance
+  fiatValue: number // USD value of the balance (should be 0 for testnet balances in real calculations)
 }
 
 export interface StablecoinBalanceError {
@@ -369,6 +381,7 @@ export interface StablecoinBalanceError {
   chainId: string | number
   chainName: string
   architecture: BlockchainArchitecture
+  isTestnet: boolean // Add flag to indicate if this error was on a testnet
   stablecoin: StablecoinSymbol
   tokenIdentifier: string
   error: string
@@ -377,15 +390,29 @@ export interface StablecoinBalanceError {
 export interface MultiChainStablecoinResult {
   balances: StablecoinBalance[]
   errors: StablecoinBalanceError[]
-  totalFiatValue: number
+  // Separate totals for mainnet and testnet
+  totalFiatValue: number // Total fiat value from mainnet chains only
+  testnetTotalFiatValue: number // Total fiat value from testnet chains (for display purposes)
+  mainnetBalances: StablecoinBalance[] // Mainnet balances only
+  testnetBalances: StablecoinBalance[] // Testnet balances only
   balancesByChain: Partial<Record<SupportedChain, StablecoinBalance[]>>
   balancesByStablecoin: Partial<Record<StablecoinSymbol, StablecoinBalance[]>>
+  // Separate groupings for mainnet and testnet
+  mainnetBalancesByChain: Partial<Record<SupportedChain, StablecoinBalance[]>>
+  testnetBalancesByChain: Partial<Record<SupportedChain, StablecoinBalance[]>>
+  mainnetBalancesByStablecoin: Partial<Record<StablecoinSymbol, StablecoinBalance[]>>
+  testnetBalancesByStablecoin: Partial<Record<StablecoinSymbol, StablecoinBalance[]>>
   summary: {
     totalAccounts: number
     totalChainsChecked: number
     totalStablecoinsChecked: number
     successfulChecks: number
     failedChecks: number
+    // Additional testnet/mainnet breakdown
+    mainnetChainsChecked: number
+    testnetChainsChecked: number
+    mainnetSuccessfulChecks: number
+    testnetSuccessfulChecks: number
   }
 }
 
@@ -483,6 +510,7 @@ export async function getStablecoinBalanceOnChain(
       chainId: 'unknown',
       chainName: 'Unknown',
       architecture: 'evm', // default fallback
+      isTestnet: false, // default fallback
       stablecoin: stablecoinSymbol,
       tokenIdentifier: 'unknown',
       error: `Unsupported chain: ${chain}`,
@@ -498,6 +526,7 @@ export async function getStablecoinBalanceOnChain(
       chainId: chainConfig.chainId,
       chainName: chainConfig.name,
       architecture: chainConfig.architecture,
+      isTestnet: chainConfig.isTestnet,
       stablecoin: stablecoinSymbol,
       tokenIdentifier: 'not_found',
       error: `${stablecoinSymbol} not supported on ${chainConfig.name}`,
@@ -533,6 +562,7 @@ export async function getStablecoinBalanceOnChain(
       chainId: chainConfig.chainId,
       chainName: chainConfig.name,
       architecture: chainConfig.architecture,
+      isTestnet: chainConfig.isTestnet,
       stablecoin: stablecoinSymbol,
       stablecoinName: stablecoinConfig.name,
       tokenIdentifier,
@@ -553,6 +583,7 @@ export async function getStablecoinBalanceOnChain(
       chainId: chainConfig.chainId,
       chainName: chainConfig.name,
       architecture: chainConfig.architecture,
+      isTestnet: chainConfig.isTestnet,
       stablecoin: stablecoinSymbol,
       tokenIdentifier,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -573,14 +604,25 @@ export async function getStablecoinBalances(
       balances: [],
       errors: [],
       totalFiatValue: 0,
+      testnetTotalFiatValue: 0,
+      mainnetBalances: [],
+      testnetBalances: [],
       balancesByChain: {},
       balancesByStablecoin: {},
+      mainnetBalancesByChain: {},
+      testnetBalancesByChain: {},
+      mainnetBalancesByStablecoin: {},
+      testnetBalancesByStablecoin: {},
       summary: {
         totalAccounts: 0,
         totalChainsChecked: 0,
         totalStablecoinsChecked: 0,
         successfulChecks: 0,
         failedChecks: 0,
+        mainnetChainsChecked: 0,
+        testnetChainsChecked: 0,
+        mainnetSuccessfulChecks: 0,
+        testnetSuccessfulChecks: 0,
       },
     }
   }
@@ -615,41 +657,90 @@ export async function getStablecoinBalances(
     }
   }
 
-  // Calculate aggregated results
-  const totalFiatValue = balances.reduce((sum, balance) => sum + balance.fiatValue, 0)
+  // Separate mainnet and testnet balances
+  const mainnetBalances = balances.filter(balance => !balance.isTestnet)
+  const testnetBalances = balances.filter(balance => balance.isTestnet)
 
-  // Group balances by chain
+  // Calculate aggregated results - only mainnet balances count toward real fiat value
+  const totalFiatValue = mainnetBalances.reduce((sum, balance) => sum + balance.fiatValue, 0)
+  const testnetTotalFiatValue = testnetBalances.reduce((sum, balance) => sum + balance.fiatValue, 0)
+
+  // Group all balances by chain
   const balancesByChain: Partial<Record<SupportedChain, StablecoinBalance[]>> = {}
+  const mainnetBalancesByChain: Partial<Record<SupportedChain, StablecoinBalance[]>> = {}
+  const testnetBalancesByChain: Partial<Record<SupportedChain, StablecoinBalance[]>> = {}
+
   for (const balance of balances) {
     if (!balancesByChain[balance.chain]) {
       balancesByChain[balance.chain] = []
     }
     balancesByChain[balance.chain]!.push(balance)
+
+    if (balance.isTestnet) {
+      if (!testnetBalancesByChain[balance.chain]) {
+        testnetBalancesByChain[balance.chain] = []
+      }
+      testnetBalancesByChain[balance.chain]!.push(balance)
+    } else {
+      if (!mainnetBalancesByChain[balance.chain]) {
+        mainnetBalancesByChain[balance.chain] = []
+      }
+      mainnetBalancesByChain[balance.chain]!.push(balance)
+    }
   }
 
-  // Group balances by stablecoin
+  // Group all balances by stablecoin
   const balancesByStablecoin: Partial<Record<StablecoinSymbol, StablecoinBalance[]>> = {}
+  const mainnetBalancesByStablecoin: Partial<Record<StablecoinSymbol, StablecoinBalance[]>> = {}
+  const testnetBalancesByStablecoin: Partial<Record<StablecoinSymbol, StablecoinBalance[]>> = {}
+
   for (const balance of balances) {
     if (!balancesByStablecoin[balance.stablecoin]) {
       balancesByStablecoin[balance.stablecoin] = []
     }
     balancesByStablecoin[balance.stablecoin]!.push(balance)
+
+    if (balance.isTestnet) {
+      if (!testnetBalancesByStablecoin[balance.stablecoin]) {
+        testnetBalancesByStablecoin[balance.stablecoin] = []
+      }
+      testnetBalancesByStablecoin[balance.stablecoin]!.push(balance)
+    } else {
+      if (!mainnetBalancesByStablecoin[balance.stablecoin]) {
+        mainnetBalancesByStablecoin[balance.stablecoin] = []
+      }
+      mainnetBalancesByStablecoin[balance.stablecoin]!.push(balance)
+    }
   }
 
-  const uniqueChains = new Set(Object.keys(SUPPORTED_CHAINS))
-  
+  // Count chains by type
+  const allChains = Object.values(SUPPORTED_CHAINS)
+  const mainnetChains = allChains.filter(chain => !chain.isTestnet)
+  const testnetChains = allChains.filter(chain => chain.isTestnet)
+
   return {
     balances,
     errors,
     totalFiatValue,
+    testnetTotalFiatValue,
+    mainnetBalances,
+    testnetBalances,
     balancesByChain,
     balancesByStablecoin,
+    mainnetBalancesByChain,
+    testnetBalancesByChain,
+    mainnetBalancesByStablecoin,
+    testnetBalancesByStablecoin,
     summary: {
       totalAccounts: addresses.length,
-      totalChainsChecked: uniqueChains.size,
+      totalChainsChecked: allChains.length,
       totalStablecoinsChecked: stablecoins.length,
       successfulChecks: balances.length,
       failedChecks: errors.length,
+      mainnetChainsChecked: mainnetChains.length,
+      testnetChainsChecked: testnetChains.length,
+      mainnetSuccessfulChecks: mainnetBalances.length,
+      testnetSuccessfulChecks: testnetBalances.length,
     },
   }
 }
@@ -668,14 +759,25 @@ export async function getStablecoinBalancesOnChains(
       balances: [],
       errors: [],
       totalFiatValue: 0,
+      testnetTotalFiatValue: 0,
+      mainnetBalances: [],
+      testnetBalances: [],
       balancesByChain: {},
       balancesByStablecoin: {},
+      mainnetBalancesByChain: {},
+      testnetBalancesByChain: {},
+      mainnetBalancesByStablecoin: {},
+      testnetBalancesByStablecoin: {},
       summary: {
         totalAccounts: 0,
         totalChainsChecked: 0,
         totalStablecoinsChecked: 0,
         successfulChecks: 0,
         failedChecks: 0,
+        mainnetChainsChecked: 0,
+        testnetChainsChecked: 0,
+        mainnetSuccessfulChecks: 0,
+        testnetSuccessfulChecks: 0,
       },
     }
   }
@@ -710,39 +812,92 @@ export async function getStablecoinBalancesOnChains(
     }
   }
 
-  // Calculate aggregated results
-  const totalFiatValue = balances.reduce((sum, balance) => sum + balance.fiatValue, 0)
+  // Separate mainnet and testnet balances
+  const mainnetBalances = balances.filter(balance => !balance.isTestnet)
+  const testnetBalances = balances.filter(balance => balance.isTestnet)
 
-  // Group balances by chain
+  // Calculate aggregated results - only mainnet balances count toward real fiat value
+  const totalFiatValue = mainnetBalances.reduce((sum, balance) => sum + balance.fiatValue, 0)
+  const testnetTotalFiatValue = testnetBalances.reduce((sum, balance) => sum + balance.fiatValue, 0)
+
+  // Group all balances by chain
   const balancesByChain: Partial<Record<SupportedChain, StablecoinBalance[]>> = {}
+  const mainnetBalancesByChain: Partial<Record<SupportedChain, StablecoinBalance[]>> = {}
+  const testnetBalancesByChain: Partial<Record<SupportedChain, StablecoinBalance[]>> = {}
+
   for (const balance of balances) {
     if (!balancesByChain[balance.chain]) {
       balancesByChain[balance.chain] = []
     }
     balancesByChain[balance.chain]!.push(balance)
+
+    if (balance.isTestnet) {
+      if (!testnetBalancesByChain[balance.chain]) {
+        testnetBalancesByChain[balance.chain] = []
+      }
+      testnetBalancesByChain[balance.chain]!.push(balance)
+    } else {
+      if (!mainnetBalancesByChain[balance.chain]) {
+        mainnetBalancesByChain[balance.chain] = []
+      }
+      mainnetBalancesByChain[balance.chain]!.push(balance)
+    }
   }
 
-  // Group balances by stablecoin
+  // Group all balances by stablecoin
   const balancesByStablecoin: Partial<Record<StablecoinSymbol, StablecoinBalance[]>> = {}
+  const mainnetBalancesByStablecoin: Partial<Record<StablecoinSymbol, StablecoinBalance[]>> = {}
+  const testnetBalancesByStablecoin: Partial<Record<StablecoinSymbol, StablecoinBalance[]>> = {}
+
   for (const balance of balances) {
     if (!balancesByStablecoin[balance.stablecoin]) {
       balancesByStablecoin[balance.stablecoin] = []
     }
     balancesByStablecoin[balance.stablecoin]!.push(balance)
+
+    if (balance.isTestnet) {
+      if (!testnetBalancesByStablecoin[balance.stablecoin]) {
+        testnetBalancesByStablecoin[balance.stablecoin] = []
+      }
+      testnetBalancesByStablecoin[balance.stablecoin]!.push(balance)
+    } else {
+      if (!mainnetBalancesByStablecoin[balance.stablecoin]) {
+        mainnetBalancesByStablecoin[balance.stablecoin] = []
+      }
+      mainnetBalancesByStablecoin[balance.stablecoin]!.push(balance)
+    }
   }
+
+  // Count specified chains by type
+  const specifiedChainConfigs = chains
+    .map(chain => SUPPORTED_CHAINS[chain])
+    .filter((chain): chain is ChainConfig => chain !== undefined)
+  const mainnetChains = specifiedChainConfigs.filter(chain => !chain.isTestnet)
+  const testnetChains = specifiedChainConfigs.filter(chain => chain.isTestnet)
 
   return {
     balances,
     errors,
     totalFiatValue,
+    testnetTotalFiatValue,
+    mainnetBalances,
+    testnetBalances,
     balancesByChain,
     balancesByStablecoin,
+    mainnetBalancesByChain,
+    testnetBalancesByChain,
+    mainnetBalancesByStablecoin,
+    testnetBalancesByStablecoin,
     summary: {
       totalAccounts: addresses.length,
       totalChainsChecked: chains.length,
       totalStablecoinsChecked: stablecoins.length,
       successfulChecks: balances.length,
       failedChecks: errors.length,
+      mainnetChainsChecked: mainnetChains.length,
+      testnetChainsChecked: testnetChains.length,
+      mainnetSuccessfulChecks: mainnetBalances.length,
+      testnetSuccessfulChecks: testnetBalances.length,
     },
   }
 }
@@ -819,7 +974,7 @@ export function getSupportedArchitectures(): BlockchainArchitecture[] {
 }
 
 /**
- * Example usage function - demonstrating how to use the stablecoin balance checker
+ * Example usage function - demonstrating how to use the stablecoin balance checker with testnet/mainnet separation
  */
 export async function exampleUsage() {
   const addresses: BlockchainAddress[] = [
@@ -829,34 +984,59 @@ export async function exampleUsage() {
     'alice.near', // Near addresses
   ]
 
-  // Check all stablecoin balances across all supported chains
-  console.log('Checking stablecoin balances across all chains...')
+  // Check all stablecoin balances across all supported chains (with testnet/mainnet separation)
+  console.log('Checking stablecoin balances across all chains with testnet/mainnet separation...')
   const allChainsResult = await getStablecoinBalances(addresses)
   
-  console.log(`Total fiat value: $${allChainsResult.totalFiatValue.toFixed(2)}`)
-  console.log(`Successful balance checks: ${allChainsResult.summary.successfulChecks}`)
-  console.log(`Failed balance checks: ${allChainsResult.summary.failedChecks}`)
+  console.log(`Real money (mainnet) total: $${allChainsResult.totalFiatValue.toFixed(2)}`)
+  console.log(`Test money (testnet) total: $${allChainsResult.testnetTotalFiatValue.toFixed(2)}`)
+  console.log(`Mainnet successful checks: ${allChainsResult.summary.mainnetSuccessfulChecks}`)
+  console.log(`Testnet successful checks: ${allChainsResult.summary.testnetSuccessfulChecks}`)
+
+  // Check only mainnet balances (real money)
+  console.log('\nChecking mainnet balances only (real money)...')
+  const mainnetResult = await getMainnetStablecoinBalances(addresses)
+  console.log(`Total real money value: $${mainnetResult.totalFiatValue.toFixed(2)}`)
+
+  // Check only testnet balances
+  console.log('\nChecking testnet balances only...')
+  const testnetResult = await getTestnetStablecoinBalances(addresses)
+  console.log(`Total test money value: $${testnetResult.totalFiatValue.toFixed(2)}`)
 
   // Check USDC only on EVM chains
   console.log('\nChecking USDC balances on EVM chains only...')
   const evmChains = getEVMChains()
   const evmResult = await getStablecoinBalancesOnChains(addresses, evmChains, ['USDC'])
-  console.log(`Total USDC value on EVM chains: $${evmResult.totalFiatValue.toFixed(2)}`)
+  console.log(`Total USDC value on EVM chains: $${evmResult.totalFiatValue.toFixed(2)} (mainnet)`)
+  console.log(`Total USDC test value on EVM chains: $${evmResult.testnetTotalFiatValue.toFixed(2)} (testnet)`)
 
-  // Check balances by architecture
-  console.log('\nSupported architectures:', getSupportedArchitectures())
-  console.log('EVM chains:', getEVMChains())
-  console.log('Solana chains:', getSolanaChains())
-  console.log('Near chains:', getNearChains())
+  // Show supported network types
+  console.log('\nSupported network types:')
+  console.log('Mainnet chains:', getMainnetChains())
+  console.log('Testnet chains:', getTestnetChains())
+  console.log('All EVM chains:', getEVMChains())
+  console.log('All Solana chains:', getSolanaChains())
+  console.log('All Near chains:', getNearChains())
   
-  // Print detailed results grouped by stablecoin
-  console.log('\nBalances by Stablecoin:')
-  for (const [stablecoin, balances] of Object.entries(allChainsResult.balancesByStablecoin)) {
+  // Print detailed results grouped by network type and stablecoin
+  console.log('\nMainnet Balances by Stablecoin (Real Money):')
+  for (const [stablecoin, balances] of Object.entries(allChainsResult.mainnetBalancesByStablecoin)) {
     if (balances && balances.length > 0) {
       const totalValue = balances.reduce((sum, bal) => sum + bal.fiatValue, 0)
-      console.log(`\n${stablecoin}: $${totalValue.toFixed(2)} total`)
+      console.log(`\n${stablecoin}: $${totalValue.toFixed(2)} total (REAL MONEY)`)
       balances.forEach((balance: StablecoinBalance) => {
         console.log(`  ${balance.address} on ${balance.chainName}: ${balance.formattedBalance} ${balance.stablecoin} ($${balance.fiatValue.toFixed(2)})`)
+      })
+    }
+  }
+
+  console.log('\nTestnet Balances by Stablecoin (Test Money):')
+  for (const [stablecoin, balances] of Object.entries(allChainsResult.testnetBalancesByStablecoin)) {
+    if (balances && balances.length > 0) {
+      const totalValue = balances.reduce((sum, bal) => sum + bal.fiatValue, 0)
+      console.log(`\n${stablecoin}: $${totalValue.toFixed(2)} total (TEST MONEY)`)
+      balances.forEach((balance: StablecoinBalance) => {
+        console.log(`  ${balance.address} on ${balance.chainName}: ${balance.formattedBalance} ${balance.stablecoin} ($${balance.fiatValue.toFixed(2)}) [TESTNET]`)
       })
     }
   }
@@ -865,9 +1045,17 @@ export async function exampleUsage() {
   if (allChainsResult.errors.length > 0) {
     console.log('\nErrors:')
     allChainsResult.errors.forEach((error: StablecoinBalanceError) => {
-      console.log(`  ${error.address} on ${error.chainName} (${error.architecture}) - ${error.stablecoin}: ${error.error}`)
+      const networkType = error.isTestnet ? 'TESTNET' : 'MAINNET'
+      console.log(`  ${error.address} on ${error.chainName} (${error.architecture}) [${networkType}] - ${error.stablecoin}: ${error.error}`)
     })
   }
+
+  // Example API Usage:
+  console.log('\nExample API Usage:')
+  console.log('GET /api/users/:userId/wallets - Returns both mainnet and testnet balances')
+  console.log('GET /api/users/:userId/wallets?includeTestnet=true - Includes testnet balance details')
+  console.log('GET /api/users/:userId/wallets/mainnet-balances - Returns only real money balances')
+  console.log('GET /api/users/:userId/wallets/testnet-balances - Returns only test money balances')
 
   return allChainsResult
 }
@@ -995,4 +1183,64 @@ export function getBlockchainsForArchitecture(architecture: BlockchainArchitectu
  */
 export function isSupportedBlockchain(blockchain: string): boolean {
   return Boolean(BLOCKCHAIN_TO_ARCHITECTURE[blockchain.toLowerCase().trim()]);
+}
+
+/**
+ * Get all mainnet chains
+ */
+export function getMainnetChains(): SupportedChain[] {
+  return Object.entries(SUPPORTED_CHAINS)
+    .filter(([_, config]) => !config.isTestnet)
+    .map(([chainKey]) => chainKey as SupportedChain)
+}
+
+/**
+ * Get all testnet chains
+ */
+export function getTestnetChains(): SupportedChain[] {
+  return Object.entries(SUPPORTED_CHAINS)
+    .filter(([_, config]) => config.isTestnet)
+    .map(([chainKey]) => chainKey as SupportedChain)
+}
+
+/**
+ * Filter chains by testnet status
+ */
+export function filterChainsByTestnetStatus(chains: SupportedChain[], isTestnet: boolean): SupportedChain[] {
+  return chains.filter(chain => {
+    const config = SUPPORTED_CHAINS[chain]
+    return config && config.isTestnet === isTestnet
+  })
+}
+
+/**
+ * Check if a chain is a testnet
+ */
+export function isTestnetChain(chain: SupportedChain): boolean {
+  const config = SUPPORTED_CHAINS[chain]
+  return config ? config.isTestnet : false
+}
+
+/**
+ * Get mainnet-only stablecoin balances (excludes testnet balances from fiat calculations)
+ */
+export async function getMainnetStablecoinBalances(
+  addresses: BlockchainAddress[],
+  stablecoins: StablecoinSymbol[] = ['USDC', 'USDT', 'DAI'],
+  priceProvider: PriceProvider = new SimplePriceProvider()
+): Promise<MultiChainStablecoinResult> {
+  const mainnetChains = getMainnetChains()
+  return getStablecoinBalancesOnChains(addresses, mainnetChains, stablecoins, priceProvider)
+}
+
+/**
+ * Get testnet-only stablecoin balances
+ */
+export async function getTestnetStablecoinBalances(
+  addresses: BlockchainAddress[],
+  stablecoins: StablecoinSymbol[] = ['USDC', 'USDT', 'DAI'],
+  priceProvider: PriceProvider = new SimplePriceProvider()
+): Promise<MultiChainStablecoinResult> {
+  const testnetChains = getTestnetChains()
+  return getStablecoinBalancesOnChains(addresses, testnetChains, stablecoins, priceProvider)
 }

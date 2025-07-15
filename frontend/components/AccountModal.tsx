@@ -19,7 +19,7 @@ import { useTheme } from "@/context/ThemeContext"
 import { signIn, signOut, useSession } from "@/lib/auth"
 import { openExplorer } from "@/lib/blockscout"
 import type { UserWallet } from "@/lib/types"
-import { api } from "@/lib/utils"
+import { api, apiCall } from "@/lib/utils"
 import {
   AlertCircle,
   CheckCircle,
@@ -60,6 +60,19 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
   const [userWallets, setUserWallets] = useState<UserWallet[]>([])
   const [isMobile, setIsMobile] = useState(false)
   const [totalFiatValue, setTotalFiatValue] = useState<number>(0)
+  const [testnetTotalFiatValue, setTestnetTotalFiatValue] = useState<number>(0)
+  const [balanceSummary, setBalanceSummary] = useState<{
+    hasMainnetBalances: boolean
+    hasTestnetBalances: boolean
+    mainnetValueUsd: number
+    testnetValueUsd: number
+  }>({
+    hasMainnetBalances: false,
+    hasTestnetBalances: false,
+    mainnetValueUsd: 0,
+    testnetValueUsd: 0
+  })
+  const [showTestnetBalances, setShowTestnetBalances] = useState(false)
   
   // Check for mobile screen size
   useEffect(() => {
@@ -83,11 +96,38 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
     if (!session?.user?.id) return
     
     try {
-      const { wallets, totalFiatValue } = await api.getUserWallets(session.user.id)
+      // Include testnet balances in the API call using query parameters
+      const response = await apiCall(`/users/${session.user.id}/wallets?includeTestnet=true`)
+      const { 
+        wallets, 
+        totalFiatValue, 
+        testnetTotalFiatValue,
+        summary 
+      } = response
+      
       setUserWallets(wallets)
-      setTotalFiatValue(totalFiatValue)
+      setTotalFiatValue(parseFloat(totalFiatValue || '0'))
+      setTestnetTotalFiatValue(parseFloat(testnetTotalFiatValue || '0'))
+      
+      // Update balance summary for UI display
+      setBalanceSummary({
+        hasMainnetBalances: summary?.hasMainnetBalances || false,
+        hasTestnetBalances: summary?.hasTestnetBalances || false,
+        mainnetValueUsd: summary?.mainnetValueUsd || 0,
+        testnetValueUsd: summary?.testnetValueUsd || 0
+      })
     } catch (error) {
       console.error('Failed to load user wallets:', error)
+      // Reset state on error
+      setUserWallets([])
+      setTotalFiatValue(0)
+      setTestnetTotalFiatValue(0)
+      setBalanceSummary({
+        hasMainnetBalances: false,
+        hasTestnetBalances: false,
+        mainnetValueUsd: 0,
+        testnetValueUsd: 0
+      })
     }
   }
 
@@ -344,25 +384,120 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
           </div>
 
           <div className={`rounded-lg border p-4 ${isDark ? "bg-gray-900/50 border-gray-800" : "bg-gray-50/50 border-gray-200"}`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <Wallet className="h-4 w-4" />
-                  <h4 className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
-                    Portfolio Value
-                  </h4>
-                </div>
-                <p className={`text-2xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
-                  ${parseFloat(String(totalFiatValue || 0)).toFixed(2)}
-                </p>
-                <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                  {userWallets.length} wallet{userWallets.length !== 1 ? 's' : ''}
-                </p>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Wallet className="h-4 w-4" />
+                <h4 className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Portfolio Value
+                </h4>
               </div>
-              <div className={`p-2.5 rounded-lg ${isDark ? "bg-green-900/20" : "bg-green-100"}`}>
-                <Wallet className="h-4 w-4 text-green-600" />
+              {balanceSummary.hasTestnetBalances && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowTestnetBalances(!showTestnetBalances)}
+                  className="h-6 text-xs px-2"
+                >
+                  {showTestnetBalances ? "Hide Test" : "Show Test"}
+                </Button>
+              )}
+            </div>
+            
+            {/* Real Money Balance (Mainnet) */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-2 h-2 rounded-full bg-green-500" />
+                    <span className={`text-xs font-medium ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+                      Real Balance
+                    </span>
+                  </div>
+                  <p className={`text-2xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                    ${totalFiatValue.toFixed(2)}
+                  </p>
+                  <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                    {balanceSummary.hasMainnetBalances ? "Live on mainnet" : "No real balances"}
+                  </p>
+                </div>
+                <div className={`p-2.5 rounded-lg ${isDark ? "bg-green-900/20" : "bg-green-100"}`}>
+                  <Wallet className="h-4 w-4 text-green-600" />
+                </div>
+              </div>
+
+              {/* Test Money Balance (Testnet) - Only show if user toggles it on */}
+              {showTestnetBalances && balanceSummary.hasTestnetBalances && (
+                <>
+                  <div className={`h-px ${isDark ? "bg-gray-800" : "bg-gray-200"}`} />
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="w-2 h-2 rounded-full bg-orange-500" />
+                        <span className={`text-xs font-medium ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+                          Test Balance
+                        </span>
+                        <Badge variant="outline" className="text-xs px-1.5 py-0">
+                          TESTNET
+                        </Badge>
+                      </div>
+                      <p className={`text-lg font-semibold ${isDark ? "text-orange-300" : "text-orange-600"}`}>
+                        ${testnetTotalFiatValue.toFixed(2)}
+                      </p>
+                      <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                        Test networks only
+                      </p>
+                    </div>
+                    <div className={`p-2.5 rounded-lg ${isDark ? "bg-orange-900/20" : "bg-orange-100"}`}>
+                      <AlertCircle className="h-4 w-4 text-orange-600" />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Wallet Count */}
+              <div className={`h-px ${isDark ? "bg-gray-800" : "bg-gray-200"}`} />
+              <div className="flex items-center justify-between text-xs">
+                <span className={isDark ? "text-gray-400" : "text-gray-600"}>
+                  {userWallets.length} wallet{userWallets.length !== 1 ? 's' : ''} connected
+                </span>
+                {(balanceSummary.hasMainnetBalances || balanceSummary.hasTestnetBalances) && (
+                  <span className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                    {balanceSummary.hasMainnetBalances ? "✓ Real money" : ""} 
+                    {balanceSummary.hasMainnetBalances && balanceSummary.hasTestnetBalances ? " • " : ""}
+                    {balanceSummary.hasTestnetBalances ? "⚠️ Test money" : ""}
+                  </span>
+                )}
               </div>
             </div>
+            {/* Helpful Info Section */}
+            {(balanceSummary.hasMainnetBalances || balanceSummary.hasTestnetBalances) && (
+              <div className={`rounded-lg border p-3 mt-3 ${isDark ? "bg-blue-900/20 border-blue-800/50" : "bg-blue-50 border-blue-200"}`}>
+                <div className="flex items-start gap-2">
+                  <div className={`w-4 h-4 rounded-full flex items-center justify-center mt-0.5 ${isDark ? "bg-blue-800/50" : "bg-blue-100"}`}>
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                  </div>
+                  <div>
+                    <h5 className={`text-xs font-medium mb-1 ${isDark ? "text-blue-300" : "text-blue-700"}`}>
+                      Balance Types
+                    </h5>
+                    <div className="space-y-1 text-xs">
+                      {balanceSummary.hasMainnetBalances && (
+                        <div className={`flex items-center gap-1.5 ${isDark ? "text-blue-200" : "text-blue-600"}`}>
+                          <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                          <span>Real Balance: Actual cryptocurrency on live networks</span>
+                        </div>
+                      )}
+                      {balanceSummary.hasTestnetBalances && (
+                        <div className={`flex items-center gap-1.5 ${isDark ? "text-blue-200" : "text-blue-600"}`}>
+                          <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+                          <span>Test Balance: Free test tokens for development</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </TabsContent>
 
@@ -383,9 +518,10 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
                 onClick={handleBuyCrypto}
                 disabled={isLoading || userWallets.length === 0}
                 className="bg-blue-600 hover:bg-blue-700 text-white h-8 text-xs px-3"
+                title="Buy real cryptocurrency for your wallets"
               >
                 <CreditCard className="h-3 w-3 mr-1.5" />
-                Buy Crypto
+                Buy Real Crypto
               </Button>
               {isConnected && !userWallets.find(w => w.walletAddress.toLowerCase() === connectedWallet?.toLowerCase()) && (
                 <Button
@@ -400,6 +536,21 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
               )}
             </div>
           </div>
+
+          {/* Helper text for testnet */}
+          {balanceSummary.hasTestnetBalances && (
+            <div className={`text-xs px-1 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+              💡 For test tokens, use faucets like{" "}
+              <a 
+                href="https://faucet.quicknode.com/base/sepolia" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-blue-500 hover:text-blue-400 underline"
+              >
+                Base Sepolia faucet
+              </a>
+            </div>
+          )}
 
           {/* Current Connected Wallet (if not linked to account) */}
           {isConnected && !userWallets.find(w => w.walletAddress.toLowerCase() === connectedWallet?.toLowerCase()) && (
