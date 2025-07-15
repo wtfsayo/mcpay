@@ -10,10 +10,11 @@
  */
 
 import { type Context, Hono } from "hono";
-import { createExactPaymentRequirements, decodePayment, settle, verifyPayment, x402Version } from "../lib/payments.js"
 import { txOperations, withTransaction } from "../db/actions.js";
-import { settleResponseHeader } from "../lib/types.js";
+import { users } from "../db/schema.js";
 import { AuthType } from "../lib/auth.js";
+import { createExactPaymentRequirements, decodePayment, settle, verifyPayment, x402Version } from "../lib/payments.js";
+import { settleResponseHeader } from "../lib/types.js";
 
 export const runtime = 'nodejs'
 
@@ -21,13 +22,12 @@ const app = new Hono<{ Bindings: AuthType }>({
     strict: false,
 })
 
-// Define a User type based on what we expect from the database
-type User = {
-    id: string;
-    walletAddress: string;
-    displayName?: string;
-    email?: string;
-    [key: string]: any; // Allow for additional properties
+// Use Drizzle-inferred types from schema
+type User = typeof users.$inferSelect;
+
+// Enhanced User type that includes wallet information for API usage
+type UserWithWallet = User & {
+    walletAddress: string; // Primary wallet address for API compatibility
 };
 
 // Define tool call type for better type safety
@@ -60,7 +60,7 @@ function ensureString(value: string | undefined, fallback: string = 'unknown'): 
  * Copies a client request to the upstream, returning the upstream Response.
  * Works for POST, GET, DELETE – anything the MCP spec allows.
  */
-const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer, metadata?: {user?: User}) => {
+const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer, metadata?: {user?: UserWithWallet}) => {
     let targetUpstream: URL | undefined = undefined;
     let authHeaders: Record<string, unknown> | undefined = undefined;
 
@@ -255,7 +255,7 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: ToolCall, body?:
 /**
  * Helper function to get or create user from wallet address (using new multi-wallet system)
  */
-async function getOrCreateUser(walletAddress: string, provider = 'unknown'): Promise<User | null> {
+async function getOrCreateUser(walletAddress: string, provider = 'unknown'): Promise<UserWithWallet | null> {
     if (!walletAddress || typeof walletAddress !== 'string') return null;
 
     return await withTransaction(async (tx) => {
@@ -272,7 +272,7 @@ async function getOrCreateUser(walletAddress: string, provider = 'unknown'): Pro
             return {
                 ...walletRecord.user,
                 walletAddress: walletRecord.walletAddress
-            } as User;
+            } as UserWithWallet;
         }
 
         // Fallback: check legacy wallet field
@@ -283,7 +283,7 @@ async function getOrCreateUser(walletAddress: string, provider = 'unknown'): Pro
             console.log(`[${new Date().toISOString()}] Migrating legacy wallet ${walletAddress} to new system`);
             await txOperations.migrateLegacyWallet(user.id)(tx);
             await txOperations.updateUserLastLogin(user.id)(tx);
-            return user as User;
+            return user as UserWithWallet;
         }
 
         // Create new user with wallet
@@ -306,7 +306,7 @@ async function getOrCreateUser(walletAddress: string, provider = 'unknown'): Pro
             // Architecture will be auto-determined from blockchain in createUser
         })(tx);
 
-        return user as User;
+        return user as UserWithWallet;
     });
 }
 
@@ -335,7 +335,7 @@ async function captureResponseData(upstream: Response): Promise<Record<string, u
  */
 async function recordAnalytics(params: {
     toolCall: ToolCall;
-    user: User | null;
+    user: UserWithWallet | null;
     startTime: number;
     upstream: Response;
     c: Context;
@@ -391,9 +391,9 @@ async function recordAnalytics(params: {
 async function processPayment(params: {
     toolCall: ToolCall;
     c: Context;
-    user: User | null;
+    user: UserWithWallet | null;
     startTime: number;
-}): Promise<{ success: boolean; error?: string; user?: User }> {
+}): Promise<{ success: boolean; error?: string; user?: UserWithWallet }> {
     const { toolCall, c, user, startTime } = params;
 
     if (!toolCall.isPaid || !toolCall.toolId) {
@@ -593,7 +593,7 @@ verbs.forEach(verb => {
         console.log(`[${new Date().toISOString()}] Request payload logged, toolCall: ${toolCall ? 'present' : 'not present'}`);
 
         // Initialize user - will be populated during payment processing or from headers
-        let user: User | null = null;
+        let user: UserWithWallet | null = null;
 
         // Process payment if this is a paid tool call
         if (toolCall?.isPaid) {
