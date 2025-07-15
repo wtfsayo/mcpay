@@ -9,6 +9,8 @@ import ping from "./ping.js";
 import auth from "./auth.js";
 import { AuthType } from "../lib/auth.js";
 
+const trustedOrigins = process.env.CLIENT_AUTH_TRUSTED_ORIGINS?.split(',') || []
+
 const app = new Hono<{ Bindings: AuthType }>({
     strict: false,
 });
@@ -19,7 +21,7 @@ app.use('*', prettyJSON());
 
 // Specific CORS configuration for auth routes - more restrictive
 app.use('/api/auth/*', cors({
-    origin: "http://localhost:3232",
+    origin: trustedOrigins,
     allowHeaders: ["Content-Type", "Authorization", "Access-Control-Allow-Origin"],
     allowMethods: ["POST", "GET", "OPTIONS", "DELETE", "PUT", "PATCH"],
     exposeHeaders: ["Content-Length"],
@@ -28,7 +30,7 @@ app.use('/api/auth/*', cors({
 }));
 
 app.use('/api/*', cors({
-    origin: "http://localhost:3232",
+    origin: trustedOrigins,
     allowHeaders: ["Content-Type", "Authorization", "Access-Control-Allow-Origin"],
     allowMethods: ["POST", "GET", "OPTIONS", "DELETE", "PUT", "PATCH"],
     exposeHeaders: ["Content-Length"],
