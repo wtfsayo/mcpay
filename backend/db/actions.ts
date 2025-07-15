@@ -22,7 +22,7 @@
  * - Secure key management via CDP's TEE infrastructure
  */
 
-import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import db from "./index.js";
 import {
     analytics,
@@ -993,6 +993,55 @@ export const txOperations = {
         externalWalletId?: string; // For managed services like Coinbase CDP, Privy
         externalUserId?: string; // User ID in external system
     }) => async (tx: TransactionType) => {
+        // Check if this exact combination already exists
+        const existingWallet = await tx.query.userWallets.findFirst({
+            where: and(
+                eq(userWallets.userId, data.userId),
+                eq(userWallets.walletAddress, data.walletAddress),
+                data.provider ? eq(userWallets.provider, data.provider) : isNull(userWallets.provider),
+                eq(userWallets.walletType, data.walletType)
+            )
+        });
+
+        if (existingWallet) {
+            // If wallet exists but is inactive, reactivate it
+            if (!existingWallet.isActive) {
+                const updatedWallet = await tx.update(userWallets)
+                    .set({
+                        isActive: true,
+                        isPrimary: data.isPrimary || existingWallet.isPrimary,
+                        blockchain: data.blockchain || existingWallet.blockchain,
+                        architecture: data.architecture || existingWallet.architecture,
+                        walletMetadata: data.walletMetadata || existingWallet.walletMetadata,
+                        externalWalletId: data.externalWalletId || existingWallet.externalWalletId,
+                        externalUserId: data.externalUserId || existingWallet.externalUserId,
+                        updatedAt: new Date(),
+                        lastUsedAt: new Date()
+                    })
+                    .where(eq(userWallets.id, existingWallet.id))
+                    .returning();
+                
+                return updatedWallet[0];
+            }
+            
+            // If wallet is active, update it with new data and return it
+            const updatedWallet = await tx.update(userWallets)
+                .set({
+                    isPrimary: data.isPrimary !== undefined ? data.isPrimary : existingWallet.isPrimary,
+                    blockchain: data.blockchain || existingWallet.blockchain,
+                    architecture: data.architecture || existingWallet.architecture,
+                    walletMetadata: data.walletMetadata || existingWallet.walletMetadata,
+                    externalWalletId: data.externalWalletId || existingWallet.externalWalletId,
+                    externalUserId: data.externalUserId || existingWallet.externalUserId,
+                    updatedAt: new Date(),
+                    lastUsedAt: new Date()
+                })
+                .where(eq(userWallets.id, existingWallet.id))
+                .returning();
+            
+            return updatedWallet[0];
+        }
+
         // If this is set as primary, unset any existing primary wallet
         if (data.isPrimary) {
             await tx.update(userWallets)
@@ -1006,6 +1055,7 @@ export const txOperations = {
         // Determine architecture if not provided
         const architecture = data.architecture || getBlockchainArchitecture(data.blockchain);
 
+        // Create new wallet record
         const result = await tx.insert(userWallets).values({
             userId: data.userId,
             walletAddress: data.walletAddress,
@@ -1366,8 +1416,10 @@ export const txOperations = {
                 isPrimary: true, // Make the first CDP wallet primary
             })(tx);
             
-            wallets.push(mainWallet);
-            console.log(`[DEBUG] Main wallet stored:`, mainWallet.walletAddress);
+            if (mainWallet) {
+                wallets.push(mainWallet);
+                console.log(`[DEBUG] Main wallet stored:`, mainWallet.walletAddress);
+            }
 
             // Store smart account if created
             if (cdpResult.smartAccount) {
@@ -1381,8 +1433,10 @@ export const txOperations = {
                     ownerAccountId: cdpResult.account.accountId,
                     isPrimary: false, // Smart accounts are not primary by default
                 })(tx);
-                wallets.push(smartWallet);
-                console.log(`[DEBUG] Smart wallet stored:`, smartWallet.walletAddress);
+                if (smartWallet) {
+                    wallets.push(smartWallet);
+                    console.log(`[DEBUG] Smart wallet stored:`, smartWallet.walletAddress);
+                }
             }
 
             console.log(`[DEBUG] Successfully created ${wallets.length} CDP wallets for user ${userId}`);

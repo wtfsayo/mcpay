@@ -34,7 +34,7 @@ export const users = pgTable('users', {
 export const userWallets = pgTable('user_wallets', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  walletAddress: text('wallet_address').notNull().unique(),
+  walletAddress: text('wallet_address').notNull(), // Removed .unique() to allow same wallet for multiple users/configs
   walletType: text('wallet_type').notNull(), // 'external', 'managed', 'custodial'
   provider: text('provider'), // 'metamask', 'phantom', 'coinbase-cdp', 'privy', 'magic', 'near-wallet', etc.
   blockchain: text('blockchain'), // 'ethereum', 'solana', 'near', 'polygon', 'base', etc.
@@ -65,6 +65,8 @@ export const userWallets = pgTable('user_wallets', {
   index('user_wallets_external_id_idx').on(table.externalWalletId),
   // Ensure only one primary wallet per user
   uniqueIndex('user_wallets_primary_unique').on(table.userId).where(sql`is_primary = true`),
+  // Prevent exact duplicates: same user + wallet + provider + type
+  uniqueIndex('user_wallets_unique_combination').on(table.userId, table.walletAddress, table.provider, table.walletType),
 ]);
 
 // Better-auth session table

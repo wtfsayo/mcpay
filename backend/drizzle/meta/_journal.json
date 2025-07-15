@@ -36,6 +36,13 @@
       "when": 1752597694279,
       "tag": "0004_certain_patch",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1752607894470,
+      "tag": "0005_elite_ken_ellis",
+      "breakpoints": true
     }
   ]
 }
