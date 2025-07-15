@@ -4,8 +4,10 @@ import { randomUUID } from "crypto";
 import db from "../db/index.js";
 import * as schema from "../db/schema.js";
 
+const trustedOrigins = process.env.CLIENT_AUTH_TRUSTED_ORIGINS?.split(',') || []
+
 export const auth = betterAuth({
-  trustedOrigins: ['http://localhost:3232'],
+  trustedOrigins,
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: {
