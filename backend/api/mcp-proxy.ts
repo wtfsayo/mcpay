@@ -44,7 +44,7 @@ const verbs = ["post", "get", "delete"] as const;
  * Works for POST, GET, DELETE – anything the MCP spec allows.
  */
 const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer, metadata?: {user?: User}) => {
-    let targetUpstream = new URL("");
+    let targetUpstream: URL | undefined = undefined;
     let authHeaders: Record<string, unknown> | undefined = undefined;
 
     if (id) {
@@ -55,10 +55,12 @@ const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer, metad
         const mcpOrigin = mcpConfig?.mcpOrigin;
         if (mcpOrigin) {
             targetUpstream = new URL(mcpOrigin);
+        } else {
         }
 
         if (mcpConfig?.authHeaders && mcpConfig?.requireAuth) {
             authHeaders = mcpConfig.authHeaders as Record<string, unknown>;
+        } else {
         }
     }
 
@@ -70,12 +72,15 @@ const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer, metad
     url.host = targetUpstream.host;
     url.protocol = targetUpstream.protocol;
 
+
     // Remove /mcp/:id from path when forwarding to upstream, keeping everything after /:id
     const pathWithoutId = url.pathname.replace(/^\/mcp\/[^\/]+/, '')
     url.pathname = targetUpstream.pathname + (pathWithoutId || '')
+    console.log(`[${new Date().toISOString()}] Modified path: ${url.pathname}`);
 
     // Preserve all query parameters from the original mcpOrigin
     if (targetUpstream.search) {
+        console.log(`[${new Date().toISOString()}] Adding query parameters from target upstream`);
         // Copy all query parameters from the target upstream (mcpOrigin)
         const targetParams = new URLSearchParams(targetUpstream.search);
         targetParams.forEach((value, key) => {
@@ -92,20 +97,25 @@ const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer, metad
     headers.set('host', targetUpstream.host);
 
     // set user information headers
-    headers.set("x-mcpay-wallet-address", metadata?.user?.walletAddress || "");
+    const walletAddress = metadata?.user?.walletAddress || "";
+    console.log(`[${new Date().toISOString()}] Setting wallet address header: ${walletAddress}`);
+    headers.set("x-mcpay-wallet-address", walletAddress);
 
     if (authHeaders) {
+        console.log(`[${new Date().toISOString()}] Adding auth headers to request`);
         for (const [key, value] of Object.entries(authHeaders)) {
             headers.set(key, value as string);
         }
     }
 
+    console.log(`[${new Date().toISOString()}] Making request to upstream server`);
     const response = await fetch(url.toString(), {
         method: c.req.raw.method,
         headers,
         body: body || (c.req.raw.method !== 'GET' ? c.req.raw.body : undefined),
         duplex: 'half'
     })
+    console.log(`[${new Date().toISOString()}] Received response from upstream with status: ${response.status}`);
 
     return response;
 }

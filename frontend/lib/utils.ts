@@ -159,7 +159,7 @@ export async function apiCall<T = any>(
   const config: RequestInit = {
     ...options,
     headers: defaultHeaders,
-    credentials: 'include',
+    credentials: 'include'
   }
 
   // Add timeout

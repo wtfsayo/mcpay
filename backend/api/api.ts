@@ -17,11 +17,11 @@ import { VLayer, type ExecutionContext } from "../lib/3rd-parties/vlayer.js";
 import { CDP, type CDPNetwork, createCDPAccount, type CreateCDPWalletOptions } from "../lib/3rd-parties/cdp.js";
 import { createOneClickBuyUrl, getSupportedNetworks, getSupportedAssets } from "../lib/3rd-parties/onramp.js";
 import { getMcpTools } from "../lib/inspect-mcp.js";
-import { auth, ensureUserHasCDPWallet } from "../lib/auth.js";
+import { auth, AuthType, ensureUserHasCDPWallet } from "../lib/auth.js";
 import { getBlockchainArchitecture, getStablecoinBalances, type BlockchainArchitecture } from "../lib/crypto-accounts.js";
 import type { InferSelectModel } from "drizzle-orm";
 import { users, userWallets, session } from "../db/schema.js";
-
+    
 export const runtime = 'nodejs'
 
 // Infer types from Drizzle schema
@@ -44,7 +44,7 @@ type AppContext = {
     };
 }
 
-const app = new Hono<AppContext>({
+const app = new Hono<{ Bindings: AuthType }>({
     strict: false,
 })
 
@@ -377,21 +377,21 @@ app.post('/servers', authMiddleware, async (c) => {
         }))
 
 
-        const serverInformation = await generateObject({
-            model: gateway("openai/gpt-4o-mini"),
-            schema: z.object({
-                name: z.string(),
-                description: z.string(),
-            }),
-            prompt: `
-            You are a helpful assistant that generates information about a server. Create a name and description for the server based on the following information:
+        // const serverInformation = await generateObject({
+        //     model: gateway("openai/gpt-4o-mini"),
+        //     schema: z.object({
+        //         name: z.string(),
+        //         description: z.string(),
+        //     }),
+        //     prompt: `
+        //     You are a helpful assistant that generates information about a server. Create a name and description for the server based on the following information:
 
-            - description: ${data.description || 'No description available'}
-            - tools: ${toolsData.map((tool) => `${tool.name}: ${tool.description || 'No description available'}`).join('\n            - ')}
+        //     - description: ${data.description || 'No description available'}
+        //     - tools: ${toolsData.map((tool) => `${tool.name}: ${tool.description || 'No description available'}`).join('\n            - ')}
 
-            The name should be a short and concise name for the server. Use the tools to create a name that is unique and descriptive.
-            `
-        })
+        //     The name should be a short and concise name for the server. Use the tools to create a name that is unique and descriptive.
+        //     `
+        // })
 
 
         try {
@@ -440,8 +440,8 @@ app.post('/servers', authMiddleware, async (c) => {
                     receiverAddress: data.receiverAddress,
                     requireAuth: data.requireAuth,
                     authHeaders: data.authHeaders,
-                    name: serverInformation.object.name || data.name || 'No name available',
-                    description: serverInformation.object.description || data.description || 'No description available',
+                    name: data.name || 'No name available',
+                    description: data.description || 'No description available',
                     metadata: data.metadata
                 })(tx)
 

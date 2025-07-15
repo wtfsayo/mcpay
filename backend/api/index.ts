@@ -50,22 +50,41 @@ app.use('*', async (c, next) => {
         return;
     }
 
-    // Apply permissive CORS for all other routes
+    // Apply permissive CORS for non-API routes
     const corsMiddleware = cors({
-        origin: '*',
-        allowHeaders: ['*'],
-        allowMethods: ['*'],
+        // Allow all origins
+        origin: (origin) => origin || '*',
+        // Allow all headers
+        allowHeaders: [
+            '*',
+            'Content-Type',
+            'Authorization',
+            'X-Requested-With',
+            'Accept',
+            'Origin'
+        ],
+        // Allow all methods
+        allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
+        // Expose all headers
         exposeHeaders: ['*'],
+        // Cache preflight for 24 hours
         maxAge: 86400,
-        credentials: true,
+        // Allow credentials
+        credentials: true
     });
 
-    await corsMiddleware(c, next);
+    return await corsMiddleware(c, next);
+
 });
 
 
 // Mount routes after middleware
-const routes = [{ logic: auth, basePath: "/api/auth" }, { logic: api, basePath: "/api" }, { logic: mcpProxy, basePath: "/mcp" }, { logic: ping, basePath: "/ping" }] as const;
+const routes = [
+    { logic: auth, basePath: "/api/auth" },
+    { logic: api, basePath: "/api" },
+    { logic: mcpProxy, basePath: "/mcp" },
+    { logic: ping, basePath: "/ping" }
+] as const;
 
 routes.forEach((route) => {
     app.basePath("/").route(route.basePath, route.logic);
