@@ -20,6 +20,11 @@ const envSchema = z.object({
   BASE_SEPOLIA_FACILITATOR_URL: z.string().url().default('https://x402.org/facilitator'),
   SEI_TESTNET_FACILITATOR_URL: z.string().url().default('https://6y3cdqj5s3.execute-api.us-west-2.amazonaws.com/prod'),
 
+  // CDP Configuration
+  CDP_API_KEY: z.string().min(1, 'CDP_API_KEY is required'),
+  CDP_API_SECRET: z.string().min(1, 'CDP_API_SECRET is required'),
+  CDP_WALLET_SECRET: z.string().min(1, 'CDP_WALLET_SECRET is required'),
+
   // Port configuration
   PORT: z.string().default('3000').transform((val) => parseInt(val, 10)),
 });

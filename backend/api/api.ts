@@ -14,8 +14,9 @@ import { z } from "zod";
 import { txOperations, withTransaction } from "../db/actions.js";
 import db from "../db/index.js";
 import { VLayer, type ExecutionContext } from "../lib/3rd-parties/vlayer.js";
+import { CDP, type CDPNetwork, createCDPAccount, type CreateCDPWalletOptions } from "../lib/3rd-parties/cdp.js";
 import { getMcpTools } from "../lib/inspect-mcp.js";
-import { auth } from "../lib/auth.js";
+import { auth, ensureUserHasCDPWallet } from "../lib/auth.js";
 import type { InferSelectModel } from "drizzle-orm";
 import { users, userWallets, session } from "../db/schema.js";
 
@@ -96,6 +97,14 @@ const authMiddleware = async (c: Context<AppContext>, next: Next) => {
             }
             return user;
         });
+
+        // Auto-create CDP wallet for user if they don't have one
+        // This runs in background and won't block the request
+        await ensureUserHasCDPWallet(authResult.user.id, {
+            email: authResult.user.email,
+            name: authResult.user.name,
+            displayName: authResult.user.displayName,
+        });
         
         await next();
     } catch (error) {
@@ -120,6 +129,14 @@ const optionalAuthMiddleware = async (c: Context<AppContext>, next: Next) => {
                     throw new Error('User not authenticated');
                 }
                 return user;
+            });
+
+            // Auto-create CDP wallet for authenticated user if they don't have one
+            // This runs in background and won't block the request
+            await ensureUserHasCDPWallet(authResult.user.id, {
+                email: authResult.user.email,
+                name: authResult.user.name,
+                displayName: authResult.user.displayName,
             });
         }
         
@@ -968,6 +985,281 @@ app.post('/users/:userId/migrate-legacy-wallet', authMiddleware, async (c) => {
     }
 });
 
+// CDP Managed Wallet Endpoints
+
+app.post('/users/:userId/wallets/cdp', authMiddleware, async (c) => {
+    try {
+        const userId = c.req.param('userId');
+        const user = c.get('requireUser')();
+        
+        // Check if user is creating CDP wallet for their own account
+        if (user.id !== userId) {
+            return c.json({ error: 'Forbidden - Cannot create CDP wallet for another user' }, 403);
+        }
+        
+        const data = await c.req.json() as {
+            accountName?: string;
+            network?: CDPNetwork;
+            createSmartAccount?: boolean;
+            isPrimary?: boolean;
+        };
+
+        // Validate network if provided
+        if (data.network && !CDP.isSupportedNetwork(data.network)) {
+            return c.json({ error: 'Unsupported network' }, 400);
+        }
+
+        // Create CDP account(s)
+        const cdpOptions: CreateCDPWalletOptions = {
+            accountName: data.accountName || `mcpay-${user.id}-${Date.now()}`,
+            network: data.network || 'base-sepolia',
+            createSmartAccount: data.createSmartAccount || false,
+        };
+
+        const cdpResult = await createCDPAccount(cdpOptions);
+
+        // Store CDP account in database
+        const wallets = await withTransaction(async (tx) => {
+            const wallets = [];
+
+            // Store main account
+            const mainWallet = await txOperations.createCDPManagedWallet(userId, {
+                walletAddress: cdpResult.account.walletAddress,
+                accountId: cdpResult.account.accountId,
+                accountName: cdpResult.account.accountName || cdpResult.account.accountId,
+                network: cdpResult.account.network,
+                isSmartAccount: false,
+                isPrimary: data.isPrimary || false,
+            })(tx);
+            wallets.push(mainWallet);
+
+            // Store smart account if created
+            if (cdpResult.smartAccount) {
+                const smartWallet = await txOperations.createCDPManagedWallet(userId, {
+                    walletAddress: cdpResult.smartAccount.walletAddress,
+                    accountId: cdpResult.smartAccount.accountId,
+                    accountName: cdpResult.smartAccount.accountName || cdpResult.smartAccount.accountId,
+                    network: cdpResult.smartAccount.network,
+                    isSmartAccount: true,
+                    ownerAccountId: cdpResult.account.accountId,
+                    isPrimary: false, // Smart accounts are not primary by default
+                })(tx);
+                wallets.push(smartWallet);
+            }
+
+            return wallets;
+        });
+
+        return c.json({
+            message: 'CDP wallets created successfully',
+            wallets,
+            cdpAccountInfo: cdpResult
+        }, 201);
+    } catch (error) {
+        console.error('Error creating CDP wallet:', error);
+        return c.json({ error: (error as Error).message }, 400);
+    }
+});
+
+app.get('/users/:userId/wallets/cdp', authMiddleware, async (c) => {
+    try {
+        const userId = c.req.param('userId');
+        const user = c.get('requireUser')();
+        
+        // Check if user is accessing their own CDP wallets
+        if (user.id !== userId) {
+            return c.json({ error: 'Forbidden - Cannot access other user\'s CDP wallets' }, 403);
+        }
+
+        const cdpWallets = await withTransaction(async (tx) => {
+            return await txOperations.getCDPWalletsByUser(userId)(tx);
+        });
+
+        return c.json(cdpWallets);
+    } catch (error) {
+        console.error('Error fetching CDP wallets:', error);
+        return c.json({ error: (error as Error).message }, 400);
+    }
+});
+
+app.post('/users/:userId/wallets/cdp/:accountId/faucet', authMiddleware, async (c) => {
+    try {
+        const userId = c.req.param('userId');
+        const accountId = c.req.param('accountId');
+        const user = c.get('requireUser')();
+        
+        // Check if user owns the CDP wallet
+        if (user.id !== userId) {
+            return c.json({ error: 'Forbidden - Cannot request faucet for another user\'s wallet' }, 403);
+        }
+
+        const data = await c.req.json() as {
+            token?: 'eth' | 'usdc';
+            network?: CDPNetwork;
+        };
+
+        const network = data.network || 'base-sepolia';
+        const token = data.token || 'eth';
+
+        // Verify wallet belongs to user
+        const wallet = await withTransaction(async (tx) => {
+            return await txOperations.getCDPWalletByAccountId(accountId)(tx);
+        });
+
+        if (!wallet || wallet.user?.id !== userId) {
+            return c.json({ error: 'CDP wallet not found or access denied' }, 404);
+        }
+
+        // Request faucet funds
+        try {
+            await CDP.requestFaucet(accountId, network, token);
+            
+            // Update wallet metadata with faucet request
+            await withTransaction(async (tx) => {
+                return await txOperations.updateCDPWalletMetadata(wallet.id, {
+                    lastUsedAt: new Date(),
+                })(tx);
+            });
+
+            return c.json({
+                message: `Faucet request successful for ${token} on ${network}`,
+                accountId,
+                token,
+                network
+            });
+        } catch (faucetError) {
+            return c.json({ 
+                error: `Faucet request failed: ${faucetError instanceof Error ? faucetError.message : 'Unknown error'}` 
+            }, 400);
+        }
+    } catch (error) {
+        console.error('Error requesting faucet:', error);
+        return c.json({ error: (error as Error).message }, 400);
+    }
+});
+
+app.get('/users/:userId/wallets/cdp/:accountId/balances', authMiddleware, async (c) => {
+    try {
+        const userId = c.req.param('userId');
+        const accountId = c.req.param('accountId');
+        const user = c.get('requireUser')();
+        
+        // Check if user owns the CDP wallet
+        if (user.id !== userId) {
+            return c.json({ error: 'Forbidden - Cannot access another user\'s wallet balances' }, 403);
+        }
+
+        const network = c.req.query('network') as CDPNetwork || 'base-sepolia';
+
+        // Verify wallet belongs to user
+        const wallet = await withTransaction(async (tx) => {
+            return await txOperations.getCDPWalletByAccountId(accountId)(tx);
+        });
+
+        if (!wallet || wallet.user?.id !== userId) {
+            return c.json({ error: 'CDP wallet not found or access denied' }, 404);
+        }
+
+        try {
+            const metadata = wallet.walletMetadata as any;
+            const isSmartAccount = metadata?.isSmartAccount || false;
+            const ownerAccountId = metadata?.ownerAccountId;
+
+            const balances = await CDP.getBalances(
+                accountId, 
+                network, 
+                isSmartAccount, 
+                ownerAccountId
+            );
+
+            // Cache balances in wallet metadata
+            await withTransaction(async (tx) => {
+                return await txOperations.updateCDPWalletMetadata(wallet.id, {
+                    balanceCache: balances,
+                    lastUsedAt: new Date(),
+                })(tx);
+            });
+
+            return c.json({
+                accountId,
+                network,
+                balances,
+                isSmartAccount,
+                walletAddress: wallet.walletAddress
+            });
+        } catch (balanceError) {
+            return c.json({ 
+                error: `Failed to get balances: ${balanceError instanceof Error ? balanceError.message : 'Unknown error'}` 
+            }, 400);
+        }
+    } catch (error) {
+        console.error('Error fetching CDP wallet balances:', error);
+        return c.json({ error: (error as Error).message }, 400);
+    }
+});
+
+app.get('/cdp/networks', async (c) => {
+    return c.json({
+        supportedNetworks: [
+            { id: 'base', name: 'Base Mainnet', isTestnet: false, nativeToken: 'ETH' },
+            { id: 'base-sepolia', name: 'Base Sepolia', isTestnet: true, nativeToken: 'ETH' },
+            { id: 'ethereum', name: 'Ethereum Mainnet', isTestnet: false, nativeToken: 'ETH' },
+            { id: 'ethereum-sepolia', name: 'Ethereum Sepolia', isTestnet: true, nativeToken: 'ETH' },
+            { id: 'polygon', name: 'Polygon Mainnet', isTestnet: false, nativeToken: 'MATIC' },
+            { id: 'arbitrum', name: 'Arbitrum One', isTestnet: false, nativeToken: 'ETH' },
+        ],
+        defaultNetwork: 'base-sepolia'
+    });
+});
+
+// Utility endpoint to manually trigger CDP wallet creation
+app.post('/users/:userId/wallets/cdp/ensure', authMiddleware, async (c) => {
+    try {
+        const userId = c.req.param('userId');
+        const user = c.get('requireUser')();
+        
+        // Check if user is creating CDP wallet for their own account
+        if (user.id !== userId) {
+            return c.json({ error: 'Forbidden - Cannot ensure CDP wallet for another user' }, 403);
+        }
+
+        console.log(`Manual CDP wallet creation requested for user: ${userId}`);
+
+        // Force check and create CDP wallet (runs immediately, not in background)
+        const result = await withTransaction(async (tx) => {
+            return await txOperations.autoCreateCDPWalletForUser(userId, {
+                email: user.email || undefined,
+                name: user.name || undefined,
+                displayName: user.displayName || undefined,
+            })(tx);
+        });
+
+        if (result) {
+            return c.json({
+                message: 'CDP wallets created successfully',
+                accountName: result.accountName,
+                walletsCreated: result.wallets.length,
+                hasSmartAccount: !!result.cdpResult.smartAccount,
+                wallets: result.wallets.map(w => ({
+                    id: w.id,
+                    walletAddress: w.walletAddress,
+                    isPrimary: w.isPrimary,
+                    isSmartAccount: (w.walletMetadata as any)?.isSmartAccount || false,
+                    network: (w.walletMetadata as any)?.cdpNetwork || 'base-sepolia'
+                }))
+            }, 201);
+        } else {
+            return c.json({
+                message: 'User already has CDP wallets',
+                existing: true
+            });
+        }
+    } catch (error) {
+        console.error('Error ensuring CDP wallet:', error);
+        return c.json({ error: (error as Error).message }, 400);
+    }
+});
+
 // Catch-all for unmatched routes
 app.all('*', (c) => {
     return c.json({
@@ -999,7 +1291,14 @@ app.all('*', (c) => {
             'DELETE /api/users/:userId/wallets/:walletId',
             'POST /api/users/:userId/wallets/managed', // External managed wallets (Coinbase CDP, Privy, Magic, etc.)
             'GET /api/wallets/:walletAddress/user',
-            'POST /api/users/:userId/migrate-legacy-wallet'
+            'POST /api/users/:userId/migrate-legacy-wallet',
+            // CDP Managed Wallet endpoints
+            'POST /api/users/:userId/wallets/cdp', // Create CDP managed wallet (with optional smart account)
+            'GET /api/users/:userId/wallets/cdp', // Get user's CDP wallets
+            'POST /api/users/:userId/wallets/cdp/ensure', // Manually ensure user has CDP wallet
+            'POST /api/users/:userId/wallets/cdp/:accountId/faucet', // Request testnet funds
+            'GET /api/users/:userId/wallets/cdp/:accountId/balances', // Get CDP wallet balances
+            'GET /api/cdp/networks' // Get supported CDP networks
         ]
     }, 404);
 });

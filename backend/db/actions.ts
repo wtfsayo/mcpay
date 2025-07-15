@@ -1,3 +1,27 @@
+/**
+ * Database Actions for MCPay.fun
+ * 
+ * This module contains all database operations, including:
+ * - User and wallet management (multi-blockchain support)
+ * - MCP server and tool operations
+ * - Payment and usage tracking  
+ * - Analytics and proof verification
+ * - CDP (Coinbase Developer Platform) managed wallet integration
+ * 
+ * ## CDP Auto-Creation:
+ * - `userHasCDPWallets()` - Check if user has CDP wallets
+ * - `autoCreateCDPWalletForUser()` - Auto-create CDP wallet with smart account
+ * - `createCDPManagedWallet()` - Store CDP wallet in database
+ * - `getCDPWalletsByUser()` - Get user's CDP wallets
+ * - `getCDPWalletByAccountId()` - Find CDP wallet by account ID
+ * - `updateCDPWalletMetadata()` - Update CDP wallet metadata
+ * 
+ * The auto-creation system ensures every user gets a managed wallet with:
+ * - Regular account for general transactions
+ * - Smart account with gas sponsorship on Base networks
+ * - Secure key management via CDP's TEE infrastructure
+ */
+
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import db from "./index.js";
 import {
@@ -17,6 +41,7 @@ import {
     account,
     verification
 } from "./schema.js";
+import { createCDPAccount } from '../lib/3rd-parties/cdp.js';
 
 // Define proper transaction type
 export type TransactionType = Parameters<Parameters<typeof db['transaction']>[0]>[0];
@@ -1158,6 +1183,205 @@ export const txOperations = {
                 provider: data.provider
             }
         })(tx);
+    },
+
+    // CDP-specific operations
+    createCDPManagedWallet: (userId: string, data: {
+        walletAddress: string;
+        accountId: string; // CDP account ID/name
+        accountName: string;
+        network: string; // CDP network (base, base-sepolia, etc.)
+        isSmartAccount?: boolean;
+        ownerAccountId?: string; // For smart accounts
+        isPrimary?: boolean;
+    }) => async (tx: TransactionType) => {
+        return await txOperations.addWalletToUser({
+            userId,
+            walletAddress: data.walletAddress,
+            walletType: 'managed',
+            provider: 'coinbase-cdp',
+            blockchain: data.network.includes('base') ? 'base' : 'ethereum',
+            isPrimary: data.isPrimary,
+            externalWalletId: data.accountId,
+            externalUserId: userId,
+            walletMetadata: {
+                cdpAccountId: data.accountId,
+                cdpAccountName: data.accountName,
+                cdpNetwork: data.network,
+                isSmartAccount: data.isSmartAccount || false,
+                ownerAccountId: data.ownerAccountId,
+                provider: 'coinbase-cdp',
+                type: 'managed',
+                createdByService: true,
+                managedBy: 'coinbase-cdp',
+                gasSponsored: data.isSmartAccount && (data.network === 'base' || data.network === 'base-sepolia'),
+            }
+        })(tx);
+    },
+
+    getCDPWalletsByUser: (userId: string) => async (tx: TransactionType) => {
+        return await tx.query.userWallets.findMany({
+            where: and(
+                eq(userWallets.userId, userId),
+                eq(userWallets.provider, 'coinbase-cdp'),
+                eq(userWallets.isActive, true)
+            ),
+            orderBy: [desc(userWallets.isPrimary), desc(userWallets.createdAt)]
+        });
+    },
+
+    getCDPWalletByAccountId: (accountId: string) => async (tx: TransactionType) => {
+        return await tx.query.userWallets.findFirst({
+            where: and(
+                eq(userWallets.externalWalletId, accountId),
+                eq(userWallets.provider, 'coinbase-cdp'),
+                eq(userWallets.isActive, true)
+            ),
+            with: {
+                user: {
+                    columns: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        displayName: true,
+                        avatarUrl: true,
+                        image: true
+                    }
+                }
+            }
+        });
+    },
+
+    updateCDPWalletMetadata: (walletId: string, metadata: {
+        cdpAccountName?: string;
+        cdpNetwork?: string;
+        lastUsedAt?: Date;
+        balanceCache?: Record<string, unknown>;
+        transactionHistory?: Record<string, unknown>[];
+    }) => async (tx: TransactionType) => {
+        const wallet = await tx.query.userWallets.findFirst({
+            where: eq(userWallets.id, walletId)
+        });
+
+        if (!wallet || wallet.provider !== 'coinbase-cdp') {
+            throw new Error('CDP wallet not found');
+        }
+
+        const updatedMetadata = {
+            ...wallet.walletMetadata as Record<string, unknown>,
+            ...metadata,
+            lastUpdated: new Date().toISOString()
+        };
+
+        return await tx.update(userWallets)
+            .set({
+                walletMetadata: updatedMetadata,
+                updatedAt: new Date(),
+                ...(metadata.lastUsedAt && { lastUsedAt: metadata.lastUsedAt })
+            })
+            .where(eq(userWallets.id, walletId))
+            .returning();
+    },
+
+    // Helper to check if user has any CDP wallets
+    userHasCDPWallets: (userId: string) => async (tx: TransactionType) => {
+        const cdpWallets = await tx.query.userWallets.findMany({
+            where: and(
+                eq(userWallets.userId, userId),
+                eq(userWallets.provider, 'coinbase-cdp'),
+                eq(userWallets.isActive, true)
+            ),
+            limit: 1 // Just need to know if any exist
+        });
+
+        return cdpWallets.length > 0;
+    },
+
+    // Auto-create CDP wallet for new users
+    autoCreateCDPWalletForUser: (userId: string, userInfo: {
+        email?: string;
+        name?: string;
+        displayName?: string;
+    }) => async (tx: TransactionType) => {
+        console.log(`[DEBUG] Starting CDP wallet auto-creation for user ${userId}`);
+        
+        try {
+            // Check if user already has CDP wallets
+            console.log(`[DEBUG] Checking if user ${userId} already has CDP wallets`);
+            const hasCDPWallets = await txOperations.userHasCDPWallets(userId)(tx);
+            console.log(`[DEBUG] User ${userId} has CDP wallets:`, hasCDPWallets);
+            
+            if (hasCDPWallets) {
+                console.log(`User ${userId} already has CDP wallets, skipping auto-creation`);
+                return null;
+            }
+
+            // Generate account name based on user info
+            const accountName = userInfo.displayName 
+                ? `mcpay-${userInfo.displayName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now()}`
+                : `mcpay-user-${userId.slice(0, 8)}-${Date.now()}`;
+
+            console.log(`[DEBUG] Auto-creating CDP wallet for user ${userId} with account name: ${accountName}`);
+
+            // Create CDP account with smart account for better UX
+            console.log(`[DEBUG] Calling createCDPAccount...`);
+            const cdpResult = await createCDPAccount({
+                accountName,
+                network: 'base-sepolia', // Start with testnet
+                createSmartAccount: true, // Enable gas sponsorship
+            });
+            console.log(`[DEBUG] CDP account creation result:`, cdpResult);
+
+            const wallets = [];
+
+            // Store main account
+            console.log(`[DEBUG] Storing main account in database...`);
+            const mainWallet = await txOperations.createCDPManagedWallet(userId, {
+                walletAddress: cdpResult.account.walletAddress,
+                accountId: cdpResult.account.accountId,
+                accountName: cdpResult.account.accountName || cdpResult.account.accountId,
+                network: cdpResult.account.network,
+                isSmartAccount: false,
+                isPrimary: true, // Make the first CDP wallet primary
+            })(tx);
+            
+            wallets.push(mainWallet);
+            console.log(`[DEBUG] Main wallet stored:`, mainWallet.walletAddress);
+
+            // Store smart account if created
+            if (cdpResult.smartAccount) {
+                console.log(`[DEBUG] Storing smart account in database...`);
+                const smartWallet = await txOperations.createCDPManagedWallet(userId, {
+                    walletAddress: cdpResult.smartAccount.walletAddress,
+                    accountId: cdpResult.smartAccount.accountId,
+                    accountName: cdpResult.smartAccount.accountName || cdpResult.smartAccount.accountId,
+                    network: cdpResult.smartAccount.network,
+                    isSmartAccount: true,
+                    ownerAccountId: cdpResult.account.accountId,
+                    isPrimary: false, // Smart accounts are not primary by default
+                })(tx);
+                wallets.push(smartWallet);
+                console.log(`[DEBUG] Smart wallet stored:`, smartWallet.walletAddress);
+            }
+
+            console.log(`[DEBUG] Successfully created ${wallets.length} CDP wallets for user ${userId}`);
+            
+            return {
+                cdpResult,
+                wallets,
+                accountName
+            };
+        } catch (error) {
+            console.error(`[ERROR] Failed to auto-create CDP wallet for user ${userId}:`, error);
+            console.error(`[ERROR] Error details:`, {
+                name: error instanceof Error ? error.name : 'Unknown',
+                message: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined
+            });
+            // Don't throw error - this is a best-effort auto-creation
+            // The user can always create wallets manually later
+            return null;
+        }
     },
 
     // Legacy compatibility - migrate legacy wallet to new system
