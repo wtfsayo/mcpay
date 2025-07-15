@@ -13,11 +13,10 @@ import {
   DrawerContent,
   DrawerHeader
 } from "@/components/ui/drawer"
-import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useTheme } from "@/context/ThemeContext"
-import { signIn, signOut, signUp, useSession } from "@/lib/auth"
+import { signIn, signOut, useSession } from "@/lib/auth"
 import { openExplorer } from "@/lib/blockscout"
 import type { UserWallet } from "@/lib/types"
 import { api } from "@/lib/utils"
@@ -26,8 +25,6 @@ import {
   CheckCircle,
   Copy,
   ExternalLink,
-  Eye,
-  EyeOff,
   Github,
   LogOut,
   Plus,
@@ -39,7 +36,7 @@ import {
   Wallet,
   X
 } from "lucide-react"
-import React, { useCallback, useEffect, useState } from "react"
+import React, { useEffect, useState } from "react"
 import { useAccount, useDisconnect } from "wagmi"
 import { ConnectButton } from "./connect-button"
 
@@ -49,49 +46,17 @@ interface AccountModalProps {
   defaultTab?: 'profile' | 'wallets' | 'settings'
 }
 
-type AuthView = 'signin' | 'signup' | 'authenticated'
-
 export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: AccountModalProps) {
   const { isDark } = useTheme()
   const { data: session, isPending: sessionLoading } = useSession()
   const { address: connectedWallet, isConnected } = useAccount()
-
   const { disconnect } = useDisconnect()
 
-  const [authView, setAuthView] = useState<AuthView>('signin')
   const [activeTab, setActiveTab] = useState(defaultTab)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string>("")
   const [userWallets, setUserWallets] = useState<UserWallet[]>([])
-  const [showPassword, setShowPassword] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
-
-  // Form states - using refs to prevent re-render issues
-  const [signInForm, setSignInForm] = useState({ email: '', password: '' })
-  const [signUpForm, setSignUpForm] = useState({ 
-    name: '', 
-    email: '', 
-    password: '', 
-    confirmPassword: '' 
-  })
-
-  // Fix input focus issue by using callbacks
-  const updateSignInForm = useCallback((field: string, value: string) => {
-    setSignInForm(prev => ({ ...prev, [field]: value }))
-  }, [])
-
-  const updateSignUpForm = useCallback((field: string, value: string) => {
-    setSignUpForm(prev => ({ ...prev, [field]: value }))
-  }, [])
-
-  // Determine current view based on session
-  useEffect(() => {
-    if (session?.user) {
-      setAuthView('authenticated')
-    } else if (authView === 'authenticated') {
-      setAuthView('signin')
-    }
-  }, [session, authView])
 
   // Check for mobile screen size
   useEffect(() => {
@@ -122,54 +87,17 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
     }
   }
 
-  const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleGitHubSignIn = async () => {
     setIsLoading(true)
     setError("")
-
+    
     try {
-      const result = await signIn.email({
-        email: signInForm.email,
-        password: signInForm.password,
+      await signIn.social({ 
+        provider: "github", 
+        callbackURL: window.location.origin 
       })
-
-      if (result.error) {
-        setError(result.error.message || "Failed to sign in")
-      } else {
-        setSignInForm({ email: '', password: '' })
-      }
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to sign in")
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setError("")
-
-    if (signUpForm.password !== signUpForm.confirmPassword) {
-      setError("Passwords don't match")
-      setIsLoading(false)
-      return
-    }
-
-    try {
-      const result = await signUp.email({
-        email: signUpForm.email,
-        password: signUpForm.password,
-        name: signUpForm.name,
-      })
-
-      if (result.error) {
-        setError(result.error.message || "Failed to create account")
-      } else {
-        setSignUpForm({ name: '', email: '', password: '', confirmPassword: '' })
-      }
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to create account")
+      setError(error instanceof Error ? error.message : "Failed to sign in with GitHub")
     } finally {
       setIsLoading(false)
     }
@@ -197,9 +125,9 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
     try {
       await api.addWalletToUser(session.user.id, {
         walletAddress: connectedWallet,
-        blockchain: 'ethereum', // Can be enhanced to detect blockchain
+        blockchain: 'ethereum',
         walletType: 'external',
-        provider: 'metamask', // Can be enhanced to detect provider
+        provider: 'metamask',
         isPrimary: userWallets.length === 0,
       })
       await loadUserWallets()
@@ -228,23 +156,20 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
     navigator.clipboard.writeText(text)
   }
 
-  // Auth Forms Component
-  const AuthForms = () => (
+  // GitHub Sign In Component
+  const GitHubSignIn = () => (
     <div className="space-y-6">
       <div className="text-center">
         <div className={`w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center ${
           isDark ? "bg-gray-800" : "bg-gray-100"
         }`}>
-          <User className={`h-8 w-8 ${isDark ? "text-gray-300" : "text-gray-600"}`} />
+          <Github className={`h-8 w-8 ${isDark ? "text-gray-300" : "text-gray-600"}`} />
         </div>
         <h2 className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
-          {authView === 'signin' ? "Welcome back" : "Create your account"}
+          Connect with GitHub
         </h2>
         <p className={`text-sm mt-2 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-          {authView === 'signin' 
-            ? "Sign in to your MCPay account" 
-            : "Get started with MCPay today"
-          }
+          Sign in to your MCPay account using GitHub
         </p>
       </div>
 
@@ -259,180 +184,20 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
         </div>
       )}
 
-      <Tabs value={authView} onValueChange={(v) => setAuthView(v as AuthView)} className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="signin">Sign In</TabsTrigger>
-          <TabsTrigger value="signup">Sign Up</TabsTrigger>
-        </TabsList>
+      <Button
+        type="button"
+        onClick={handleGitHubSignIn}
+        disabled={isLoading}
+        className="w-full"
+        size="lg"
+      >
+        <Github className="h-5 w-5 mr-3" />
+        {isLoading ? "Connecting..." : "Continue with GitHub"}
+      </Button>
 
-        <TabsContent value="signin" className="space-y-4 mt-6">
-          <form onSubmit={handleSignIn} className="space-y-4">
-            <div>
-              <label className={`text-sm font-medium block mb-2 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                Email
-              </label>
-              <Input
-                type="email"
-                placeholder="Enter your email"
-                value={signInForm.email}
-                onChange={(e) => updateSignInForm('email', e.target.value)}
-                required
-                className={isDark ? "bg-gray-800 border-gray-700" : ""}
-              />
-            </div>
-            <div>
-              <label className={`text-sm font-medium block mb-2 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                Password
-              </label>
-              <div className="relative">
-                <Input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Enter your password"
-                  value={signInForm.password}
-                  onChange={(e) => updateSignInForm('password', e.target.value)}
-                  required
-                  className={`pr-10 ${isDark ? "bg-gray-800 border-gray-700" : ""}`}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-0 top-0 h-full px-3"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
-              </div>
-            </div>
-            <Button 
-              type="submit" 
-              className="w-full" 
-              disabled={isLoading}
-            >
-              {isLoading ? "Signing in..." : "Sign In"}
-            </Button>
-          </form>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className={`w-full border-t ${isDark ? "border-gray-700" : "border-gray-300"}`} />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className={`px-2 ${isDark ? "bg-gray-900 text-gray-400" : "bg-white text-gray-500"}`}>
-                Or continue with
-              </span>
-            </div>
-          </div>
-
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => signIn.social({ provider: "github", callbackURL: "http://localhost:3232" })}
-            disabled={isLoading}
-            className="w-full"
-          >
-            <Github className="h-4 w-4 mr-2" />
-            GitHub
-          </Button>
-        </TabsContent>
-
-        <TabsContent value="signup" className="space-y-4 mt-6">
-          <form onSubmit={handleSignUp} className="space-y-4">
-            <div>
-              <label className={`text-sm font-medium block mb-2 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                Name
-              </label>
-              <Input
-                type="text"
-                placeholder="Enter your full name"
-                value={signUpForm.name}
-                onChange={(e) => updateSignUpForm('name', e.target.value)}
-                required
-                className={isDark ? "bg-gray-800 border-gray-700" : ""}
-              />
-            </div>
-            <div>
-              <label className={`text-sm font-medium block mb-2 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                Email
-              </label>
-              <Input
-                type="email"
-                placeholder="Enter your email"
-                value={signUpForm.email}
-                onChange={(e) => updateSignUpForm('email', e.target.value)}
-                required
-                className={isDark ? "bg-gray-800 border-gray-700" : ""}
-              />
-            </div>
-            <div>
-              <label className={`text-sm font-medium block mb-2 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                Password
-              </label>
-              <div className="relative">
-                <Input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Create a password"
-                  value={signUpForm.password}
-                  onChange={(e) => updateSignUpForm('password', e.target.value)}
-                  required
-                  className={`pr-10 ${isDark ? "bg-gray-800 border-gray-700" : ""}`}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-0 top-0 h-full px-3"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
-              </div>
-            </div>
-            <div>
-              <label className={`text-sm font-medium block mb-2 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                Confirm Password
-              </label>
-              <Input
-                type="password"
-                placeholder="Confirm your password"
-                value={signUpForm.confirmPassword}
-                onChange={(e) => updateSignUpForm('confirmPassword', e.target.value)}
-                required
-                className={isDark ? "bg-gray-800 border-gray-700" : ""}
-              />
-            </div>
-            <Button 
-              type="submit" 
-              className="w-full" 
-              disabled={isLoading}
-            >
-              {isLoading ? "Creating account..." : "Create Account"}
-            </Button>
-          </form>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className={`w-full border-t ${isDark ? "border-gray-700" : "border-gray-300"}`} />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className={`px-2 ${isDark ? "bg-gray-900 text-gray-400" : "bg-white text-gray-500"}`}>
-                Or continue with
-              </span>
-            </div>
-          </div>
-
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => signIn.social({ provider: "github" })}
-            disabled={isLoading}
-            className="w-full"
-          >
-            <Github className="h-4 w-4 mr-2" />
-            GitHub
-          </Button>
-        </TabsContent>
-      </Tabs>
+      <div className={`text-center text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+        By continuing, you agree to our Terms of Service and Privacy Policy
+      </div>
     </div>
   )
 
@@ -799,18 +564,8 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
 
   const ModalHeader = ({ Component }: { Component: any }) => (
     <Component>
-      <div className="flex items-center justify-between">
-        <div className="text-lg font-semibold">
-          {session?.user ? "Account" : "Sign In"}
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onClose}
-          className="h-6 w-6 p-0"
-        >
-          <X className="h-4 w-4" />
-        </Button>
+      <div className="text-lg font-semibold">
+        {session?.user ? "Account" : "Sign In"}
       </div>
     </Component>
   )
@@ -841,7 +596,7 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
         <DrawerContent className={`max-h-[95vh] ${isDark ? "bg-gray-900 border-gray-800" : ""}`}>
           <ModalHeader Component={DrawerHeader} />
           <div className="overflow-y-auto px-4 pb-6">
-            {session?.user ? <AuthenticatedInterface /> : <AuthForms />}
+            {session?.user ? <AuthenticatedInterface /> : <GitHubSignIn />}
           </div>
         </DrawerContent>
       </Drawer>
@@ -853,7 +608,7 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className={`max-w-2xl max-h-[90vh] overflow-y-auto ${isDark ? "bg-gray-900 border-gray-800" : ""}`}>
         <ModalHeader Component={DialogHeader} />
-        {session?.user ? <AuthenticatedInterface /> : <AuthForms />}
+        {session?.user ? <AuthenticatedInterface /> : <GitHubSignIn />}
       </DialogContent>
     </Dialog>
   )
