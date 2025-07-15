@@ -152,6 +152,27 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
     }
   }
 
+  const handleRemoveWallet = async (walletId: string, isPrimary: boolean) => {
+    if (!session?.user?.id) return
+
+    // Confirm removal, especially for primary wallets
+    const confirmMessage = isPrimary 
+      ? "Are you sure you want to remove your primary wallet? This will affect your account access."
+      : "Are you sure you want to remove this wallet?"
+    
+    if (!confirm(confirmMessage)) return
+
+    setIsLoading(true)
+    try {
+      await api.removeWallet(session.user.id, walletId)
+      await loadUserWallets()
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Failed to remove wallet")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
   }
@@ -295,24 +316,6 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
                       <AlertCircle className="h-4 w-4 text-orange-500" />
                     )}
                   </div>
-                </div>
-              </div>
-              <div>
-                <label className={`text-sm font-medium block mb-1 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                  User ID
-                </label>
-                <div className="flex items-center gap-2">
-                  <code className={`text-xs px-2 py-1 rounded ${isDark ? "bg-gray-700" : "bg-gray-100"}`}>
-                    {session?.user?.id}
-                  </code>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => copyToClipboard(session?.user?.id || "")}
-                    className="h-6 w-6 p-0"
-                  >
-                    <Copy className="h-3 w-3" />
-                  </Button>
                 </div>
               </div>
             </CardContent>
@@ -484,6 +487,15 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
                           Set Primary
                         </Button>
                       )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveWallet(wallet.id, wallet.isPrimary)}
+                        disabled={isLoading}
+                        className="h-8 px-2 text-red-500 hover:text-red-400"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
                     </div>
                   </div>
                 </CardContent>

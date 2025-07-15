@@ -15,7 +15,7 @@ export const {
   useSession, 
   signIn, 
   signUp, 
-  signOut 
+  signOut
 } = authClient
 
 // Auth status type

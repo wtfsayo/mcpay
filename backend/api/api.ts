@@ -7,7 +7,7 @@
 
 import { gateway } from "@vercel/ai-sdk-gateway";
 import { generateObject } from "ai";
-import { Hono } from "hono";
+import { Hono, type Context, type Next } from "hono";
 import { randomUUID } from "node:crypto";
 import { PaymentRequirementsSchema } from "x402/types";
 import { z } from "zod";
@@ -15,13 +15,121 @@ import { txOperations, withTransaction } from "../db/actions.js";
 import db from "../db/index.js";
 import { VLayer, type ExecutionContext } from "../lib/3rd-parties/vlayer.js";
 import { getMcpTools } from "../lib/inspect-mcp.js";
-import { auth, AuthType } from "../lib/auth.js";
+import { auth } from "../lib/auth.js";
+import type { InferSelectModel } from "drizzle-orm";
+import { users, userWallets, session } from "../db/schema.js";
 
 export const runtime = 'nodejs'
 
-const app = new Hono<{ Bindings: AuthType }>({
+// Infer types from Drizzle schema
+type User = InferSelectModel<typeof users>;
+type UserWallet = InferSelectModel<typeof userWallets>;
+type Session = InferSelectModel<typeof session>;
+
+// Better-auth session type (inferred from auth instance)
+type AuthSession = typeof auth.$Infer.Session;
+
+// Extend Hono context with proper typing
+type AppContext = {
+    Bindings: {};
+    Variables: {
+        // Optional session and user - will be undefined if not authenticated
+        session?: AuthSession['session'];
+        user?: AuthSession['user'];
+        // Helper method to get authenticated user (throws if not authenticated)
+        requireUser(): AuthSession['user'];
+    };
+}
+
+const app = new Hono<AppContext>({
     strict: false,
 })
+
+/**
+ * Authentication Middlewares with Type Safety
+ * 
+ * Usage Examples:
+ * 
+ * 1. Required Authentication:
+ *    app.get('/protected-endpoint', authMiddleware, async (c) => {
+ *        const session = c.get('session')!; // Guaranteed to exist after authMiddleware
+ *        const user = c.get('user')!; // Guaranteed to exist after authMiddleware
+ *        // Or use the helper:
+ *        const user = c.get('requireUser')();
+ *    });
+ * 
+ * 2. Optional Authentication:
+ *    app.get('/public-endpoint', optionalAuthMiddleware, async (c) => {
+ *        const user = c.get('user'); // May be undefined
+ *        if (user) {
+ *            // Provide personalized experience
+ *        } else {
+ *            // Provide anonymous experience
+ *        }
+ *    });
+ * 
+ * 3. User Authorization (after authMiddleware):
+ *    const user = c.get('requireUser')();
+ *    if (user.id !== userId) {
+ *        return c.json({ error: 'Forbidden' }, 403);
+ *    }
+ */
+
+// Authentication middleware - ensures user is authenticated
+const authMiddleware = async (c: Context<AppContext>, next: Next) => {
+    try {
+        const authResult = await auth.api.getSession({ headers: c.req.raw.headers });
+        
+        if (!authResult?.session || !authResult?.user) {
+            return c.json({ error: 'Unauthorized - No valid session found' }, 401);
+        }
+
+        // Add session and user to context
+        c.set('session', authResult.session);
+        c.set('user', authResult.user);
+        
+        // Add helper method to get authenticated user
+        c.set('requireUser', () => {
+            const user = c.get('user');
+            if (!user) {
+                throw new Error('User not authenticated');
+            }
+            return user;
+        });
+        
+        await next();
+    } catch (error) {
+        console.error('Auth middleware error:', error);
+        return c.json({ error: 'Unauthorized - Invalid session' }, 401);
+    }
+};
+
+// Optional authentication middleware (doesn't fail if no session)
+const optionalAuthMiddleware = async (c: Context<AppContext>, next: Next) => {
+    try {
+        const authResult = await auth.api.getSession({ headers: c.req.raw.headers });
+        
+        if (authResult?.session && authResult?.user) {
+            c.set('session', authResult.session);
+            c.set('user', authResult.user);
+            
+            // Add helper method
+            c.set('requireUser', () => {
+                const user = c.get('user');
+                if (!user) {
+                    throw new Error('User not authenticated');
+                }
+                return user;
+            });
+        }
+        
+        await next();
+    } catch (error) {
+        // Silently continue without session for optional auth
+        console.warn('Optional auth middleware warning:', error);
+        await next();
+    }
+};
 
 app.get('/', (c) => {
     return c.json({
@@ -50,7 +158,7 @@ app.get('/version', (c) => {
 });
 
 // MCP Server endpoints
-app.get('/servers', async (c) => {
+app.get('/servers', optionalAuthMiddleware, async (c) => {
     const limit = c.req.query('limit') ? parseInt(c.req.query('limit') as string) : 10
     const offset = c.req.query('offset') ? parseInt(c.req.query('offset') as string) : 0
     const type = c.req.query('type') ? c.req.query('type') as string : "trending"
@@ -180,7 +288,7 @@ app.get('/servers/:id', async (c) => {
     }
 })
 
-app.post('/servers', async (c) => {
+app.post('/servers', authMiddleware, async (c) => {
     try {
         const data = await c.req.json() as {
             mcpOrigin: string;
@@ -353,7 +461,7 @@ app.get('/servers/:serverId/tools', async (c) => {
 });
 
 // Analytics endpoints
-app.get('/analytics/usage', async (c) => {
+app.get('/analytics/usage', optionalAuthMiddleware, async (c) => {
     try {
         const { startDate, endDate, toolId, userId, serverId } = c.req.query();
 
@@ -674,11 +782,16 @@ app.get('/servers/:serverId/reputation', async (c) => {
 });
 
 // Wallet Management endpoints
-app.get('/users/:userId/wallets', async (c) => {
-    const session = await auth.api.getSession({ headers: c.req.raw.headers });
-    console.log("session", session)
+app.get('/users/:userId/wallets', authMiddleware, async (c) => {
     try {
         const userId = c.req.param('userId');
+        const user = c.get('requireUser')();
+        
+        // Check if user is accessing their own wallets
+        if (user.id !== userId) {
+            return c.json({ error: 'Forbidden - Cannot access other user\'s wallets' }, 403);
+        }
+        
         const includeInactive = c.req.query('includeInactive') === 'true';
         
         const wallets = await withTransaction(async (tx) => {
@@ -692,10 +805,17 @@ app.get('/users/:userId/wallets', async (c) => {
     }
 });
 
-app.post('/users/:userId/wallets', async (c) => {
+app.post('/users/:userId/wallets', authMiddleware, async (c) => {
     console.log("wallets request", c.req.raw.url);
     try {
         const userId = c.req.param('userId');
+        const user = c.get('requireUser')();
+        
+        // Check if user is adding wallet to their own account
+        if (user.id !== userId) {
+            return c.json({ error: 'Forbidden - Cannot add wallet to another user\'s account' }, 403);
+        }
+        
         const data = await c.req.json() as {
             walletAddress: string;
             walletType: 'external' | 'managed' | 'custodial';
@@ -719,10 +839,16 @@ app.post('/users/:userId/wallets', async (c) => {
     }
 });
 
-app.put('/users/:userId/wallets/:walletId/primary', async (c) => {
+app.put('/users/:userId/wallets/:walletId/primary', authMiddleware, async (c) => {
     try {
         const userId = c.req.param('userId');
         const walletId = c.req.param('walletId');
+        const user = c.get('requireUser')();
+        
+        // Check if user is modifying their own wallet
+        if (user.id !== userId) {
+            return c.json({ error: 'Forbidden - Cannot modify another user\'s wallet' }, 403);
+        }
 
         const wallet = await withTransaction(async (tx) => {
             return await txOperations.setPrimaryWallet(userId, walletId)(tx);
@@ -735,10 +861,16 @@ app.put('/users/:userId/wallets/:walletId/primary', async (c) => {
     }
 });
 
-app.delete('/users/:userId/wallets/:walletId', async (c) => {
+app.delete('/users/:userId/wallets/:walletId', authMiddleware, async (c) => {
     try {
         const userId = c.req.param('userId');
         const walletId = c.req.param('walletId');
+        const user = c.get('requireUser')();
+        
+        // Check if user is deleting their own wallet
+        if (user.id !== userId) {
+            return c.json({ error: 'Forbidden - Cannot delete another user\'s wallet' }, 403);
+        }
 
         const wallet = await withTransaction(async (tx) => {
             return await txOperations.removeWallet(userId, walletId)(tx);
@@ -751,9 +883,16 @@ app.delete('/users/:userId/wallets/:walletId', async (c) => {
     }
 });
 
-app.post('/users/:userId/wallets/managed', async (c) => {
+app.post('/users/:userId/wallets/managed', authMiddleware, async (c) => {
     try {
         const userId = c.req.param('userId');
+        const user = c.get('requireUser')();
+        
+        // Check if user is creating managed wallet for their own account
+        if (user.id !== userId) {
+            return c.json({ error: 'Forbidden - Cannot create managed wallet for another user' }, 403);
+        }
+        
         const data = await c.req.json() as {
             walletAddress: string;
             provider: string; // 'coinbase-cdp', 'privy', 'magic', etc.
@@ -804,9 +943,15 @@ app.get('/wallets/:walletAddress/user', async (c) => {
     }
 });
 
-app.post('/users/:userId/migrate-legacy-wallet', async (c) => {
+app.post('/users/:userId/migrate-legacy-wallet', authMiddleware, async (c) => {
     try {
         const userId = c.req.param('userId');
+        const user = c.get('requireUser')();
+        
+        // Check if user is migrating their own wallet
+        if (user.id !== userId) {
+            return c.json({ error: 'Forbidden - Cannot migrate another user\'s wallet' }, 403);
+        }
 
         const wallet = await withTransaction(async (tx) => {
             return await txOperations.migrateLegacyWallet(userId)(tx);
@@ -859,5 +1004,8 @@ app.all('*', (c) => {
     }, 404);
 });
 
+
+// Export types for better developer experience
+export type { User, UserWallet, Session, AuthSession, AppContext };
 
 export default app;

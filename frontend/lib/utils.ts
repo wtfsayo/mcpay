@@ -311,4 +311,10 @@ export const api = {
       method: 'PUT',
     })
   },
+
+  removeWallet: async (userId: string, walletId: string) => {
+    return apiCall(`/users/${userId}/wallets/${walletId}`, {
+      method: 'DELETE',
+    })
+  },
 }

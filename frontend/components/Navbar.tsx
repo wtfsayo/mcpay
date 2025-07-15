@@ -1,25 +1,24 @@
 "use client"
 
-import { useState } from "react"
-import Link from "next/link"
-import Image from "next/image"
-import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { useTheme } from "@/context/ThemeContext"
+import { useSession } from "@/lib/auth"
 import {
+  LogIn,
   // Moon, 
   // Sun, 
   Menu,
-  X,
   User,
-  LogIn
+  X
 } from "lucide-react"
-import { useTheme } from "@/context/ThemeContext"
+import Image from "next/image"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { useState } from "react"
 import { useConnect, useConnectors } from 'wagmi'
-import { ConnectButton } from "./connect-button"
-import { Badge } from "./ui/badge"
-import { AccountModal } from "./AccountModal"
 import { useAccountModal } from "../hooks/useAccountModal"
-import { useSession } from "@/lib/auth"
+import { AccountModal } from "./AccountModal"
+import { Badge } from "./ui/badge"
 
 interface NavbarProps {
   activeTab?: string
@@ -83,9 +82,6 @@ export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
               <Link href="/register">Register Server</Link>
             </Button>
             
-            {/* Wallet Connection */}
-            <ConnectButton />
-            
             {/* Account Button */}
             <Button
               variant="ghost"
@@ -117,10 +113,7 @@ export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
                   </span>
                 </>
               ) : (
-                <>
-                  <LogIn className="h-4 w-4" />
-                  <span className="hidden lg:inline">Sign In</span>
-                </>
+                <span className="hidden lg:inline">Connect</span>
               )}
             </Button>
           </div>
@@ -220,7 +213,7 @@ export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
                 ) : (
                   <>
                     <LogIn className="h-4 w-4 mr-3" />
-                    Sign In
+                    Connect
                   </>
                 )}
               </Button>
