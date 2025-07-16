@@ -390,7 +390,7 @@ export const SupportedNetworkSchema = z.enum([
     "avalanche-fuji",
     "avalanche",
     "iotex",
-    "sei-testnet"
+    "sei-testnet",
 ]);
 
 export type SupportedNetwork = z.infer<typeof SupportedNetworkSchema>;

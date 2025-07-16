@@ -25,6 +25,18 @@ const envSchema = z.object({
   CDP_API_SECRET: z.string().min(1, 'CDP_API_SECRET is required'),
   CDP_WALLET_SECRET: z.string().min(1, 'CDP_WALLET_SECRET is required'),
 
+  // Payment strategy configuration
+  PAYMENT_STRATEGY_ENABLED: z.boolean().default(true),
+  PAYMENT_STRATEGY_FALLBACK: z.enum(['fail', 'continue', 'log_only']).default('fail'),
+  PAYMENT_STRATEGY_MAX_RETRIES: z.number().min(1).max(10).default(3),
+  PAYMENT_STRATEGY_TIMEOUT_MS: z.number().min(1000).max(120000).default(30000),
+  CDP_STRATEGY_ENABLED: z.boolean().default(true),
+  PRIVY_STRATEGY_ENABLED: z.boolean().default(true),
+  CDP_PREFER_SMART_ACCOUNTS: z.boolean().default(true),
+  CDP_STRATEGY_PRIORITY: z.number().min(0).max(1000).default(100),
+  PAYMENT_STRATEGY_LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+  PAYMENT_STRATEGY_LOG_AUTH_DETAILS: z.boolean().default(false),
+
   // Port configuration
   PORT: z.string().default('3000').transform((val) => parseInt(val, 10)),
 });

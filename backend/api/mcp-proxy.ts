@@ -15,6 +15,7 @@ import { users } from "../db/schema.js";
 import { AuthType } from "../lib/auth.js";
 import { createExactPaymentRequirements, decodePayment, settle, verifyPayment, x402Version } from "../lib/payments.js";
 import { settleResponseHeader } from "../lib/types.js";
+import { attemptAutoSign } from "../lib/payment-strategies/index.js";
 
 export const runtime = 'nodejs'
 
@@ -403,6 +404,49 @@ async function processPayment(params: {
     console.log(`[${new Date().toISOString()}] Paid tool call detected: ${toolCall.name}`);
     console.log(`[${new Date().toISOString()}] Payment details: ${JSON.stringify(toolCall.payment, null, 2)}`);
 
+    // Check if payment header already exists
+    let paymentHeader = c.req.header("X-PAYMENT");
+    let extractedUser = user;
+
+    // Attempt auto-signing if no payment header exists and payment details are available
+    if (!paymentHeader && toolCall.payment) {
+        console.log(`[${new Date().toISOString()}] No X-PAYMENT header found, attempting auto-signing`);
+        
+        try {            
+            // Create a properly typed tool call for auto-signing
+            const autoSignToolCall = {
+                isPaid: toolCall.isPaid,
+                payment: {
+                    maxAmountRequired: toolCall.payment.maxAmountRequired,
+                    network: toolCall.payment.network,
+                    asset: toolCall.payment.asset,
+                    payTo: toolCall.payment.payTo,
+                    resource: toolCall.payment.resource,
+                    description: toolCall.payment.description
+                }
+            };
+            
+            const autoSignResult = await attemptAutoSign(c, autoSignToolCall);
+            
+            if (autoSignResult.success && autoSignResult.signedPaymentHeader) {
+                console.log(`[${new Date().toISOString()}] Auto-signing successful with strategy: ${autoSignResult.strategy}`);
+                paymentHeader = autoSignResult.signedPaymentHeader;
+                
+                // Set the X-PAYMENT header for the request
+                c.req.raw.headers.set("X-PAYMENT", paymentHeader);
+                
+                // Update user information if we got wallet address from auto-signing
+                if (autoSignResult.walletAddress && !extractedUser) {
+                    extractedUser = await getOrCreateUser(autoSignResult.walletAddress, 'managed-wallet');
+                }
+            } else {
+                console.log(`[${new Date().toISOString()}] Auto-signing failed: ${autoSignResult.error}`);
+            }
+        } catch (autoSignError) {
+            console.warn(`[${new Date().toISOString()}] Auto-signing threw error:`, autoSignError);
+        }
+    }
+
     // Ensure payTo field exists, default to asset address if missing
     const payTo = toolCall.payment.payTo || toolCall.payment.asset;
     
@@ -417,10 +461,8 @@ async function processPayment(params: {
     ];
     console.log(`[${new Date().toISOString()}] Created payment requirements: ${JSON.stringify(paymentRequirements, null, 2)}`);
 
-    // Get the payment header before verification to extract payer information
-    const paymentHeader = c.req.header("X-PAYMENT");
+    // Extract payer information from payment header (if exists)
     let payerAddress = '';
-    let extractedUser = user;
 
     if (paymentHeader) {
         try {

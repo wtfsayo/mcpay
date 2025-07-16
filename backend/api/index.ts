@@ -61,7 +61,10 @@ app.use('*', async (c, next) => {
             'Authorization',
             'X-Requested-With',
             'Accept',
-            'Origin'
+            'Origin',
+            'Access-Control-Allow-Headers',
+            'Access-Control-Expose-Headers',
+            'X-PAYMENT',
         ],
         // Allow all methods
         allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],

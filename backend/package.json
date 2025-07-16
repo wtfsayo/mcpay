@@ -11,6 +11,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@coinbase/agentkit": "^0.8.2",
     "@coinbase/cdp-sdk": "^1.25.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@vercel/ai-sdk-gateway": "^0.1.8",

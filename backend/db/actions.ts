@@ -1723,6 +1723,103 @@ export const txOperations = {
         });
     },
 
+    // API Keys
+    validateApiKey: (keyHash: string) => async (tx: TransactionType) => {
+        const apiKey = await tx.query.apiKeys.findFirst({
+            where: and(
+                eq(apiKeys.keyHash, keyHash),
+                eq(apiKeys.active, true)
+            ),
+            with: {
+                user: {
+                    columns: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        displayName: true,
+                        avatarUrl: true,
+                        image: true
+                    }
+                }
+            }
+        });
+
+        if (!apiKey) {
+            return null;
+        }
+
+        // Check if key is expired
+        if (apiKey.expiresAt && new Date() > apiKey.expiresAt) {
+            return null;
+        }
+
+        // Update last used timestamp
+        await tx.update(apiKeys)
+            .set({ lastUsedAt: new Date() })
+            .where(eq(apiKeys.id, apiKey.id));
+
+        return {
+            apiKey,
+            user: apiKey.user
+        };
+    },
+
+    createApiKey: (data: {
+        userId: string;
+        keyHash: string;
+        name: string;
+        permissions: string[];
+        expiresAt?: Date;
+    }) => async (tx: TransactionType) => {
+        const result = await tx.insert(apiKeys).values({
+            userId: data.userId,
+            keyHash: data.keyHash,
+            name: data.name,
+            permissions: data.permissions,
+            expiresAt: data.expiresAt,
+            active: true,
+            createdAt: new Date()
+        }).returning();
+
+        if (!result[0]) throw new Error("Failed to create API key");
+        return result[0];
+    },
+
+    getUserApiKeys: (userId: string) => async (tx: TransactionType) => {
+        return await tx.query.apiKeys.findMany({
+            where: and(
+                eq(apiKeys.userId, userId),
+                eq(apiKeys.active, true)
+            ),
+            columns: {
+                id: true,
+                name: true,
+                permissions: true,
+                createdAt: true,
+                expiresAt: true,
+                lastUsedAt: true,
+                // Exclude keyHash for security
+            },
+            orderBy: [desc(apiKeys.createdAt)]
+        });
+    },
+
+    revokeApiKey: (keyId: string, userId: string) => async (tx: TransactionType) => {
+        const result = await tx.update(apiKeys)
+            .set({ 
+                active: false,
+                lastUsedAt: new Date()
+            })
+            .where(and(
+                eq(apiKeys.id, keyId),
+                eq(apiKeys.userId, userId)
+            ))
+            .returning();
+
+        if (!result[0]) throw new Error(`API key with ID ${keyId} not found or doesn't belong to user`);
+        return result[0];
+    },
+
     // Tool Usage
     recordToolUsage: (data: {
         toolId: string;
@@ -1961,28 +2058,6 @@ export const txOperations = {
                 eq(serverOwnership.active, true)
             )
         });
-    },
-
-    // API Keys
-    createApiKey: (data: {
-        userId: string;
-        keyHash: string;
-        name: string;
-        permissions: string[];
-        expiresAt?: Date;
-    }) => async (tx: TransactionType) => {
-        const result = await tx.insert(apiKeys).values({
-            userId: data.userId,
-            keyHash: data.keyHash,
-            name: data.name,
-            permissions: data.permissions,
-            expiresAt: data.expiresAt,
-            active: true,
-            createdAt: new Date()
-        }).returning();
-
-        if (!result[0]) throw new Error("Failed to create API key");
-        return result[0];
     },
 
     getApiKeyByHash: (keyHash: string) => async (tx: TransactionType) => {

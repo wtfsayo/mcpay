@@ -327,6 +327,9 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
 
         const transport = createPaymentTransport(new URL(mcpUrl), account, {
           maxPaymentValue: BigInt(0.1 * 10 ** 6), // 0.1 USDC max
+          requestInit: {
+            credentials: "include",
+          }
         });
 
         // Create MCP client

@@ -5,22 +5,21 @@
  * It provides endpoints for user management, server configuration, and other core functionality.
  */
 
-import { gateway } from "@vercel/ai-sdk-gateway";
-import { generateObject } from "ai";
+import type { InferSelectModel } from "drizzle-orm";
 import { Hono, type Context, type Next } from "hono";
 import { randomUUID } from "node:crypto";
 import { PaymentRequirementsSchema } from "x402/types";
 import { z } from "zod";
 import { txOperations, withTransaction } from "../db/actions.js";
 import db from "../db/index.js";
+import { session, users, userWallets } from "../db/schema.js";
+import { CDP, createCDPAccount, type CDPNetwork, type CreateCDPWalletOptions } from "../lib/3rd-parties/cdp.js";
+import { createOneClickBuyUrl, getSupportedAssets, getSupportedNetworks } from "../lib/3rd-parties/onramp.js";
 import { VLayer, type ExecutionContext } from "../lib/3rd-parties/vlayer.js";
-import { CDP, type CDPNetwork, createCDPAccount, type CreateCDPWalletOptions } from "../lib/3rd-parties/cdp.js";
-import { createOneClickBuyUrl, getSupportedNetworks, getSupportedAssets } from "../lib/3rd-parties/onramp.js";
-import { getMcpTools } from "../lib/inspect-mcp.js";
+import { generateApiKey } from "../lib/auth-utils.js";
 import { auth, AuthType, ensureUserHasCDPWallet } from "../lib/auth.js";
 import { getBlockchainArchitecture, getStablecoinBalances, type BlockchainArchitecture } from "../lib/crypto-accounts.js";
-import type { InferSelectModel } from "drizzle-orm";
-import { users, userWallets, session } from "../db/schema.js";
+import { getMcpTools } from "../lib/inspect-mcp.js";
     
 export const runtime = 'nodejs'
 
@@ -1536,6 +1535,144 @@ app.get('/users/:userId/wallets/testnet-balances', authMiddleware, async (c) => 
     }
 });
 
+// API Key Management endpoints
+app.get('/users/:userId/api-keys', authMiddleware, async (c) => {
+    try {
+        const userId = c.req.param('userId');
+        const user = c.get('requireUser')();
+        
+        // Check if user is accessing their own API keys
+        if (user.id !== userId) {
+            return c.json({ error: 'Forbidden - Cannot access other user\'s API keys' }, 403);
+        }
+        
+        const apiKeys = await withTransaction(async (tx) => {
+            return await txOperations.getUserApiKeys(userId)(tx);
+        });
+
+        return c.json(apiKeys);
+    } catch (error) {
+        console.error('Error fetching user API keys:', error);
+        return c.json({ error: (error as Error).message }, 400);
+    }
+});
+
+app.post('/users/:userId/api-keys', authMiddleware, async (c) => {
+    try {
+        const userId = c.req.param('userId');
+        const user = c.get('requireUser')();
+        
+        // Check if user is creating API key for their own account
+        if (user.id !== userId) {
+            return c.json({ error: 'Forbidden - Cannot create API key for another user' }, 403);
+        }
+        
+        const data = await c.req.json() as {
+            name: string;
+            permissions: string[];
+            expiresInDays?: number;
+        };
+
+        // Validate input
+        if (!data.name || !data.permissions || !Array.isArray(data.permissions)) {
+            return c.json({ error: 'Missing required fields: name and permissions' }, 400);
+        }
+
+        if (data.name.length < 1 || data.name.length > 100) {
+            return c.json({ error: 'Name must be between 1 and 100 characters' }, 400);
+        }
+
+        // Generate API key
+        const { apiKey, keyHash } = generateApiKey();
+        
+        // Calculate expiration date if provided
+        let expiresAt: Date | undefined;
+        if (data.expiresInDays && data.expiresInDays > 0) {
+            expiresAt = new Date();
+            expiresAt.setDate(expiresAt.getDate() + data.expiresInDays);
+        }
+
+        const apiKeyRecord = await withTransaction(async (tx) => {
+            return await txOperations.createApiKey({
+                userId,
+                keyHash,
+                name: data.name,
+                permissions: data.permissions,
+                expiresAt
+            })(tx);
+        });
+
+        // Return the API key only once (for security)
+        return c.json({
+            apiKey, // This is the only time the full key is returned
+            record: {
+                id: apiKeyRecord.id,
+                name: apiKeyRecord.name,
+                permissions: apiKeyRecord.permissions,
+                createdAt: apiKeyRecord.createdAt,
+                expiresAt: apiKeyRecord.expiresAt
+            }
+        }, 201);
+    } catch (error) {
+        console.error('Error creating API key:', error);
+        return c.json({ error: (error as Error).message }, 400);
+    }
+});
+
+app.delete('/users/:userId/api-keys/:keyId', authMiddleware, async (c) => {
+    try {
+        const userId = c.req.param('userId');
+        const keyId = c.req.param('keyId');
+        const user = c.get('requireUser')();
+        
+        // Check if user is deleting their own API key
+        if (user.id !== userId) {
+            return c.json({ error: 'Forbidden - Cannot delete another user\'s API key' }, 403);
+        }
+
+        const revokedKey = await withTransaction(async (tx) => {
+            return await txOperations.revokeApiKey(keyId, userId)(tx);
+        });
+
+        return c.json({
+            message: 'API key revoked successfully',
+            revokedKey: {
+                id: revokedKey.id,
+                name: revokedKey.name,
+                revokedAt: revokedKey.lastUsedAt
+            }
+        });
+    } catch (error) {
+        console.error('Error revoking API key:', error);
+        return c.json({ error: (error as Error).message }, 400);
+    }
+});
+
+// Auto-signing configuration endpoint
+app.get('/auto-signing/config', optionalAuthMiddleware, async (c) => {
+    try {
+        // Import config dynamically to avoid issues
+        const { getConfig } = await import('../lib/payment-strategies/config.js');
+        const config = getConfig();
+        
+        // Return a safe subset of config for client information
+        return c.json({
+            enabled: config.enabled,
+            supportedNetworks: config.strategies.cdp.networks,
+            availableStrategies: {
+                cdp: {
+                    enabled: config.strategies.cdp.enabled,
+                    preferSmartAccounts: config.strategies.cdp.preferSmartAccounts
+                }
+            },
+            fallbackBehavior: config.fallbackBehavior
+        });
+    } catch (error) {
+        console.error('Error fetching auto-signing config:', error);
+        return c.json({ error: (error as Error).message }, 500);
+    }
+});
+
 // Catch-all for unmatched routes
 app.all('*', (c) => {
     return c.json({
@@ -1583,12 +1720,18 @@ app.all('*', (c) => {
             // Mainnet/Testnet balance endpoints
             'GET /api/users/:userId/wallets/mainnet-balances', // Get mainnet balances for a user
             'GET /api/users/:userId/wallets/testnet-balances', // Get testnet balances for a user
+            // API Key Management endpoints (requires authentication)
+            'GET /api/users/:userId/api-keys', // Get user's API keys
+            'POST /api/users/:userId/api-keys', // Create new API key
+            'DELETE /api/users/:userId/api-keys/:keyId', // Revoke API key
+            // Auto-signing configuration
+            'GET /api/auto-signing/config', // Get auto-signing configuration and status
         ]
     }, 404);
 });
 
 
 // Export types for better developer experience
-export type { User, UserWallet, Session, AuthSession, AppContext };
+export type { AppContext, AuthSession, Session, User, UserWallet };
 
 export default app;

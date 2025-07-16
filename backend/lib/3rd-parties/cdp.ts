@@ -99,7 +99,17 @@ export type CDPNetwork =
     | "ethereum" 
     | "ethereum-sepolia"
     | "polygon"
-    | "arbitrum";
+    | "arbitrum"
+    | "sei-testnet";
+
+// Supported networks for CDP
+export type CDPNetworkSmartAccount = 
+    | "base" 
+    | "base-sepolia" 
+    | "ethereum" 
+    | "ethereum-sepolia"
+    | "polygon"
+    | "arbitrum"
 
 // CDP Account information
 export interface CDPAccountInfo {
@@ -294,7 +304,7 @@ export async function getNetworkScopedAccount(accountName: string, network: CDPN
 /**
  * Get network-scoped smart account instance
  */
-export async function getNetworkScopedSmartAccount(smartAccountName: string, ownerAccountName: string, network: CDPNetwork) {
+export async function getNetworkScopedSmartAccount(smartAccountName: string, ownerAccountName: string, network: CDPNetworkSmartAccount) {
     const smartAccount = await getCDPSmartAccount(smartAccountName, ownerAccountName, network);
     return await smartAccount.useNetwork(network);
 }
@@ -399,7 +409,8 @@ export function isSupportedCDPNetwork(network: string): network is CDPNetwork {
         "ethereum",
         "ethereum-sepolia",
         "polygon",
-        "arbitrum"
+        "arbitrum",
+        "sei-testnet",
     ];
     return supportedNetworks.includes(network as CDPNetwork);
 }
