@@ -57,8 +57,8 @@ importers:
         specifier: ^0.511.0
         version: 0.511.0(react@19.1.0)
       mcpay:
-        specifier: ^0.0.9
-        version: 0.0.9(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)
+        specifier: ^0.0.10
+        version: 0.0.10(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10)
       next:
         specifier: 15.2.4
         version: 15.2.4(@opentelemetry/api@1.9.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
@@ -2775,8 +2775,8 @@ packages:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
     engines: {node: '>= 0.4'}
 
-  mcpay@0.0.9:
-    resolution: {integrity: sha512-1SiRgqeUOp+5E+mZEzQANXJiHr+ACV0YKtTgfpHxkNohuiCmIRZfGdAMTxo2nQ4DqVZZzJpZY38V6PGXL/3Zew==}
+  mcpay@0.0.10:
+    resolution: {integrity: sha512-5tOfJO35M7qY30ZoY2B+UAue9r+BoxsWJsq/MQUILfPIcUsze9jOA3VP2VVA8t0JgnqlpPuDnuZBa2edtC0xWA==}
     engines: {node: '>=18.0.0', pnpm: '>=10.0.0'}
     hasBin: true
 
@@ -7545,7 +7545,7 @@ snapshots:
 
   math-intrinsics@1.1.0: {}
 
-  mcpay@0.0.9(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10):
+  mcpay@0.0.10(bufferutil@4.0.9)(typescript@5.8.3)(utf-8-validate@5.0.10):
     dependencies:
       '@modelcontextprotocol/sdk': 1.12.3
       commander: 12.1.0
