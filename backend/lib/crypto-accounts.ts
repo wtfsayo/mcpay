@@ -252,9 +252,9 @@ export const SUPPORTED_CHAINS: Record<string, ChainConfig> = {
     name: 'Sei Testnet',
     rpcUrl: 'https://evm-rpc-testnet.sei-apis.com',
     isTestnet: true,
-    nativeCurrency: { symbol: 'SEI', decimals: 18 },
+    nativeCurrency: { symbol: 'SEI', decimals: 6 },
     stablecoins: [
-      { address: '0xeAcd10aaA6f362a94823df6BBC3C536841870772', symbol: 'USDC' },
+      { address: '0x4fCF1784B31630811181f670Aea7A7bEF803eaED', symbol: 'USDC' },
     ],
   } as EVMChainConfig,
 

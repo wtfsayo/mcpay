@@ -39,7 +39,7 @@ export function ConnectButton() {
   // USDC addresses for supported networks
   const usdcAddresses: Record<Network, string> = {
     'base-sepolia': '0x036cbd53842c5426634e7929541ec2318f3dcf7e',
-    'sei-testnet': '0xeAcd10aaA6f362a94823df6BBC3C536841870772',
+    'sei-testnet': '0x4fCF1784B31630811181f670Aea7A7bEF803eaED',
   }
 
   // Multi-chain balance fetching

@@ -126,7 +126,7 @@ export default function RegisterPage() {
       const defaultPaymentTokens: Record<Network, string> = {
         'base-sepolia': '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC on Base Sepolia
         // 'base': '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', // USDC on Base
-        'sei-testnet': '0xeAcd10aaA6f362a94823df6BBC3C536841870772', // USDC on Sei Testnet
+        'sei-testnet': '0x4fCF1784B31630811181f670Aea7A7bEF803eaED', // USDC on Sei Testnet
         // 'ethereum': '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC on Ethereum
         // 'arbitrum': '0xaf88d065e77c8cc2239327c5edb3a432268e5831', // USDC on Arbitrum
         // 'optimism': '0x0b2c639c533813f4aa9d7837caf62653d097ff85', // USDC on Optimism

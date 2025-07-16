@@ -201,7 +201,7 @@ export const TOKEN_REGISTRY: Record<Network, Record<string, TokenInfo>> = {
       verificationSource: 'Sei Protocol Official',
     },
     // USDC (Testnet) - User provided address
-    '0xeacd10aaa6f362a94823df6bbc3c536841870772': {
+    '0x4fCF1784B31630811181f670Aea7A7bEF803eaED': {
       symbol: 'USDC',
       name: 'USD Coin',
       network: 'sei-testnet',
