@@ -1,7 +1,7 @@
 // Service that will get a ping from an MCP server, will connect to the server and register it in the database.
 
 import { Hono } from "hono";
-import { AuthType } from "../lib/auth.js";
+import { type AuthType } from "../lib/auth.js";
 
 export const runtime = 'nodejs'
 

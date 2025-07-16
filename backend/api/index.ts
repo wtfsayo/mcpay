@@ -7,7 +7,7 @@ import api from "./api.js";
 import mcpProxy from "./mcp-proxy.js";
 import ping from "./ping.js";
 import auth from "./auth.js";
-import { AuthType } from "../lib/auth.js";
+import { type AuthType } from "../lib/auth.js";
 import { getTrustedOrigins } from "../lib/env.js";
 
 const app = new Hono<{ Bindings: AuthType }>({

@@ -17,7 +17,7 @@ import { baseSepolia, seiTestnet } from "viem/chains";
 import { txOperations, withTransaction } from "../../db/actions.js";
 import { getCDPAccount, isSupportedCDPNetwork, type CDPNetwork } from "../3rd-parties/cdp.js";
 import { x402Version } from "../payments.js";
-import { createPaymentHeader, ExtendedPaymentRequirements } from "../types.js";
+import { createPaymentHeader, type ExtendedPaymentRequirements } from "../types.js";
 import type { PaymentSigningContext, PaymentSigningResult, PaymentSigningStrategy } from "./index.js";
 
 export class CDPSigningStrategy implements PaymentSigningStrategy {

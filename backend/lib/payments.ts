@@ -19,10 +19,10 @@
  * in most cases - just set the appropriate environment variables.
  */
 
-import { Address } from "viem";
+import type { Address } from "viem";
 import type { ERC20TokenAmount, Price, Resource } from "x402/types";
 import { moneySchema } from "x402/types";
-import { PaymentPayloadSchema, safeBase64Decode, SupportedNetwork, PaymentPayload, SupportedPaymentRequirements, ExtendedPaymentRequirements } from "./types.js";
+import { PaymentPayloadSchema, safeBase64Decode, type SupportedNetwork, type PaymentPayload, type SupportedPaymentRequirements, type ExtendedPaymentRequirements } from "./types.js";
 import { useFacilitator } from "./types.js";
 import { getFacilitatorUrl } from "./env.js";
 

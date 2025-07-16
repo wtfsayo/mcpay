@@ -17,7 +17,7 @@ import { CDP, createCDPAccount, type CDPNetwork, type CreateCDPWalletOptions } f
 import { createOneClickBuyUrl, getSupportedAssets, getSupportedNetworks } from "../lib/3rd-parties/onramp.js";
 import { VLayer, type ExecutionContext } from "../lib/3rd-parties/vlayer.js";
 import { generateApiKey } from "../lib/auth-utils.js";
-import { auth, AuthType, ensureUserHasCDPWallet } from "../lib/auth.js";
+import { auth, ensureUserHasCDPWallet, type AuthType } from "../lib/auth.js";
 import { getBlockchainArchitecture, getStablecoinBalances, type BlockchainArchitecture } from "../lib/crypto-accounts.js";
 import { getMcpTools } from "../lib/inspect-mcp.js";
     

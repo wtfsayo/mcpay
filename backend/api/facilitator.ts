@@ -4,9 +4,9 @@ import { cors } from 'hono/cors';
 import { verify, settle } from "x402/facilitator";
 import {
   PaymentRequirementsSchema,
-  PaymentRequirements,
+  type PaymentRequirements,
   evm,
-  PaymentPayload,
+  type PaymentPayload,
   PaymentPayloadSchema,
 } from "x402/types";
 

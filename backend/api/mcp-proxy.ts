@@ -12,10 +12,10 @@
 import { type Context, Hono } from "hono";
 import { txOperations, withTransaction } from "../db/actions.js";
 import { users } from "../db/schema.js";
-import { AuthType } from "../lib/auth.js";
+import { type AuthType } from "../lib/auth.js";
+import { attemptAutoSign } from "../lib/payment-strategies/index.js";
 import { createExactPaymentRequirements, decodePayment, settle, verifyPayment, x402Version } from "../lib/payments.js";
 import { settleResponseHeader } from "../lib/types.js";
-import { attemptAutoSign } from "../lib/payment-strategies/index.js";
 
 export const runtime = 'nodejs'
 
@@ -45,7 +45,7 @@ type ToolCall = {
 // Headers that must NOT be forwarded (RFC‑7230 §6.1)
 const HOP_BY_HOP = new Set([
     'proxy-authenticate', 'proxy-authorization',
-    'te', 'trailer', 'transfer-encoding', 'upgrade'
+    'te', 'trailer', 'transfer-encoding', 'upgrade', 'cookie',
 ])
 
 const verbs = ["post", "get", "delete"] as const;
@@ -112,6 +112,7 @@ const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer, metad
     headers.set('host', targetUpstream.host);
 
     // set user information headers
+    console.log(`[${new Date().toISOString()}] Metadata: ${JSON.stringify(metadata, null, 2)}`);
     const walletAddress = metadata?.user?.walletAddress || "";
     console.log(`[${new Date().toISOString()}] Setting wallet address header: ${walletAddress}`);
     headers.set("x-mcpay-wallet-address", walletAddress);
@@ -124,12 +125,20 @@ const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer, metad
     }
 
     console.log(`[${new Date().toISOString()}] Making request to upstream server`);
+    console.log(`[${new Date().toISOString()}] Making fetch request:`, {
+        url: url.toString(),
+        method: c.req.raw.method,
+        headers: Object.fromEntries(headers.entries()),
+        hasBody: !!body || (c.req.raw.method !== 'GET' && !!c.req.raw.body),
+        body: body ? new TextDecoder().decode(body) : undefined
+    });
+    
     const response = await fetch(url.toString(), {
         method: c.req.raw.method,
         headers,
         body: body || (c.req.raw.method !== 'GET' ? c.req.raw.body : undefined),
         duplex: 'half'
-    })
+    });
     console.log(`[${new Date().toISOString()}] Received response from upstream with status: ${response.status}`);
 
     return response;
