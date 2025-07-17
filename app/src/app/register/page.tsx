@@ -2,8 +2,8 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState, useEffect, useCallback } from "react"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -18,8 +18,8 @@ import { useTheme } from "@/components/providers/theme-context"
 import { ConnectButton } from "@/components/custom-ui/connect-button"
 import { openBlockscout } from "@/lib/client/blockscout"
 import { useRouter } from "next/navigation"
-import { type Network, getTokensByNetwork, getStablecoins, NETWORKS, type NetworkInfo } from "@/lib/client/tokens"
-import { switchToNetwork, getConnectionStatus } from "@/lib/client/wallet-utils"
+import { type Network, NETWORKS } from "@/lib/client/tokens"
+
 import { useChainId } from "wagmi"
 import { getNetworkByChainId } from "@/lib/client/tokens"
 
@@ -81,7 +81,6 @@ export default function RegisterPage() {
   const [showAuthHeaders, setShowAuthHeaders] = useState(false)
   const [selectedNetwork, setSelectedNetwork] = useState<Network>('base-sepolia')
   const [selectedPaymentToken, setSelectedPaymentToken] = useState<string>('')
-  const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false)
   const [showNetworkSelection, setShowNetworkSelection] = useState(false)
 
   const { address: walletAddress, isConnected: isWalletConnected } = useAccount()
@@ -224,7 +223,7 @@ export default function RegisterPage() {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
-  const fetchMCPTools = async (url: string) => {
+  const fetchMCPTools = useCallback(async (url: string) => {
     if (!url.trim()) {
       setTools([])
       setToolsError("")
@@ -275,7 +274,7 @@ export default function RegisterPage() {
     } finally {
       setIsLoadingTools(false)
     }
-  }
+  }, [formData.name, formData.description])
 
   const handleDisconnectWallet = () => {
     disconnect()
@@ -290,17 +289,7 @@ export default function RegisterPage() {
     setSelectedPaymentToken('') // Reset payment token selection
   }
 
-  const handleSwitchToSelectedNetwork = async () => {
-    setIsSwitchingNetwork(true)
-    try {
-      await switchToNetwork(selectedNetwork)
-    } catch (error) {
-      console.error('Failed to switch network:', error)
-      setToolsError(`Failed to switch to ${NETWORKS[selectedNetwork].name}: ${error instanceof Error ? error.message : 'Unknown error'}`)
-    } finally {
-      setIsSwitchingNetwork(false)
-    }
-  }
+
 
   // Debounced URL checking
   useEffect(() => {
@@ -311,7 +300,7 @@ export default function RegisterPage() {
     }, 1000)
 
     return () => clearTimeout(timer)
-  }, [formData.url])
+  }, [formData.url, fetchMCPTools])
 
   // Update toolsError display if Wagmi connectError exists
   useEffect(() => {

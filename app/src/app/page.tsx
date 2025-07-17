@@ -1,6 +1,5 @@
 "use client"
 
-import { MCPServer } from "@/components/custom-ui/tools-modal"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -25,7 +24,6 @@ import {
   X,
   Zap
 } from "lucide-react"
-import Image from "next/image"
 import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
 
@@ -40,6 +38,38 @@ interface APITool {
   status: string;
   createdAt: string;
   updatedAt: string;
+}
+
+interface MCPTool {
+  name: string
+  description?: string
+  inputSchema: {
+    type: string
+    properties: Record<string, MCPInputPropertySchema>
+  }
+  annotations?: {
+    title?: string
+    readOnlyHint?: boolean
+    destructiveHint?: boolean
+    idempotentHint?: boolean
+    openWorldHint?: boolean
+  }
+}
+
+interface MCPInputPropertySchema {
+  type: string;
+  description?: string;
+  [key: string]: unknown;
+}
+export interface MCPServer { // Exporting MCPServer as it's used in the props
+  id: string
+  name: string
+  description: string
+  url: string
+  category: string
+  tools: MCPTool[]
+  icon: React.ReactNode
+  verified?: boolean
 }
 
 // Note: Backend supports multi-wallet and blockchain-agnostic user management
@@ -116,8 +146,8 @@ const transformServerData = (apiServer: APIServer): MCPServer => ({
     name: tool.name,
     description: tool.description,
     inputSchema: {
-      type: (tool.inputSchema as any)?.type || "object",
-      properties: (tool.inputSchema as any)?.properties || {}
+      type: (tool.inputSchema as Record<string, unknown>)?.type as string || "object",
+      properties: (tool.inputSchema as Record<string, unknown>)?.properties as Record<string, MCPInputPropertySchema> || {}
     },
     annotations: {
       title: tool.name,
@@ -338,7 +368,7 @@ export default function MCPBrowser() {
   }: {
     title: string
     value: string | number
-    icon: any
+    icon: React.ComponentType<{ className?: string }>
     subtitle?: string
     trend?: string
     delay?: number

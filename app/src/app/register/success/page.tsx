@@ -2,18 +2,56 @@
 
 import type React from "react"
 import { useState, useEffect, Suspense } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { CheckCircle, Server, Calendar, User, Globe, ExternalLink, ChevronDown, ChevronRight, Shield, Database, Hash, AlertCircle, Home, Plus, Eye, ArrowRight, Wrench, DollarSign, Zap } from "lucide-react"
+import { CheckCircle, Server, Calendar, User, Globe, ExternalLink, ChevronDown, ChevronRight, Shield, Database, Hash, AlertCircle, Home, Plus, Eye, Wrench, DollarSign, Zap } from "lucide-react"
 import { useTheme } from "@/components/providers/theme-context"
 import { openBlockscout } from "@/lib/client/blockscout"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 
+// Type definitions for registration data
+interface PaymentInfo {
+  maxAmountRequired: number
+  asset: string
+  network: string
+  resource: string
+  description: string
+}
+
+interface Tool {
+  name: string
+  description: string
+  payment?: PaymentInfo
+}
+
+interface RegistrationMetadata {
+  timestamp: string
+  toolsCount: number
+  registeredFromUI: boolean
+  monetizedToolsCount: number
+}
+
+interface RegistrationData {
+  id: string
+  serverId: string
+  mcpOrigin: string
+  creatorId: string
+  receiverAddress: string
+  requireAuth: boolean
+  authHeaders: string | null
+  createdAt: string
+  updatedAt: string
+  status: string
+  name: string
+  description: string
+  tools: Tool[]
+  metadata: RegistrationMetadata
+}
+
 // Mock data - fallback if no query params are provided
-const mockRegistrationResult = {
+const mockRegistrationResult: RegistrationData = {
   "id": "4233460e-8520-4821-809d-027ba19fc809",
   "serverId": "cf9fc475-321f-455a-9813-96e88851497f",
   "mcpOrigin": "https://mcp.bitte.ai/mcp?agentId=near-cow-agent.vercel.app",
@@ -83,7 +121,7 @@ const mockRegistrationResult = {
 function RegisterSuccessContent() {
   const { isDark } = useTheme()
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
-  const [registrationData, setRegistrationData] = useState<any>(null)
+  const [registrationData, setRegistrationData] = useState<RegistrationData | null>(null)
   const [dataError, setDataError] = useState<string>("")
   const searchParams = useSearchParams()
 
@@ -93,7 +131,7 @@ function RegisterSuccessContent() {
       const dataParam = searchParams.get('data')
       if (dataParam) {
         const decodedData = decodeURIComponent(dataParam)
-        const parsedData = JSON.parse(decodedData)
+        const parsedData = JSON.parse(decodedData) as RegistrationData
         setRegistrationData(parsedData)
       } else {
         // No data parameter, use mock data and show warning
@@ -359,7 +397,7 @@ function RegisterSuccessContent() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {registrationData.tools.map((tool: any, index: number) => (
+                {registrationData.tools.map((tool: Tool) => (
                   <div
                     key={tool.name}
                     className={`p-5 rounded-lg border ${isDark ? "bg-gray-800 border-gray-700" : "bg-gray-50 border-gray-200"} transition-all hover:shadow-md`}
