@@ -1,5 +1,6 @@
 "use client"
 
+import React from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -11,7 +12,6 @@ import {
   formatTokenAmount,
   getNetworkByChainId,
   getTokenInfo,
-  getTokenVerification,
   NETWORKS,
   type Network
 } from "@/lib/client/tokens"
@@ -30,14 +30,18 @@ import {
 } from "lucide-react"
 import { createPaymentTransport } from "mcpay/client"
 import Image from "next/image"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useAccount, useChainId, useWalletClient } from "wagmi"
+
+// =============================================================================
+// TYPE DEFINITIONS
+// =============================================================================
 
 interface InputProperty {
   type: string
   description?: string
   enum?: string[]
-  default?: any
+  default?: unknown
   minimum?: number
   maximum?: number
 }
@@ -71,55 +75,102 @@ interface ToolExecutionModalProps {
   serverId: string
 }
 
+type ExecutionStatus = 'idle' | 'initializing' | 'executing' | 'success' | 'error'
+
 interface ToolExecution {
-  status: 'idle' | 'initializing' | 'executing' | 'success' | 'error'
-  result?: any
+  status: ExecutionStatus
+  result?: unknown
   error?: string
 }
 
-interface MCPTool {
-  name: string
-  description?: string
-  execute: (params: Record<string, any>, options: { toolCallId: string; messages: any[] }) => Promise<any>
-  [key: string]: any // Allow additional properties from the MCP client
+interface MCPToolInputSchema {
+  jsonSchema?: {
+    properties?: Record<string, InputProperty>
+    required?: string[]
+  }
 }
+
+interface MCPToolFromClient {
+  name?: string
+  description?: string
+  parameters?: MCPToolInputSchema
+  inputSchema?: MCPToolInputSchema
+  execute?: (params: Record<string, unknown>, options: { toolCallId: string; messages: unknown[] }) => Promise<unknown>
+}
+
+type MCPClient = Awaited<ReturnType<typeof experimental_createMCPClient>>
+type MCPToolsCollection = Record<string, unknown>
+
+// =============================================================================
+// STYLING UTILITIES
+// =============================================================================
+
+const getThemeClasses = (isDark: boolean) => ({
+  input: isDark ? "bg-gray-700 border-gray-600 text-white" : "",
+  button: isDark ? "border-gray-600 text-gray-300 hover:bg-gray-700" : "",
+  modal: isDark ? "bg-gray-800 border-gray-700" : "",
+  text: {
+    primary: isDark ? "text-gray-300" : "text-gray-700",
+    secondary: isDark ? "text-gray-400" : "text-gray-600",
+    error: isDark ? "text-gray-300" : "text-gray-800"
+  },
+  background: {
+    error: isDark ? "bg-red-900/20 text-red-400 border border-red-800" : "bg-red-50 text-red-600 border border-red-200",
+    success: isDark ? "bg-green-900/20 text-green-400 border-green-800" : "bg-green-50 text-green-600 border-green-200",
+    warning: isDark ? "bg-orange-900/20 text-orange-400 border-orange-800" : "bg-orange-50 text-orange-600 border-orange-200",
+    info: isDark ? "bg-blue-900/20 text-blue-400 border-blue-800" : "bg-blue-50 text-blue-600 border-blue-200",
+    code: isDark ? "bg-gray-800 border-gray-700" : "bg-gray-100 border-gray-200"
+  }
+})
+
+// =============================================================================
+// MAIN COMPONENT
+// =============================================================================
 
 export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExecutionModalProps) {
   const { isDark } = useTheme()
   const { address, isConnected } = useAccount()
   const { data: walletClient } = useWalletClient()
   const chainId = useChainId()
-  const [toolInputs, setToolInputs] = useState<Record<string, any>>({})
+  const themeClasses = getThemeClasses(isDark)
+  
+  // State management
+  const [toolInputs, setToolInputs] = useState<Record<string, unknown>>({})
   const [execution, setExecution] = useState<ToolExecution>({ status: 'idle' })
   const [isMobile, setIsMobile] = useState(false)
-  const [mcpClient, setMcpClient] = useState<any>(null)
-  const [mcpTools, setMcpTools] = useState<Record<string, any>>({})
+  const [mcpClient, setMcpClient] = useState<MCPClient | null>(null)
+  const [mcpToolsCollection, setMcpToolsCollection] = useState<MCPToolsCollection>({})
   const [isInitialized, setIsInitialized] = useState(false)
   const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false)
 
-  // Network compatibility checking
-  const getRequiredNetwork = () => {
+  // =============================================================================
+  // NETWORK UTILITIES
+  // =============================================================================
+
+  const getRequiredNetwork = useCallback((): string | null => {
     if (!tool?.isMonetized || !tool.pricing.length) return null
     return tool.pricing[0].network
-  }
+  }, [tool])
 
-  const getCurrentNetwork = () => {
-    return chainId ? getNetworkByChainId(chainId) : null
-  }
+  const getCurrentNetwork = useCallback((): string | null => {
+    const network = chainId ? getNetworkByChainId(chainId) : undefined
+    return typeof network === 'string' ? network : null
+  }, [chainId])
 
-  const getCurrentBlockchain = () => {
-    const network = getCurrentNetwork()
-    if (!network) return 'ethereum'
-    return network.startsWith('sei') ? 'sei' : 'ethereum'
-  }
-
-  const isOnCorrectNetwork = () => {
+  const isOnCorrectNetwork = useCallback((): boolean => {
     const requiredNetwork = getRequiredNetwork()
     const currentNetwork = getCurrentNetwork()
-    
+
     if (!requiredNetwork) return true // Free tools don't require specific network
     return requiredNetwork === currentNetwork
-  }
+  }, [getRequiredNetwork, getCurrentNetwork])
+
+  const shouldShowNetworkStatus = useCallback((): boolean => {
+    if (!tool?.isMonetized || !tool.pricing?.length || !isConnected) {
+      return false
+    }
+    return isOnCorrectNetwork()
+  }, [tool, isConnected, isOnCorrectNetwork])
 
   const handleNetworkSwitch = async () => {
     const requiredNetwork = getRequiredNetwork()
@@ -127,14 +178,14 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
 
     setIsSwitchingNetwork(true)
     setExecution({ status: 'idle' }) // Clear any previous errors
-    
+
     try {
       console.log(`[Network Switch] Starting switch to ${requiredNetwork}`)
       console.log(`[Network Switch] Network info:`, NETWORKS[requiredNetwork as Network])
-      
+
       await switchToNetwork(requiredNetwork as Network)
       console.log(`[Network Switch] Successfully switched to ${requiredNetwork}`)
-      
+
       // Clear any previous errors after successful switch
       if (execution.status === 'error') {
         setExecution({ status: 'idle' })
@@ -147,9 +198,9 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
         requiredNetwork,
         availableNetworks: Object.keys(NETWORKS)
       })
-      
-      setExecution({ 
-        status: 'error', 
+
+      setExecution({
+        status: 'error',
         error: `Failed to switch to ${requiredNetwork}: ${error instanceof Error ? error.message : 'Unknown error. Check browser console for details.'}`
       })
     } finally {
@@ -157,8 +208,11 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     }
   }
 
-  // Enhanced formatCurrency function using token registry
-  const formatCurrency = (amount: string | number, currency: string, network?: string) => {
+  // =============================================================================
+  // CURRENCY AND TOKEN UTILITIES
+  // =============================================================================
+
+  const formatCurrency = useCallback((amount: string | number, currency: string, network?: string) => {
     const num = typeof amount === 'string' ? parseFloat(amount) : amount
 
     // If we have network info, try to get token info from registry
@@ -181,22 +235,19 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
 
     // Simple currency display
     return `${num.toFixed(6)} ${currency}`
-  }
+  }, [])
 
   // Enhanced token display with verification badge
   const TokenDisplay = ({
     currency,
     network,
-    amount,
-    showVerification = false
+    amount
   }: {
     currency: string
     network: string
     amount?: string | number
-    showVerification?: boolean
   }) => {
     const tokenInfo = getTokenInfo(currency, network as Network)
-    const verification = getTokenVerification(currency, network as Network)
 
     return (
       <div className="flex items-center gap-2">
@@ -233,67 +284,80 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     )
   }
 
-  // Check if we're on mobile
+  // =============================================================================
+  // MOBILE DETECTION
+  // =============================================================================
+
   useEffect(() => {
     const checkIsMobile = () => {
       setIsMobile(window.innerWidth < 768)
     }
-    
+
     checkIsMobile()
     window.addEventListener('resize', checkIsMobile)
-    
+
     return () => window.removeEventListener('resize', checkIsMobile)
   }, [])
 
-  // Helper function to safely get tool properties from MCP tool or server tool
-  const getToolProperties = (tool: Tool): Record<string, InputProperty> => {
+  // =============================================================================
+  // TOOL SCHEMA UTILITIES
+  // =============================================================================
+
+  const getToolProperties = useCallback((tool: Tool): Record<string, InputProperty> => {
     // First try to get from MCP client tools (if available and initialized)
-    if (isInitialized && mcpTools[tool.name]) {
-      const mcpTool = mcpTools[tool.name] as any
+    if (isInitialized && mcpToolsCollection[tool.name]) {
+      const mcpTool = mcpToolsCollection[tool.name] as MCPToolFromClient
       if (mcpTool.inputSchema?.jsonSchema?.properties) {
         return mcpTool.inputSchema.jsonSchema.properties
       }
+      if (mcpTool.parameters?.jsonSchema?.properties) {
+        return mcpTool.parameters.jsonSchema.properties
+      }
     }
-    
+
     // Fallback to server tool inputSchema
-    const schema = tool.inputSchema as any
+    const schema = tool.inputSchema as ToolInputSchema
     if (schema && typeof schema === 'object' && schema.properties) {
       return schema.properties
     }
     return {}
-  }
+  }, [isInitialized, mcpToolsCollection])
 
-  // Helper function to get required fields from MCP tool or server tool
-  const getRequiredFields = (tool: Tool): string[] => {
+  const getRequiredFields = useCallback((tool: Tool): string[] => {
     // First try to get from MCP client tools (if available and initialized)
-    if (isInitialized && mcpTools[tool.name]) {
-      const mcpTool = mcpTools[tool.name] as any
+    if (isInitialized && mcpToolsCollection[tool.name]) {
+      const mcpTool = mcpToolsCollection[tool.name] as MCPToolFromClient
       if (mcpTool.parameters?.jsonSchema?.required) {
         return mcpTool.parameters.jsonSchema.required
       }
+      if (mcpTool.inputSchema?.jsonSchema?.required) {
+        return mcpTool.inputSchema.jsonSchema.required
+      }
     }
-    
+
     // Fallback to server tool inputSchema
-    const schema = tool.inputSchema as any
+    const schema = tool.inputSchema as ToolInputSchema
     if (schema && typeof schema === 'object' && schema.required) {
       return schema.required
     }
     return []
-  }
+  }, [isInitialized, mcpToolsCollection])
 
-  // Helper function to check if tool has inputs
-  const hasToolInputs = (tool: Tool): boolean => {
+  const hasToolInputs = useCallback((tool: Tool): boolean => {
     const properties = getToolProperties(tool)
     return Object.keys(properties).length > 0
-  }
+  }, [getToolProperties])
 
-  // Initialize tool inputs when tool changes
+  // =============================================================================
+  // TOOL INPUT MANAGEMENT
+  // =============================================================================
+
   useEffect(() => {
     if (!tool) return
-    
-    const inputs: Record<string, any> = {}
+
+    const inputs: Record<string, unknown> = {}
     const properties = getToolProperties(tool)
-    
+
     Object.entries(properties).forEach(([key, prop]) => {
       if (prop.type === 'array') {
         inputs[key] = prop.default || []
@@ -301,14 +365,17 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
         inputs[key] = prop.default || ''
       }
     })
-    
+
     setToolInputs(inputs)
     setExecution({ status: 'idle' })
     setIsInitialized(false) // Reset initialization when tool changes
     setIsSwitchingNetwork(false) // Reset network switching state
-  }, [tool])
+  }, [tool, getToolProperties])
 
-  // Initialize MCP client when modal opens and user is connected
+  // =============================================================================
+  // MCP CLIENT INITIALIZATION
+  // =============================================================================
+
   useEffect(() => {
     if (!isOpen || !isConnected || !address || !tool || !walletClient || isInitialized) return
 
@@ -318,7 +385,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
 
         // Create the MCP URL using the serverId
         const mcpUrl = new URL(urlUtils.getMcpUrl(serverId))
-        
+
         // Create a viem-compatible Account object that x402 can use
         const account = walletClient
 
@@ -344,25 +411,26 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
         console.log("Available MCP tools:", tools)
 
         setMcpClient(client)
-        setMcpTools(tools)
+        setMcpToolsCollection(tools)
         setIsInitialized(true)
         setExecution({ status: 'idle' })
-        
+
         console.log(`MCP client initialized for tool: ${tool.name}`)
         console.log(`Available tools: ${Object.keys(tools).join(', ')}`)
-        
+
         // Check if the current tool is available in MCP
         if (tools[tool.name]) {
           console.log(`Current tool found in MCP:`, tools[tool.name])
-          console.log(`Provider options:`, tools[tool.name].providerOptions)
-          console.log(`Current tool schema:`, tools[tool.name].inputSchema)
+          const mcpTool = tools[tool.name] as unknown as MCPToolFromClient
+          console.log(`Provider options:`, mcpTool)
+          console.log(`Current tool schema:`, mcpTool.inputSchema || mcpTool.parameters)
         } else {
           console.warn(`Warning: Tool "${tool.name}" not found in MCP server tools`)
         }
       } catch (error) {
         console.error("Failed to initialize MCP client:", error)
-        setExecution({ 
-          status: 'error', 
+        setExecution({
+          status: 'error',
           error: error instanceof Error ? error.message : 'Failed to initialize MCP client'
         })
       }
@@ -376,13 +444,17 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     if (!isOpen) {
       setIsInitialized(false)
       setMcpClient(null)
-      setMcpTools({})
+      setMcpToolsCollection({})
       setExecution({ status: 'idle' })
       setIsSwitchingNetwork(false)
     }
   }, [isOpen])
 
-  const updateToolInput = (inputName: string, value: any) => {
+  // =============================================================================
+  // TOOL EXECUTION
+  // =============================================================================
+
+  const updateToolInput = (inputName: string, value: unknown) => {
     setToolInputs(prev => ({
       ...prev,
       [inputName]: value
@@ -391,49 +463,53 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
 
   const executeTool = async () => {
     if (!tool || !mcpClient || !isInitialized || !walletClient) return
-    
+
     setExecution({ status: 'executing' })
 
     try {
       // Get the MCP tool by name
-      const mcpTool = mcpTools[tool.name]
-      
+      const mcpTool = mcpToolsCollection[tool.name] as MCPToolFromClient
+
       if (!mcpTool) {
         throw new Error(`Tool "${tool.name}" not found in MCP server`)
       }
 
       console.log(`Executing MCP tool: ${tool.name}`, toolInputs)
-      console.log(`MCP tool schema:`, (mcpTool as any).parameters?.jsonSchema)
-      
+      console.log(`MCP tool schema:`, mcpTool.parameters?.jsonSchema || mcpTool.inputSchema?.jsonSchema)
+
       // Execute the tool using the MCP client's callTool method
-      const result = await mcpTool.execute(toolInputs, {
+      const result = await mcpTool.execute?.(toolInputs, {
         toolCallId: "123",
         messages: []
       })
-      
+
       console.log(`Tool execution result:`, result)
-      
-      setExecution({ 
-        status: 'success', 
-        result 
+
+      setExecution({
+        status: 'success',
+        result
       })
-          } catch (error) {
-        console.error("Tool execution error:", error)
-        setExecution({ 
-          status: 'error', 
-          error: error instanceof Error ? error.message : 'Unknown error occurred'
-        })
-      }
+    } catch (error) {
+      console.error("Tool execution error:", error)
+      setExecution({
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
+      })
+    }
   }
 
-  const copyResult = (result: any) => {
+  const copyResult = (result: unknown) => {
     navigator.clipboard.writeText(JSON.stringify(result, null, 2))
   }
+
+  // =============================================================================
+  // INPUT FIELD RENDERING
+  // =============================================================================
 
   const renderInputField = (inputName: string, inputProp: InputProperty) => {
     console.log("Rendering input field:", inputName, inputProp)
     if (!tool) return null
-    
+
     const currentValue = toolInputs[inputName] || ''
     const requiredFields = getRequiredFields(tool)
     const isRequired = requiredFields.includes(inputName)
@@ -441,17 +517,17 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     // Handle array inputs
     if (inputProp.type === 'array') {
       const arrayValue = Array.isArray(currentValue) ? currentValue : []
-      
+
       const addArrayItem = () => {
         const newArray = [...arrayValue, '']
         updateToolInput(inputName, newArray)
       }
-      
+
       const removeArrayItem = (index: number) => {
-        const newArray = arrayValue.filter((_: any, i: number) => i !== index)
+        const newArray = arrayValue.filter((_: unknown, i: number) => i !== index)
         updateToolInput(inputName, newArray)
       }
-      
+
       const updateArrayItem = (index: number, value: string) => {
         const newArray = [...arrayValue]
         newArray[index] = value
@@ -460,26 +536,26 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
 
       return (
         <div key={inputName} className="space-y-2">
-          <label className={`text-sm font-medium flex items-center gap-1 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+          <label className={`text-sm font-medium flex items-center gap-1 ${themeClasses.text.primary}`}>
             {inputName}
             {isRequired && <span className="text-red-500">*</span>}
           </label>
           <div className="space-y-2">
-            {arrayValue.map((item: string, index: number) => (
+            {arrayValue.map((item: unknown, index: number) => (
               <div key={index} className="flex items-center gap-2">
                 <Input
                   type="text"
-                  value={item}
+                  value={String(item)}
                   onChange={(e) => updateArrayItem(index, e.target.value)}
                   placeholder={`Enter ${inputName} item ${index + 1}`}
-                  className={`flex-1 ${isDark ? "bg-gray-700 border-gray-600 text-white" : ""}`}
+                  className={`flex-1 ${themeClasses.input}`}
                 />
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => removeArrayItem(index)}
-                  className={`px-2 ${isDark ? "border-gray-600 text-gray-300 hover:bg-gray-700" : ""}`}
+                  className={`px-2 ${themeClasses.button}`}
                 >
                   ×
                 </Button>
@@ -490,13 +566,13 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
               variant="outline"
               size="sm"
               onClick={addArrayItem}
-              className={`w-full ${isDark ? "border-gray-600 text-gray-300 hover:bg-gray-700" : ""}`}
+              className={`w-full ${themeClasses.button}`}
             >
               + Add {inputName} item
             </Button>
           </div>
           {inputProp.description && (
-            <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+            <p className={`text-xs ${themeClasses.text.secondary}`}>
               {inputProp.description}
             </p>
           )}
@@ -507,17 +583,16 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     if (inputProp.enum) {
       return (
         <div key={inputName} className="space-y-2">
-          <label className={`text-sm font-medium flex items-center gap-1 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+          <label className={`text-sm font-medium flex items-center gap-1 ${themeClasses.text.primary}`}>
             {inputName}
             {isRequired && <span className="text-red-500">*</span>}
           </label>
           <select
-            className={`w-full px-3 py-2 rounded-md border text-sm ${
-              isDark 
-                ? "bg-gray-700 border-gray-600 text-white" 
+            className={`w-full px-3 py-2 rounded-md border text-sm ${isDark
+                ? "bg-gray-700 border-gray-600 text-white"
                 : "bg-white border-gray-300 text-gray-900"
-            }`}
-            value={currentValue}
+              }`}
+            value={String(currentValue)}
             onChange={(e) => updateToolInput(inputName, e.target.value)}
           >
             <option value="">Select {inputName}</option>
@@ -526,7 +601,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
             ))}
           </select>
           {inputProp.description && (
-            <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+            <p className={`text-xs ${themeClasses.text.secondary}`}>
               {inputProp.description}
             </p>
           )}
@@ -537,21 +612,21 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     if (inputProp.type === 'number' || inputProp.type === 'integer') {
       return (
         <div key={inputName} className="space-y-2">
-          <label className={`text-sm font-medium flex items-center gap-1 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+          <label className={`text-sm font-medium flex items-center gap-1 ${themeClasses.text.primary}`}>
             {inputName}
             {isRequired && <span className="text-red-500">*</span>}
           </label>
           <Input
             type="number"
-            value={currentValue}
+            value={String(currentValue)}
             onChange={(e) => updateToolInput(inputName, parseFloat(e.target.value) || '')}
             placeholder={`Enter ${inputName}`}
             min={inputProp.minimum}
             max={inputProp.maximum}
-            className={isDark ? "bg-gray-700 border-gray-600 text-white" : ""}
+            className={themeClasses.input}
           />
           {inputProp.description && (
-            <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+            <p className={`text-xs ${themeClasses.text.secondary}`}>
               {inputProp.description}
             </p>
           )}
@@ -562,7 +637,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     if (inputProp.type === 'boolean') {
       return (
         <div key={inputName} className="space-y-2">
-          <label className={`flex items-center gap-2 text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+          <label className={`flex items-center gap-2 text-sm font-medium ${themeClasses.text.primary}`}>
             <input
               type="checkbox"
               checked={currentValue === true}
@@ -573,7 +648,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
             {isRequired && <span className="text-red-500">*</span>}
           </label>
           {inputProp.description && (
-            <p className={`text-xs ml-6 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+            <p className={`text-xs ml-6 ${themeClasses.text.secondary}`}>
               {inputProp.description}
             </p>
           )}
@@ -583,37 +658,217 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
 
     // Default to text input
     const isLongText = inputProp.description && inputProp.description.length > 100
-    
+
     return (
       <div key={inputName} className="space-y-2">
-        <label className={`text-sm font-medium flex items-center gap-1 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+        <label className={`text-sm font-medium flex items-center gap-1 ${themeClasses.text.primary}`}>
           {inputName}
           {isRequired && <span className="text-red-500">*</span>}
         </label>
         {isLongText ? (
           <Textarea
-            value={currentValue}
+            value={String(currentValue)}
             onChange={(e) => updateToolInput(inputName, e.target.value)}
             placeholder={`Enter ${inputName}`}
             rows={3}
-            className={isDark ? "bg-gray-700 border-gray-600 text-white" : ""}
+            className={themeClasses.input}
           />
         ) : (
           <Input
             type="text"
-            value={currentValue}
+            value={String(currentValue)}
             onChange={(e) => updateToolInput(inputName, e.target.value)}
             placeholder={`Enter ${inputName}`}
-            className={isDark ? "bg-gray-700 border-gray-600 text-white" : ""}
+            className={themeClasses.input}
           />
         )}
         {inputProp.description && (
-          <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+          <p className={`text-xs ${themeClasses.text.secondary}`}>
             {inputProp.description}
           </p>
         )}
       </div>
     )
+  }
+
+  // =============================================================================
+  // CONTENT RENDERING
+  // =============================================================================
+
+  const renderNetworkSwitchCard = () => {
+    if (!tool?.isMonetized || !tool.pricing.length || !isConnected || isOnCorrectNetwork()) {
+      return null
+    }
+
+    return (
+      <div className={`p-3 rounded-md border ${themeClasses.background.warning}`}>
+        <div className="flex items-start gap-3">
+          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+          <div className="flex-1">
+            <div className="text-sm font-medium mb-1">Network Mismatch</div>
+            <div className="text-xs mb-3">
+              This tool requires <strong>{getRequiredNetwork()}</strong> network, but you're connected to{" "}
+              <strong>{getCurrentNetwork() || 'unknown network'}</strong>.
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={handleNetworkSwitch}
+                disabled={isSwitchingNetwork}
+                size="sm"
+                className={`text-xs ${isDark
+                    ? "bg-orange-600 hover:bg-orange-700 text-white"
+                    : "bg-orange-600 hover:bg-orange-700 text-white"
+                  }`}
+              >
+                {isSwitchingNetwork ? (
+                  <>
+                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                    Switching...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-3 w-3 mr-1" />
+                    Switch to {getRequiredNetwork()}
+                  </>
+                )}
+              </Button>
+
+              {/* Manual add network info */}
+              {getRequiredNetwork() === 'sei-testnet' && (
+                <Button
+                  onClick={() => {
+                    const networkInfo = NETWORKS['sei-testnet']
+                    const config = {
+                      chainId: `0x${networkInfo.chainId.toString(16)}`,
+                      chainName: networkInfo.name,
+                      nativeCurrency: networkInfo.nativeCurrency,
+                      rpcUrls: networkInfo.rpcUrls,
+                      blockExplorerUrls: networkInfo.blockExplorerUrls,
+                    }
+                    navigator.clipboard.writeText(JSON.stringify(config, null, 2))
+                    console.log('[Manual Network] Sei Testnet config:', config)
+                    alert('Sei Testnet network config copied to clipboard!\n\nTo manually add:\n1. Open your wallet settings\n2. Go to Networks\n3. Add Custom Network\n4. Paste the config\n\nOr check browser console for details.')
+                  }}
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                >
+                  <Copy className="h-3 w-3 mr-1" />
+                  Manual Setup
+                </Button>
+              )}
+            </div>
+
+            {/* Manual Instructions for Sei Testnet */}
+            {getRequiredNetwork() === 'sei-testnet' && (
+              <div className="mt-3 p-2 rounded text-xs bg-orange-100 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800">
+                <div className="font-medium mb-1">Sei Testnet Network Details:</div>
+                <div className="space-y-1 font-mono text-xs">
+                  <div>Chain ID: 1328 (0x530)</div>
+                  <div>RPC: https://evm-rpc-testnet.sei-apis.com</div>
+                  <div>Symbol: SEI</div>
+                  <div>Explorer: https://seitrace.com/?chain=atlantic-2</div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const renderConnectionStatus = () => {
+    if (!isConnected || !walletClient) {
+      return (
+        <div className={`p-4 rounded-md border ${themeClasses.background.warning}`}>
+          <p className="text-sm">
+            {!isConnected
+              ? "Please connect your wallet to execute this tool."
+              : "Waiting for wallet client to be ready..."}
+          </p>
+        </div>
+      )
+    }
+
+    if (!isInitialized && execution.status !== 'error') {
+      return (
+        <div className={`p-4 rounded-md border ${themeClasses.background.info}`}>
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <p className="text-sm">Initializing MCP connection...</p>
+          </div>
+        </div>
+      )
+    }
+
+    if (isInitialized && !mcpToolsCollection[tool?.name || '']) {
+      return (
+        <div className={`p-4 rounded-md border ${themeClasses.background.warning}`}>
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" />
+            <p className="text-sm">Tool &quot;{tool?.name}&quot; not found in MCP server.</p>
+          </div>
+          <p className="text-xs mt-1 opacity-80">
+            Available tools: {Object.keys(mcpToolsCollection).join(', ') || 'None'}
+          </p>
+        </div>
+      )
+    }
+
+    return null
+  }
+
+  const renderExecutionResult = () => {
+    if (execution.status === 'success' && execution.result) {
+      return (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-medium flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 text-green-500" />
+              Result
+            </h4>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => copyResult(execution.result)}
+              className={themeClasses.button}
+            >
+              <Copy className="h-3 w-3 mr-1" />
+              Copy
+            </Button>
+          </div>
+          <div className={`rounded-md border max-h-48 overflow-hidden ${themeClasses.background.code}`}>
+            <pre className={`text-xs p-3 max-h-48 overflow-auto whitespace-pre ${themeClasses.text.error}`}>
+              {(() => {
+                if (execution.result === undefined) return 'No result'
+                if (typeof execution.result === 'string') return execution.result
+                try {
+                  return JSON.stringify(execution.result, null, 2)
+                } catch {
+                  return String(execution.result)
+                }
+              })()}
+            </pre>
+          </div>
+        </div>
+      )
+    }
+
+    if (execution.status === 'error' && execution.error) {
+      return (
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-red-500" />
+            Error
+          </h4>
+          <div className={`text-sm p-3 rounded-md ${themeClasses.background.error}`}>
+            {execution.error}
+          </div>
+        </div>
+      )
+    }
+
+    return null
   }
 
   const renderContent = () => {
@@ -639,15 +894,13 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
               </Badge>
             )}
           </div>
-          
-          <p className={`text-sm ${isDark ? "text-gray-300" : "text-gray-600"}`}>
-            {(isInitialized && (mcpTools[tool.name] as any)?.description) || tool.description}
+
+          <p className={`text-sm ${themeClasses.text.secondary}`}>
+            {(isInitialized && (mcpToolsCollection[tool.name] as MCPToolFromClient)?.description) || tool.description}
           </p>
 
           {tool.isMonetized && tool.pricing.length > 0 && (
-            <div className={`p-3 rounded-md border ${
-              isDark ? "bg-green-900/20 text-green-400 border-green-800" : "bg-green-50 text-green-600 border-green-200"
-            }`}>
+            <div className={`p-3 rounded-md border ${themeClasses.background.success}`}>
               <div className="flex items-center gap-2 text-sm">
                 <Coins className="h-4 w-4" />
                 <span className="font-medium">Paid Tool</span>
@@ -659,7 +912,6 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
                     currency={tool.pricing[0].currency}
                     network={tool.pricing[0].network}
                     amount={tool.pricing[0].price}
-                    showVerification={true}
                   />
                 </div>
                 <div>Network: {tool.pricing[0].network}</div>
@@ -671,84 +923,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
           )}
 
           {/* Network Status Warning */}
-          {tool.isMonetized && tool.pricing.length > 0 && isConnected && !isOnCorrectNetwork() && (
-            <div className={`p-3 rounded-md border ${
-              isDark ? "bg-orange-900/20 text-orange-400 border-orange-800" : "bg-orange-50 text-orange-600 border-orange-200"
-            }`}>
-              <div className="flex items-start gap-3">
-                <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                <div className="flex-1">
-                  <div className="text-sm font-medium mb-1">Network Mismatch</div>
-                  <div className="text-xs mb-3">
-                    This tool requires <strong>{getRequiredNetwork()}</strong> network, but youre connected to{" "}
-                    <strong>{getCurrentNetwork() || 'unknown network'}</strong>.
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      onClick={handleNetworkSwitch}
-                      disabled={isSwitchingNetwork}
-                      size="sm"
-                      className={`text-xs ${
-                        isDark 
-                          ? "bg-orange-600 hover:bg-orange-700 text-white" 
-                          : "bg-orange-600 hover:bg-orange-700 text-white"
-                      }`}
-                    >
-                      {isSwitchingNetwork ? (
-                        <>
-                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                          Switching...
-                        </>
-                      ) : (
-                        <>
-                          <RefreshCw className="h-3 w-3 mr-1" />
-                          Switch to {getRequiredNetwork()}
-                        </>
-                      )}
-                    </Button>
-                    
-                    {/* Manual add network info */}
-                    {getRequiredNetwork() === 'sei-testnet' && (
-                      <Button
-                        onClick={() => {
-                          const networkInfo = NETWORKS['sei-testnet']
-                          const config = {
-                            chainId: `0x${networkInfo.chainId.toString(16)}`,
-                            chainName: networkInfo.name,
-                            nativeCurrency: networkInfo.nativeCurrency,
-                            rpcUrls: networkInfo.rpcUrls,
-                            blockExplorerUrls: networkInfo.blockExplorerUrls,
-                          }
-                          navigator.clipboard.writeText(JSON.stringify(config, null, 2))
-                          console.log('[Manual Network] Sei Testnet config:', config)
-                          alert('Sei Testnet network config copied to clipboard!\n\nTo manually add:\n1. Open your wallet settings\n2. Go to Networks\n3. Add Custom Network\n4. Paste the config\n\nOr check browser console for details.')
-                        }}
-                        variant="outline"
-                        size="sm"
-                        className="text-xs"
-                      >
-                        <Copy className="h-3 w-3 mr-1" />
-                        Manual Setup
-                      </Button>
-                    )}
-                  </div>
-                  
-                  {/* Manual Instructions for Sei Testnet */}
-                  {getRequiredNetwork() === 'sei-testnet' && (
-                    <div className="mt-3 p-2 rounded text-xs bg-orange-100 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800">
-                      <div className="font-medium mb-1">Sei Testnet Network Details:</div>
-                      <div className="space-y-1 font-mono text-xs">
-                        <div>Chain ID: 1328 (0x530)</div>
-                        <div>RPC: https://evm-rpc-testnet.sei-apis.com</div>
-                        <div>Symbol: SEI</div>
-                        <div>Explorer: https://seitrace.com/?chain=atlantic-2</div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+          {renderNetworkSwitchCard()}
         </div>
 
         {/* Input Fields */}
@@ -763,68 +938,35 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
               )}
             </div>
           </div>
-                  )}
+        )}
 
-          {/* Network Status Success */}
-          {tool.isMonetized && tool.pricing.length > 0 && isConnected && isOnCorrectNetwork() && (
-            <div className={`p-3 rounded-md border ${
-              isDark ? "bg-green-900/20 text-green-400 border-green-800" : "bg-green-50 text-green-600 border-green-200"
-            }`}>
-              <div className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4" />
-                <div className="text-sm">
-                  <span className="font-medium">Ready to Execute</span>
-                  <span className="ml-2 text-xs opacity-80">
-                    Connected to {getCurrentNetwork()} network
-                  </span>
-                </div>
+        {/* Network Status Success */}
+        {shouldShowNetworkStatus() && (
+          <div className={`p-3 rounded-md border ${themeClasses.background.success}`}>
+            <div className="flex items-center gap-2">
+              <CheckCircle className="h-4 w-4" />
+              <div className="text-sm">
+                <span className="font-medium">Ready to Execute</span>
+                <span className="ml-2 text-xs opacity-80">
+                  Connected to {getCurrentNetwork() || 'unknown'} network
+                </span>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
         {/* Connection Status */}
-        {!isConnected || !walletClient ? (
-          <div className={`p-4 rounded-md border ${
-            isDark ? "bg-yellow-900/20 text-yellow-400 border-yellow-800" : "bg-yellow-50 text-yellow-600 border-yellow-200"
-          }`}>
-            <p className="text-sm">
-              {!isConnected 
-                ? "Please connect your wallet to execute this tool." 
-                : "Waiting for wallet client to be ready..."}
-            </p>
-          </div>
-        ) : !isInitialized && execution.status !== 'error' ? (
-          <div className={`p-4 rounded-md border ${
-            isDark ? "bg-blue-900/20 text-blue-400 border-blue-800" : "bg-blue-50 text-blue-600 border-blue-200"
-          }`}>
-            <div className="flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <p className="text-sm">Initializing MCP connection...</p>
-            </div>
-          </div>
-        ) : isInitialized && !mcpTools[tool.name] ? (
-          <div className={`p-4 rounded-md border ${
-            isDark ? "bg-orange-900/20 text-orange-400 border-orange-800" : "bg-orange-50 text-orange-600 border-orange-200"
-          }`}>
-            <div className="flex items-center gap-2">
-              <AlertCircle className="h-4 w-4" />
-              <p className="text-sm">Tool &quot;{tool.name}&quot; not found in MCP server.</p>
-            </div>
-            <p className="text-xs mt-1 opacity-80">
-              Available tools: {Object.keys(mcpTools).join(', ') || 'None'}
-            </p>
-          </div>
-        ) : null}
+        {renderConnectionStatus()}
 
         {/* Execute Button */}
         <Button
           onClick={executeTool}
           disabled={
-            !isConnected || 
-            !walletClient || 
-            !isInitialized || 
-            !mcpTools[tool.name] || 
-            execution.status === 'executing' || 
+            !isConnected ||
+            !walletClient ||
+            !isInitialized ||
+            !mcpToolsCollection[tool.name] ||
+            execution.status === 'executing' ||
             execution.status === 'initializing' ||
             (tool.isMonetized && !isOnCorrectNetwork()) ||
             isSwitchingNetwork
@@ -860,56 +1002,19 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
         </Button>
 
         {/* Execution Result */}
-        {execution.status === 'success' && execution.result && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500" />
-                Result
-              </h4>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => copyResult(execution.result)}
-                className={isDark ? "border-gray-600 text-gray-300" : ""}
-              >
-                <Copy className="h-3 w-3 mr-1" />
-                Copy
-              </Button>
-            </div>
-            <div className={`rounded-md border max-h-48 overflow-hidden ${
-              isDark ? "bg-gray-800 border-gray-700" : "bg-gray-100 border-gray-200"
-            }`}>
-              <pre className={`text-xs p-3 max-h-48 overflow-auto whitespace-pre ${
-                isDark ? "text-gray-300" : "text-gray-800"
-              }`}>
-                {JSON.stringify(execution.result, null, 2)}
-              </pre>
-            </div>
-          </div>
-        )}
-
-        {execution.status === 'error' && execution.error && (
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 text-red-500" />
-              Error
-            </h4>
-            <div className={`text-sm p-3 rounded-md ${
-              isDark ? "bg-red-900/20 text-red-400 border border-red-800" : "bg-red-50 text-red-600 border border-red-200"
-            }`}>
-              {execution.error}
-            </div>
-          </div>
-        )}
+        {renderExecutionResult()}
       </div>
     )
   }
 
+  // =============================================================================
+  // MODAL RENDERING
+  // =============================================================================
+
   if (isMobile) {
     return (
       <Drawer open={isOpen} onOpenChange={onClose}>
-        <DrawerContent className={`max-h-[85vh] ${isDark ? "bg-gray-800 border-gray-700" : ""}`}>
+        <DrawerContent className={`max-h-[85vh] ${themeClasses.modal}`}>
           <DrawerHeader>
             <DrawerTitle className="flex items-center gap-2">
               <Wrench className="h-5 w-5" />
@@ -929,7 +1034,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className={`max-w-2xl max-h-[85vh] overflow-hidden flex flex-col ${isDark ? "bg-gray-800 border-gray-700" : ""}`}>
+      <DialogContent className={`max-w-2xl max-h-[85vh] overflow-hidden flex flex-col ${themeClasses.modal}`}>
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Wrench className="h-5 w-5" />

@@ -806,19 +806,20 @@ export default function MCPBrowser() {
                   </div>
 
                   {/* Enhanced action button */}
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="w-full hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:border-blue-300 dark:hover:border-blue-600 transition-all duration-300"
-                    onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      window.location.href = `/servers/${server.id}`;
-                    }}
+                  <Link
+                    href={`/servers/${server.id}`}
+                    className="w-full"
+                    scroll={true}
                   >
-                    <BarChart3 className="h-4 w-4 mr-2" />
-                    Open Dashboard →
-                  </Button>
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      className="w-full hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:border-blue-300 dark:hover:border-blue-600 transition-all duration-300"
+                    >
+                      <BarChart3 className="h-4 w-4 mr-2" />
+                      Open Dashboard →
+                    </Button>
+                  </Link>
                 </CardContent>
 
                 {/* Shine effect on hover */}
