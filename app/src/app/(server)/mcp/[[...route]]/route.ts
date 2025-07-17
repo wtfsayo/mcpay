@@ -15,7 +15,7 @@ import { users } from "@/lib/gateway/db/schema";
 import { type AuthType } from "@/lib/gateway/auth";
 import { attemptAutoSign } from "@/lib/gateway/payment-strategies";
 import { createExactPaymentRequirements, decodePayment, settle, verifyPayment, x402Version } from "@/lib/gateway/payments";
-import { settleResponseHeader } from "@/lib/gateway/types";
+import { settleResponseHeader, type SupportedNetwork, type ExtendedPaymentRequirements } from "@/lib/gateway/types";
 import { handle } from "hono/vercel";
 
 export const runtime = 'nodejs'
@@ -32,12 +32,37 @@ type UserWithWallet = User & {
     walletAddress: string; // Primary wallet address for API compatibility
 };
 
+// Define payment information structure based on database schema
+interface PaymentInfo {
+    maxAmountRequired: string;
+    network: string;
+    asset: string;
+    payTo?: string;
+    resource: string;
+    description: string;
+}
+
+// Define tool configuration type based on database query results
+interface DbToolResult {
+    id: string;
+    name: string;
+    description: string;
+    inputSchema: unknown;
+    isMonetized: boolean;
+    payment: unknown;
+    status: string;
+    metadata: unknown;
+    createdAt: Date;
+    updatedAt: Date;
+    serverId: string;
+}
+
 // Define tool call type for better type safety
 type ToolCall = {
     name: string;
-    args: any;
+    args: Record<string, unknown>;
     isPaid: boolean;
-    payment?: any;
+    payment?: PaymentInfo;
     id?: string;
     toolId?: string;
     serverId?: string;
@@ -219,7 +244,7 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: ToolCall, body?:
                                     return await txOperations.listMcpToolsByServer(server.id)(tx);
                                 });
 
-                                const toolConfig = tools.find((t: any) => t.name === toolName);
+                                const toolConfig = tools.find((t: DbToolResult) => t.name === toolName);
 
                                 console.log(`[${new Date().toISOString()}] ---Tool Config: ${JSON.stringify(toolConfig, null, 2)}`)
 
@@ -241,9 +266,9 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: ToolCall, body?:
                         // Store tool call info to return
                         toolCall = {
                             name: toolName,
-                            args: toolArgs,
+                            args: toolArgs || {},
                             isPaid,
-                            ...(paymentDetails && { payment: paymentDetails }),
+                            ...(paymentDetails && { payment: paymentDetails as PaymentInfo }),
                             ...(id && { id: id }),
                             ...(toolId && { toolId }),
                             ...(serverId && { serverId })
@@ -253,7 +278,7 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: ToolCall, body?:
                             console.log('\x1b[32m%s\x1b[0m', `  Meta: ${JSON.stringify(jsonData.params._meta, null, 2)}`);
                         }
                     }
-                } catch (e) {
+                } catch {
                     console.log('\x1b[33m%s\x1b[0m', `[${new Date().toISOString()}] Request body couldn't be parsed as JSON`);
                 }
             }
@@ -415,7 +440,7 @@ async function processPayment(params: {
     }
 
     console.log(`[${new Date().toISOString()}] Paid tool call detected: ${toolCall.name}`);
-    console.log(`[${new Date().toISOString()}] Payment details: ${JSON.stringify(toolCall.payment, null, 2)}`);
+    console.log(`[${new Date().toISOString()}] Payment details: ${JSON.stringify(toolCall.payment || {}, null, 2)}`);
 
     // Check if payment header already exists
     let paymentHeader = c.req.header("X-PAYMENT");
@@ -460,16 +485,24 @@ async function processPayment(params: {
         }
     }
 
+    if (!toolCall.payment) {
+        return { 
+            success: false, 
+            error: "No payment information available for paid tool",
+            user: user || undefined
+        };
+    }
+
     // Ensure payTo field exists, default to asset address if missing
     const payTo = toolCall.payment.payTo || toolCall.payment.asset;
     
     const paymentRequirements = [
         createExactPaymentRequirements(
             toolCall.payment.maxAmountRequired,
-            toolCall.payment.network,
-            toolCall.payment.resource,
+            toolCall.payment.network as SupportedNetwork,
+            toolCall.payment.resource as `${string}://${string}`,
             toolCall.payment.description,
-            payTo
+            payTo as `0x${string}`
         ),
     ];
     console.log(`[${new Date().toISOString()}] Created payment requirements: ${JSON.stringify(paymentRequirements, null, 2)}`);
@@ -605,7 +638,7 @@ async function processPayment(params: {
                 const paymentRecord = await txOperations.createPayment({
                     toolId: ensureString(toolCall.toolId),
                     userId: extractedUser?.id,
-                    amount: (paymentRequirement as any).amount || toolCall.payment.maxAmountRequired,
+                    amount: (paymentRequirement as ExtendedPaymentRequirements).maxAmountRequired || toolCall.payment?.maxAmountRequired || "0",
                     currency: paymentRequirement.asset,
                     network: paymentRequirement.network,
                     transactionHash: settleResponse.transaction || `unknown-${Date.now()}`,
@@ -656,14 +689,21 @@ verbs.forEach(verb => {
             
             if (!paymentResult.success) {
                 c.status(402);
-                const payTo = toolCall.payment?.payTo || toolCall.payment?.asset;
+                if (!toolCall.payment) {
+                    return c.json({
+                        x402Version,
+                        error: "No payment information available",
+                        accepts: [],
+                    });
+                }
+                const payTo = toolCall.payment.payTo || toolCall.payment.asset;
                 const paymentRequirements = [
                     createExactPaymentRequirements(
                         toolCall.payment.maxAmountRequired,
-                        toolCall.payment.network,
-                        toolCall.payment.resource,
+                        toolCall.payment.network as SupportedNetwork,
+                        toolCall.payment.resource as `${string}://${string}`,
                         toolCall.payment.description,
-                        payTo
+                        payTo as `0x${string}`
                     ),
                 ];
                 
