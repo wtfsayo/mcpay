@@ -258,6 +258,7 @@ export async function getCDPAccount(accountName: string, network: CDPNetwork = "
     const cdp = getCDPClient();
     
     try {
+        console.log(`Getting CDP account ${accountName} for network ${network}`);
         const account = await cdp.evm.getOrCreateAccount({
             name: accountName,
         });
@@ -276,6 +277,7 @@ export async function getCDPSmartAccount(smartAccountName: string, ownerAccountN
     const cdp = getCDPClient();
     
     try {
+        console.log(`Getting CDP smart account ${smartAccountName} (owner: ${ownerAccountName}) for network ${network}`);
         // Get owner account first
         const ownerAccount = await cdp.evm.getOrCreateAccount({
             name: ownerAccountName,
@@ -342,7 +344,7 @@ export async function getAccountBalances(accountName: string, network: CDPNetwor
     try {
         // Implementation will depend on actual CDP SDK methods available
         // This is a placeholder that should be updated based on the specific SDK version
-        console.log(`Getting balances for account ${accountName} on ${network}`);
+        console.log(`Getting balances for account ${accountName} on ${network}, isSmartAccount: ${isSmartAccount}, ownerAccount: ${ownerAccountName || 'none'}`);
         return {}; // Return empty object as placeholder
     } catch (error) {
         console.error('Failed to get account balances:', error);
@@ -391,7 +393,7 @@ export async function sendUserOperation(
     try {
         // Implementation will depend on actual CDP SDK methods available
         // This is a placeholder that should be updated based on the specific SDK version
-        console.log(`Sending user operation from ${smartAccountName} (owner: ${ownerAccountName}) on ${network}`);
+        console.log(`Sending user operation from ${smartAccountName} (owner: ${ownerAccountName}) on ${network} with ${calls.length} calls`);
         throw new Error("User operation functionality needs to be implemented based on your CDP SDK version");
     } catch (error) {
         console.error('Failed to send user operation:', error);

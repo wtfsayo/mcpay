@@ -303,10 +303,10 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
   // TOOL SCHEMA UTILITIES
   // =============================================================================
 
-  const getToolProperties = useCallback((tool: Tool): Record<string, InputProperty> => {
+  const getToolProperties = useCallback((toolArg: Tool): Record<string, InputProperty> => {
     // First try to get from MCP client tools (if available and initialized)
-    if (isInitialized && mcpToolsCollection[tool.name]) {
-      const mcpTool = mcpToolsCollection[tool.name] as MCPToolFromClient
+    if (isInitialized && mcpToolsCollection[toolArg.name]) {
+      const mcpTool = mcpToolsCollection[toolArg.name] as MCPToolFromClient
       if (mcpTool.inputSchema?.jsonSchema?.properties) {
         return mcpTool.inputSchema.jsonSchema.properties
       }
@@ -316,17 +316,17 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     }
 
     // Fallback to server tool inputSchema
-    const schema = tool.inputSchema as ToolInputSchema
+    const schema = toolArg.inputSchema as ToolInputSchema
     if (schema && typeof schema === 'object' && schema.properties) {
       return schema.properties
     }
     return {}
   }, [isInitialized, mcpToolsCollection])
 
-  const getRequiredFields = useCallback((tool: Tool): string[] => {
+  const getRequiredFields = useCallback((toolArg: Tool): string[] => {
     // First try to get from MCP client tools (if available and initialized)
-    if (isInitialized && mcpToolsCollection[tool.name]) {
-      const mcpTool = mcpToolsCollection[tool.name] as MCPToolFromClient
+    if (isInitialized && mcpToolsCollection[toolArg.name]) {
+      const mcpTool = mcpToolsCollection[toolArg.name] as MCPToolFromClient
       if (mcpTool.parameters?.jsonSchema?.required) {
         return mcpTool.parameters.jsonSchema.required
       }
@@ -336,15 +336,15 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     }
 
     // Fallback to server tool inputSchema
-    const schema = tool.inputSchema as ToolInputSchema
+    const schema = toolArg.inputSchema as ToolInputSchema
     if (schema && typeof schema === 'object' && schema.required) {
       return schema.required
     }
     return []
   }, [isInitialized, mcpToolsCollection])
 
-  const hasToolInputs = useCallback((tool: Tool): boolean => {
-    const properties = getToolProperties(tool)
+  const hasToolInputs = useCallback((toolArg: Tool): boolean => {
+    const properties = getToolProperties(toolArg)
     return Object.keys(properties).length > 0
   }, [getToolProperties])
 
@@ -382,7 +382,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
 
     setToolInputs(inputs)
     setExecution({ status: 'idle' })
-  }, [tool?.id]) // Only depend on tool ID, not the entire tool object
+  }, [tool?.id, tool?.name, tool?.inputSchema, previousToolId, getToolProperties]) // Include all dependencies but use stable references
 
   // Update inputs when MCP data becomes available (enhances the initial inputs)
   useEffect(() => {
@@ -400,7 +400,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     })
 
     setToolInputs(inputs)
-  }, [tool?.id, isInitialized, mcpToolsCollection])
+  }, [tool?.id, tool?.name, tool?.inputSchema, isInitialized, mcpToolsCollection, getToolProperties])
 
   // =============================================================================
   // MCP CLIENT INITIALIZATION
@@ -737,7 +737,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
           <div className="flex-1">
             <div className="text-sm font-medium mb-1">Network Mismatch</div>
             <div className="text-xs mb-3">
-              This tool requires <strong>{getRequiredNetwork()}</strong> network, but you're connected to{" "}
+              This tool requires <strong>{getRequiredNetwork()}</strong> network, but you&apos;re connected to{" "}
               <strong>{getCurrentNetwork() || 'unknown network'}</strong>.
             </div>
             <div className="flex gap-2">

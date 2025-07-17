@@ -1,22 +1,45 @@
 import { type Connector } from 'wagmi'
 import { type Network, NETWORKS, getNetworkByChainId, type NetworkInfo } from './tokens'
 
+// Type definitions for wallet providers
+interface EthereumProvider {
+  isMetaMask?: boolean
+  isCoinbaseWallet?: boolean
+  isPorto?: boolean
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>
+}
+
+interface WalletWindow {
+  ethereum?: EthereumProvider
+  coinbaseWalletExtension?: unknown
+  porto?: unknown
+}
+
+// Helper function to get wallet window
+function getWalletWindow(): WalletWindow {
+  if (typeof window === 'undefined') return {}
+  return window as unknown as WalletWindow
+}
+
 // Check if MetaMask is available in the browser
 export function isMetaMaskAvailable(): boolean {
   if (typeof window === 'undefined') return false
-  return !!(window as any).ethereum?.isMetaMask
+  const walletWindow = getWalletWindow()
+  return !!walletWindow.ethereum?.isMetaMask
 }
 
 // Check if Coinbase Wallet is available in the browser
 export function isCoinbaseWalletAvailable(): boolean {
   if (typeof window === 'undefined') return false
-  return !!(window as any).ethereum?.isCoinbaseWallet || !!(window as any).coinbaseWalletExtension
+  const walletWindow = getWalletWindow()
+  return !!walletWindow.ethereum?.isCoinbaseWallet || !!walletWindow.coinbaseWalletExtension
 }
 
 // Check if Porto is available in the browser
 export function isPortoAvailable(): boolean {
   if (typeof window === 'undefined') return false
-  return !!(window as any).ethereum?.isPorto || !!(window as any).porto
+  const walletWindow = getWalletWindow()
+  return !!walletWindow.ethereum?.isPorto || !!walletWindow.porto
 }
 
 // Check if current connector is MetaMask
@@ -84,8 +107,7 @@ export function verifyMetaMaskConnection(
 // Verify wallet connection status (generic for any wallet)
 export function verifyWalletConnection(
   isConnected: boolean, 
-  address?: string, 
-  connector?: Connector
+  address?: string
 ): {
   isValid: boolean
   error?: string
@@ -212,9 +234,15 @@ export function getConnectionStatus(
   }
 }
 
+// Error type for wallet operations
+interface WalletError extends Error {
+  code?: number
+}
+
 // Generic network switching function
 export async function switchToNetwork(network: Network): Promise<boolean> {
-  if (typeof window === 'undefined' || !(window as any).ethereum) {
+  const walletWindow = getWalletWindow()
+  if (typeof window === 'undefined' || !walletWindow.ethereum) {
     throw new Error('No wallet provider available')
   }
 
@@ -226,16 +254,17 @@ export async function switchToNetwork(network: Network): Promise<boolean> {
   const chainIdHex = `0x${networkInfo.chainId.toString(16)}`
 
   try {
-    await (window as any).ethereum.request({
+    await walletWindow.ethereum.request({
       method: 'wallet_switchEthereumChain',
       params: [{ chainId: chainIdHex }],
     })
     return true
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const walletError = error as WalletError
     // Chain doesn't exist, try to add it
-    if (error.code === 4902) {
+    if (walletError.code === 4902) {
       try {
-        await (window as any).ethereum.request({
+        await walletWindow.ethereum.request({
           method: 'wallet_addEthereumChain',
           params: [{
             chainId: chainIdHex,
@@ -251,7 +280,7 @@ export async function switchToNetwork(network: Network): Promise<boolean> {
         return false
       }
     }
-    console.error(`Failed to switch to ${networkInfo.name}:`, error)
+    console.error(`Failed to switch to ${networkInfo.name}:`, walletError)
     return false
   }
 }

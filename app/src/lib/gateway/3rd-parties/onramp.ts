@@ -80,11 +80,11 @@ export async function createOnrampSessionToken(
     throw new Error(`Failed to create onramp session token: ${response.status} ${errorText}`);
   }
 
-  const responseData = await response.json() as any;
+  const responseData = await response.json() as unknown;
   console.log('Onramp API response:', JSON.stringify(responseData, null, 2));
   
   // Check if response has the expected structure - it should have token and channel_id directly
-  if (!responseData || !responseData.token) {
+  if (!responseData || typeof responseData !== 'object' || !('token' in responseData)) {
     console.error('Unexpected response structure:', responseData);
     throw new Error('Invalid response structure from onramp API');
   }
