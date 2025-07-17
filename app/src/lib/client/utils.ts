@@ -99,19 +99,19 @@ export const urlUtils = {
 }
 
 // API Response types
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   data?: T
   error?: string
-  details?: any
+  details?: unknown
 }
 
 export interface ApiError extends Error {
   status?: number
-  details?: any
+  details?: unknown
 }
 
 // API utility function with proper error handling
-export async function apiCall<T = any>(
+export async function apiCall<T = unknown>(
   endpoint: string, 
   options: RequestInit = {}
 ): Promise<T> {
@@ -139,13 +139,13 @@ export async function apiCall<T = any>(
 
     if (!response.ok) {
       let errorMessage = `HTTP error! status: ${response.status}`
-      let errorDetails: any = null
+      let errorDetails: unknown = null
       
       try {
         const errorData = await response.json()
         errorMessage = errorData.error || errorData.message || errorMessage
         errorDetails = errorData.details || errorData
-      } catch (e) {
+      } catch {
         // Failed to parse error JSON, use status text
         errorMessage = `${response.status}: ${response.statusText}`
       }

@@ -11,7 +11,6 @@ import { AddressLink, TransactionLink } from "@/components/custom-ui/explorer-li
 import {
   formatTokenAmount,
   getTokenInfo,
-  getTokenVerification,
   type Network
 } from "@/lib/client/tokens"
 import { api, urlUtils } from "@/lib/client/utils"
@@ -35,13 +34,75 @@ import {
   XCircle
 } from "lucide-react"
 import Image from "next/image"
-import { useParams, useRouter } from "next/navigation"
+import { useParams } from "next/navigation"
 import { useEffect, useState } from "react"
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { ToolExecutionModal } from "@/components/custom-ui/tool-execution-modal"
 
 // Types based on the API response structure
+interface Tool {
+  id: string
+  name: string
+  description: string
+  inputSchema: Record<string, unknown>
+  isMonetized: boolean
+  payment?: Record<string, unknown>
+  status: string
+  metadata?: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+  pricing: Array<{
+    id: string
+    price: string
+    currency: string
+    network: string
+    assetAddress: string
+    active: boolean
+    createdAt: string
+  }>
+  payments: Array<{
+    id: string
+    amount: string
+    currency: string
+    network: string
+    status: string
+    createdAt: string
+    settledAt?: string
+    transactionHash?: string
+    user: {
+      id: string
+      walletAddress: string
+      displayName: string
+    }
+  }>
+  usage: Array<{
+    id: string
+    timestamp: string
+    responseStatus: string
+    executionTimeMs?: number
+    user: {
+      id: string
+      walletAddress: string
+      displayName: string
+    }
+  }>
+  proofs: Array<{
+    id: string
+    isConsistent: boolean
+    confidenceScore: string
+    status: string
+    verificationType: string
+    createdAt: string
+    webProofPresentation?: string
+    user: {
+      id: string
+      walletAddress: string
+      displayName: string
+    }
+  }>
+}
+
 interface ServerData {
   id: string
   serverId: string
@@ -59,67 +120,7 @@ interface ServerData {
     displayName: string
     avatarUrl?: string
   }
-  tools: Array<{
-    id: string
-    name: string
-    description: string
-    inputSchema: Record<string, unknown>
-    isMonetized: boolean
-    payment?: Record<string, unknown>
-    status: string
-    metadata?: Record<string, unknown>
-    createdAt: string
-    updatedAt: string
-    pricing: Array<{
-      id: string
-      price: string
-      currency: string
-      network: string
-      assetAddress: string
-      active: boolean
-      createdAt: string
-    }>
-    payments: Array<{
-      id: string
-      amount: string
-      currency: string
-      network: string
-      status: string
-      createdAt: string
-      settledAt?: string
-      transactionHash?: string
-      user: {
-        id: string
-        walletAddress: string
-        displayName: string
-      }
-    }>
-    usage: Array<{
-      id: string
-      timestamp: string
-      responseStatus: string
-      executionTimeMs?: number
-      user: {
-        id: string
-        walletAddress: string
-        displayName: string
-      }
-    }>
-    proofs: Array<{
-      id: string
-      isConsistent: boolean
-      confidenceScore: string
-      status: string
-      verificationType: string
-      createdAt: string
-      webProofPresentation?: string
-      user: {
-        id: string
-        walletAddress: string
-        displayName: string
-      }
-    }>
-  }>
+  tools: Tool[]
   analytics: Array<{
     id: string
     date: string
@@ -183,12 +184,11 @@ interface ServerData {
 
 export default function ServerDashboard() {
   const params = useParams()
-  const router = useRouter()
   const serverId = params.id as string
   const [serverData, setServerData] = useState<ServerData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedTool, setSelectedTool] = useState<any>(null)
+  const [selectedTool, setSelectedTool] = useState<Tool | null>(null)
   const [showToolModal, setShowToolModal] = useState(false)
   const [activeTab, setActiveTab] = useState("overview")
   const [markdownCopied, setMarkdownCopied] = useState(false)
@@ -340,7 +340,7 @@ await client.connect(transport)
         setError(null)
 
         const data = await api.getServer(serverId)
-        setServerData(data)
+        setServerData(data as ServerData)
       } catch (err) {
         console.error('Error fetching server data:', err)
         setError(err instanceof Error ? err.message : 'Failed to fetch server data')
@@ -358,7 +358,7 @@ await client.connect(transport)
     navigator.clipboard.writeText(text)
   }
 
-  const handleToolExecution = (tool: any) => {
+  const handleToolExecution = (tool: Tool) => {
     setSelectedTool(tool)
     setShowToolModal(true)
   }
@@ -393,16 +393,13 @@ await client.connect(transport)
   const TokenDisplay = ({
     currency,
     network,
-    amount,
-    showVerification = false
+    amount
   }: {
     currency: string
     network: string
     amount?: string | number
-    showVerification?: boolean
   }) => {
     const tokenInfo = getTokenInfo(currency, network as Network)
-    const verification = getTokenVerification(currency, network as Network)
 
     return (
       <div className="flex items-center gap-2">
@@ -458,12 +455,6 @@ await client.connect(transport)
       hour: '2-digit',
       minute: '2-digit'
     })
-  }
-
-  const getReputationColor = (score: number) => {
-    if (score >= 0.8) return isDark ? "text-green-400" : "text-green-600"
-    if (score >= 0.6) return isDark ? "text-yellow-400" : "text-yellow-600"
-    return isDark ? "text-red-400" : "text-red-600"
   }
 
   if (loading) {
@@ -533,9 +524,6 @@ await client.connect(transport)
             <span className={isDark ? "text-gray-400" : "text-gray-500"}>
               Last Activity: {formatDate(serverData.stats.lastActivity)}
             </span>
-            {/* <span className={`font-medium ${getReputationColor(serverData.stats.reputationScore)}`}>
-              Reputation: {(serverData.stats.reputationScore * 100).toFixed(1)}%
-            </span> */}
           </div>
         </div>
 
@@ -1140,7 +1128,6 @@ await client.connect(transport)`}
                             currency={tool.pricing[0].currency}
                             network={tool.pricing[0].network}
                             amount={tool.pricing[0].price}
-                            showVerification={true}
                           />
                         ) : (
                           <span className={isDark ? "text-gray-400" : "text-gray-500"}>Free</span>
@@ -1208,7 +1195,7 @@ await client.connect(transport)`}
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {serverData.analytics.slice(0, 7).map((day, index) => (
+                    {serverData.analytics.slice(0, 7).map((day) => (
                       <div key={day.id} className="flex items-center justify-between">
                         <span className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}>
                           {new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -1339,7 +1326,6 @@ await client.connect(transport)`}
                               currency={payment.currency}
                               network={payment.network}
                               amount={payment.amount}
-                              showVerification={true}
                             />
                           </TableCell>
                           <TableCell>

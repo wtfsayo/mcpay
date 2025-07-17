@@ -38,7 +38,8 @@ import {
   User,
   Wallet
 } from "lucide-react"
-import { useEffect, useState } from "react"
+import Image from "next/image"
+import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { useAccount, useDisconnect } from "wagmi"
 
@@ -106,7 +107,6 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
   })
   
   // New state for improved UX
-  const [portfolioView, setPortfolioView] = useState<'all' | 'live' | 'test'>('all')
   const [showDetails, setShowDetails] = useState(false)
   const [mainnetBalancesByChain, setMainnetBalancesByChain] = useState<BalancesByChain>({})
   const [testnetBalancesByChain, setTestnetBalancesByChain] = useState<BalancesByChain>({})
@@ -122,14 +122,7 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
-  // Load user wallets when authenticated
-  useEffect(() => {
-    if (session?.user?.id) {
-      loadUserWallets()
-    }
-  }, [session?.user?.id])
-
-  const loadUserWallets = async () => {
+  const loadUserWallets = useCallback(async () => {
     if (!session?.user?.id) return
     
     try {
@@ -142,7 +135,19 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
         summary,
         mainnetBalancesByChain,
         testnetBalancesByChain
-      } = response
+      } = response as {
+        wallets: UserWallet[]
+        totalFiatValue: string
+        testnetTotalFiatValue: string
+        summary: {
+          hasMainnetBalances: boolean
+          hasTestnetBalances: boolean
+          mainnetValueUsd: number
+          testnetValueUsd: number
+        }
+        mainnetBalancesByChain: BalancesByChain
+        testnetBalancesByChain: BalancesByChain
+      }
       
       setUserWallets(wallets)
       setTotalFiatValue(parseFloat(totalFiatValue || '0'))
@@ -172,7 +177,14 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
         testnetValueUsd: 0
       })
     }
-  }
+  }, [session?.user?.id])
+
+  // Load user wallets when authenticated
+  useEffect(() => {
+    if (session?.user?.id) {
+      loadUserWallets()
+    }
+  }, [session?.user?.id, loadUserWallets])
 
   const handleGitHubSignIn = async () => {
     setIsLoading(true)
@@ -268,10 +280,10 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
       const response = await api.createOnrampUrl(session.user.id, {
         redirectUrl: window.location.origin
       })
-      
-      if (response.onrampUrl) {
+      if (response && typeof response === 'object' && 'onrampUrl' in response && response.onrampUrl) {
+        const onrampUrl = response.onrampUrl as string
         // Open Coinbase Onramp in a new window
-        window.open(response.onrampUrl, '_blank', 'noopener,noreferrer')
+        window.open(onrampUrl, '_blank')
         toast.success("Redirecting to Coinbase to buy crypto...")
       }
     } catch (error) {
@@ -322,7 +334,6 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
       
       // Get friendly chain name
       const chainName = getChainDisplayName(chainKey, balances[0]?.chainName)
-      const isTestnet = balances[0]?.isTestnet || false
       
       // Group tokens by stablecoin type and sum balances across all addresses
       const tokenGroups: { [symbol: string]: { balance: number; value: number; addresses: Set<string> } } = {}
@@ -372,25 +383,10 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
     const mainnetChains = transformChainData(mainnetBalancesByChain)
     const testnetChains = transformChainData(testnetBalancesByChain)
     
-    switch (portfolioView) {
-      case 'live':
-        return { chains: mainnetChains, total: totalFiatValue }
-      case 'test':
-        return { chains: testnetChains, total: testnetTotalFiatValue }
-      default:
-        return { 
-          chains: [...mainnetChains, ...testnetChains], 
-          total: totalFiatValue + testnetTotalFiatValue 
-        }
+    return { 
+      chains: [...mainnetChains, ...testnetChains], 
+      total: totalFiatValue + testnetTotalFiatValue 
     }
-  }
-
-  // Helper function to get network type badge color
-  const getNetworkBadgeColor = (isMainnet: boolean) => {
-    if (isMainnet) {
-      return isDark ? "bg-green-900/30 text-green-400 border-green-700" : "bg-green-100 text-green-700 border-green-300"
-    }
-    return isDark ? "bg-orange-900/30 text-orange-400 border-orange-700" : "bg-orange-100 text-orange-700 border-orange-300"
   }
 
   // GitHub Sign In Component
@@ -448,9 +444,11 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
             isDark ? "bg-gray-800/50" : "bg-gray-50"
           }`}>
             {session?.user?.image ? (
-              <img 
+              <Image 
                 src={session.user.image} 
                 alt="Profile" 
+                width={40}
+                height={40}
                 className="w-10 h-10 rounded-full object-cover"
               />
             ) : (
@@ -1045,7 +1043,7 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
     </div>
   )
 
-  const ModalHeader = ({ Component }: { Component: any }) => (
+  const ModalHeader = ({ Component }: { Component: React.ComponentType<{ children: React.ReactNode }> }) => (
     <Component>
       <div className="text-lg font-semibold">
         {session?.user ? "Account" : "Sign In"}

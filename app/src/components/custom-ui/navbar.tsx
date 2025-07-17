@@ -71,9 +71,11 @@ export default function Navbar() {
                     isDark ? "bg-gray-700" : "bg-gray-200"
                   }`}>
                     {session.user.image ? (
-                      <img 
+                      <Image 
                         src={session.user.image} 
                         alt="Profile" 
+                        width={24}
+                        height={24}
                         className="w-6 h-6 rounded-full object-cover"
                       />
                     ) : (

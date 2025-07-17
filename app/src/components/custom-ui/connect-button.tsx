@@ -5,9 +5,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { AddressLink } from "./explorer-link"
-import { getNetworkByChainId, getTokenInfo, NETWORKS, type Network } from "@/lib/client/tokens"
+import { getNetworkByChainId, NETWORKS, type Network } from "@/lib/client/tokens"
 import {
-  getConnectionStatus,
   isCoinbaseWalletConnector,
   isMetaMaskConnector,
   isPortoConnector,
@@ -33,7 +32,6 @@ export function ConnectButton() {
   const currentNetwork = getNetworkByChainId(chainId) as Network
   const defaultNetwork: Network = 'base-sepolia'
   
-  const connectionStatus = getConnectionStatus(isConnected, address, connector, chainId, currentNetwork)
   const verification = verifyWalletConnection(isConnected, address, connector)
 
   // USDC addresses for supported networks
@@ -143,7 +141,6 @@ export function ConnectButton() {
     const isMetaMask = connector ? isMetaMaskConnector(connector) : false
     const isCoinbaseWallet = connector ? isCoinbaseWalletConnector(connector) : false
     const isPorto = connector ? isPortoConnector(connector) : false
-    const currentNetworkInfo = currentNetwork ? NETWORKS[currentNetwork] : null
     const isOnSupportedNetwork = supportedChains.includes(currentNetwork)
 
     return (
