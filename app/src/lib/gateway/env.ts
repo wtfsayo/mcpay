@@ -47,12 +47,12 @@ function parseEnv() {
     return envSchema.parse(process.env);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const missingVars = error.errors
-        .filter((err) => err.code === 'invalid_type' && err.received === 'undefined')
+      const missingVars = error.issues
+        .filter((err) => err.code === 'invalid_type')
         .map((err) => err.path.join('.'));
       
-      const invalidVars = error.errors
-        .filter((err) => err.code !== 'invalid_type' || err.received !== 'undefined')
+      const invalidVars = error.issues
+        .filter((err) => err.code !== 'invalid_type')
         .map((err) => `${err.path.join('.')}: ${err.message}`);
 
       console.error('❌ Environment validation failed:');
