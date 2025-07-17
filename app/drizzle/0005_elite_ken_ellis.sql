@@ -1,0 +1,2 @@
+ALTER TABLE "user_wallets" DROP CONSTRAINT "user_wallets_wallet_address_unique";--> statement-breakpoint
+CREATE UNIQUE INDEX "user_wallets_unique_combination" ON "user_wallets" USING btree ("user_id","wallet_address","provider","wallet_type");
