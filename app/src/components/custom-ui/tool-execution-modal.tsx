@@ -352,9 +352,23 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
   // TOOL INPUT MANAGEMENT
   // =============================================================================
 
-  useEffect(() => {
-    if (!tool) return
+  // Track previous tool ID to avoid unnecessary resets
+  const [previousToolId, setPreviousToolId] = useState<string | null>(null)
 
+  useEffect(() => {
+    if (!tool) {
+      setPreviousToolId(null)
+      return
+    }
+
+    // Only reset MCP initialization if the tool actually changed
+    if (previousToolId !== tool.id) {
+      setPreviousToolId(tool.id)
+      setIsInitialized(false)
+      setIsSwitchingNetwork(false)
+    }
+
+    // Initialize tool inputs (this doesn't depend on MCP being ready)
     const inputs: Record<string, unknown> = {}
     const properties = getToolProperties(tool)
 
@@ -368,9 +382,25 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
 
     setToolInputs(inputs)
     setExecution({ status: 'idle' })
-    setIsInitialized(false) // Reset initialization when tool changes
-    setIsSwitchingNetwork(false) // Reset network switching state
-  }, [tool, getToolProperties])
+  }, [tool?.id]) // Only depend on tool ID, not the entire tool object
+
+  // Update inputs when MCP data becomes available (enhances the initial inputs)
+  useEffect(() => {
+    if (!tool || !isInitialized || !mcpToolsCollection[tool.name]) return
+
+    const inputs: Record<string, unknown> = {}
+    const properties = getToolProperties(tool)
+
+    Object.entries(properties).forEach(([key, prop]) => {
+      if (prop.type === 'array') {
+        inputs[key] = prop.default || []
+      } else {
+        inputs[key] = prop.default || ''
+      }
+    })
+
+    setToolInputs(inputs)
+  }, [tool?.id, isInitialized, mcpToolsCollection])
 
   // =============================================================================
   // MCP CLIENT INITIALIZATION
@@ -437,7 +467,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     }
 
     initializeMcpClient()
-  }, [isOpen, isConnected, address, tool, serverId, walletClient, isInitialized])
+  }, [isOpen, isConnected, address, tool?.id, tool?.name, serverId, walletClient, isInitialized])
 
   // Cleanup when modal closes
   useEffect(() => {
