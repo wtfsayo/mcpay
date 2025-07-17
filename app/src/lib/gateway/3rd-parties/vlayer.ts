@@ -26,8 +26,8 @@ export interface ToolMetadata {
 
 export interface ExecutionContext {
   tool: ToolMetadata;
-  params: Record<string, any>;
-  result: any;
+  params: Record<string, unknown>;
+  result: unknown;
   timestamp: number;
   url?: string; // URL of the request if it's a web request
   method?: 'GET' | 'POST';
@@ -146,9 +146,6 @@ export class VLayer {
    */
   static async generateProof(context: ExecutionContext): Promise<VerificationResult> {
     try {
-      // Generate original web proof
-      const originalProof = await this.verifyExecution(context);
-      
       // For replay, we could re-execute the same request
       let replayExecution: ExecutionContext | undefined;
       let replayProof: WebProofResponse | undefined;

@@ -6,6 +6,19 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { randomUUID } from "crypto";
 
+// Interface for CDP wallet metadata structure
+interface CDPWalletMetadata {
+  cdpAccountId?: string;
+  cdpAccountName?: string;
+  cdpNetwork?: string;
+  isSmartAccount?: boolean;
+  ownerAccountId?: string;
+  provider?: string;
+  type?: string;
+  gasSponsored?: boolean;
+  [key: string]: unknown; // Allow additional properties
+}
+
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -125,7 +138,7 @@ export async function ensureUserHasCDPWallet(
         walletsCreated: result.wallets.length,
         hasSmartAccount: !!result.cdpResult.smartAccount,
         primaryWallet: result.wallets.find(w => w.isPrimary)?.walletAddress,
-        smartWallet: result.wallets.find(w => w.walletMetadata && (w.walletMetadata as any).isSmartAccount)?.walletAddress
+        smartWallet: result.wallets.find(w => w.walletMetadata && (w.walletMetadata as CDPWalletMetadata).isSmartAccount)?.walletAddress
       });
     } else {
       console.log(`User ${userId} already has CDP wallets, no auto-creation needed`);

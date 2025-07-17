@@ -23,7 +23,7 @@ import { auth } from "@/lib/gateway/auth";
 import { createExactPaymentRequirements } from "@/lib/gateway/payments";
 import type { ExtendedPaymentRequirements } from "@/lib/gateway/types";
 import { CDPSigningStrategy } from "@/lib/gateway/payment-strategies/cdp-strategy";
-import { getConfig } from "@/lib/gateway/payment-strategies/config";
+import { getConfig, type PaymentStrategyConfig } from "@/lib/gateway/payment-strategies/config";
 
 
 // Type definitions
@@ -130,7 +130,7 @@ export async function detectAuthentication(c: Context): Promise<{
 }
 
 // Enhanced logging function that respects configuration
-function logWithLevel(level: 'debug' | 'info' | 'warn' | 'error', message: string, data?: any) {
+function logWithLevel(level: 'debug' | 'info' | 'warn' | 'error', message: string, data?: unknown) {
     const config = getConfig();
     const logLevels = { debug: 0, info: 1, warn: 2, error: 3 };
     
@@ -207,7 +207,7 @@ export async function attemptAutoSign(
 async function performAutoSigning(
     c: Context,
     toolCall: PaymentSigningContext['toolCall'],
-    config: any
+    config: PaymentStrategyConfig
 ): Promise<PaymentSigningResult> {
     // Detect authentication
     const authInfo = await detectAuthentication(c);
@@ -347,7 +347,9 @@ async function getSigningStrategies(): Promise<PaymentSigningStrategy[]> {
     return strategies;
 }
 
-export default {
+const paymentStrategies = {
     attemptAutoSign,
     detectAuthentication
-}; 
+};
+
+export default paymentStrategies; 

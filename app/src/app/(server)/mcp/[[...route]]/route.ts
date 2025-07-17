@@ -432,7 +432,7 @@ async function processPayment(params: {
     c: Context;
     user: UserWithWallet | null;
     startTime: number;
-}): Promise<{ success: boolean; error?: string; user?: UserWithWallet }> {
+}): Promise<{ success: boolean; error?: string; user?: UserWithWallet } | Response> {
     const { toolCall, c, user, startTime } = params;
 
     if (!toolCall.isPaid || !toolCall.toolId) {
@@ -527,10 +527,16 @@ async function processPayment(params: {
         }
     }
 
-    const isPaymentValid = await verifyPayment(c, paymentRequirements);
-    console.log(`[${new Date().toISOString()}] Payment verification result: ${JSON.stringify(isPaymentValid, null, 2)}`);
+    const paymentResult = await verifyPayment(c, paymentRequirements);
+    console.log(`[${new Date().toISOString()}] Payment verification result: ${JSON.stringify(paymentResult, null, 2)}`);
 
-    if (!isPaymentValid) {
+    // If verifyPayment returns a Response object, it means there was an error and the response was already prepared
+    if (paymentResult instanceof Response) {
+        console.log(`[${new Date().toISOString()}] Payment verification returned error response, returning it`);
+        return paymentResult;
+    }
+
+    if (!paymentResult) {
         console.log(`[${new Date().toISOString()}] Payment verification failed, returning early`);
 
         // Record failed payment attempt in analytics
@@ -687,7 +693,15 @@ verbs.forEach(verb => {
         if (toolCall?.isPaid) {
             const paymentResult = await processPayment({ toolCall, c, user, startTime });
             
-            if (!paymentResult.success) {
+            // If processPayment returns a Response, return it immediately (payment verification already handled the response)
+            if (paymentResult instanceof Response) {
+                return paymentResult;
+            }
+            
+            // At this point, paymentResult is guaranteed to be the object type, not Response
+            const paymentResultObj = paymentResult as { success: boolean; error?: string; user?: UserWithWallet };
+            
+            if (!paymentResultObj.success) {
                 c.status(402);
                 if (!toolCall.payment) {
                     return c.json({
@@ -709,12 +723,12 @@ verbs.forEach(verb => {
                 
                 return c.json({
                     x402Version,
-                    error: paymentResult.error,
+                    error: paymentResultObj.error,
                     accepts: paymentRequirements,
                 });
             }
 
-            user = paymentResult.user || null;
+            user = paymentResultObj.user || null;
         }
 
         // For non-paid requests, try to get wallet address from header as fallback

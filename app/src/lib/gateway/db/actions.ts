@@ -594,7 +594,7 @@ export const txOperations = {
         const serverIdsFromTools = [...new Set(matchingTools.map(tool => tool.serverId))];
 
         // Fetch servers that have matching tools (using simple IN clause with individual conditions)
-        let serversWithMatchingTools: any[] = [];
+        let serversWithMatchingTools: typeof servers = [];
         if (serverIdsFromTools.length > 0) {
             serversWithMatchingTools = await tx.query.mcpServers.findMany({
                 where: or(...serverIdsFromTools.map(serverId => eq(mcpServers.id, serverId))),
@@ -675,7 +675,7 @@ export const txOperations = {
                 relevanceScore += 2; // Description match gets medium relevance
             }
             // Check if any tools match the search term
-            const hasMatchingTool = server.tools?.some((tool: any) => 
+            const hasMatchingTool = server.tools?.some((tool) => 
                 tool.name?.toLowerCase().includes(cleanSearchTerm) || 
                 tool.description?.toLowerCase().includes(cleanSearchTerm)
             );
@@ -684,24 +684,24 @@ export const txOperations = {
             }
 
             // Calculate activity metrics (same as trending algorithm)
-            const allPayments = server.tools?.flatMap((tool: any) => tool.payments || []) || [];
-            const allUsage = server.tools?.flatMap((tool: any) => tool.usage || []) || [];
+            const allPayments = server.tools?.flatMap((tool) => tool.payments || []) || [];
+            const allUsage = server.tools?.flatMap((tool) => tool.usage || []) || [];
             
             const totalPayments = allPayments.length;
-            const totalRevenue = allPayments.reduce((sum: number, payment: any) => 
+            const totalRevenue = allPayments.reduce((sum: number, payment) => 
                 sum + parseFloat(payment.amount), 0
             );
             const totalUsage = allUsage.length;
-            const successfulUsage = allUsage.filter((usage: any) => 
+            const successfulUsage = allUsage.filter((usage) => 
                 usage.responseStatus === 'success' || usage.responseStatus === '200'
             ).length;
             
             // Get unique users from both payments and usage
             const paymentUserIds = allPayments
-                .map((p: any) => p.userId)
+                .map((p) => p.userId)
                 .filter(Boolean);
             const usageUserIds = allUsage
-                .map((u: any) => u.userId)
+                .map((u) => u.userId)
                 .filter(Boolean);
             const uniqueUsers = new Set([...paymentUserIds, ...usageUserIds]).size;
             
@@ -709,10 +709,10 @@ export const txOperations = {
             const thirtyDaysAgo = new Date();
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
             
-            const recentPayments = allPayments.filter((p: any) => 
+            const recentPayments = allPayments.filter((p) => 
                 new Date(p.createdAt) > thirtyDaysAgo
             ).length;
-            const recentUsage = allUsage.filter((u: any) => 
+            const recentUsage = allUsage.filter((u) => 
                 new Date(u.timestamp) > thirtyDaysAgo
             ).length;
             
@@ -1948,8 +1948,8 @@ export const txOperations = {
             let updatedUniqueUsers = existing.uniqueUsers;
             let updatedAvgResponseTime = existing.avgResponseTime;
             let updatedErrorCount = existing.errorCount;
-            let updatedToolUsage = existing.toolUsage as Record<string, number> || {};
-            let updatedUserIdsList = existing.userIdsList as string[] || [];
+            const updatedToolUsage = existing.toolUsage as Record<string, number> || {};
+            const updatedUserIdsList = existing.userIdsList as string[] || [];
 
             // Update values incrementally
             if (data.totalRequests !== undefined) {

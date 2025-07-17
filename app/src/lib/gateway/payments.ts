@@ -22,6 +22,7 @@
 import type { Address } from "viem";
 import type { ERC20TokenAmount, Price, Resource } from "x402/types";
 import { moneySchema } from "x402/types";
+import type { Context } from "hono";
 import { PaymentPayloadSchema, safeBase64Decode, type SupportedNetwork, type PaymentPayload, type SupportedPaymentRequirements, type ExtendedPaymentRequirements } from "@/lib/gateway/types";
 import { useFacilitator } from "@/lib/gateway/types";
 import { getFacilitatorUrl } from "@/lib/gateway/env";
@@ -152,6 +153,7 @@ function getFacilitatorForNetwork(network: SupportedNetwork) {
     if (!facilitatorInstances.has(network)) {
         const facilitatorUrl = FACILITATOR_URLS[network] || DEFAULT_FACILITATOR_URL;
         console.log(`[PAYMENTS] Creating facilitator instance for network ${network} with URL: ${facilitatorUrl}`);
+        // eslint-disable-next-line react-hooks/rules-of-hooks -- useFacilitator is not a React hook despite the naming
         facilitatorInstances.set(network, useFacilitator({ url: facilitatorUrl }));
     }
     return facilitatorInstances.get(network)!;
@@ -219,12 +221,12 @@ export function createExactPaymentRequirements(
  *
  * @param c - The Hono context
  * @param paymentRequirements - The payment requirements to verify against
- * @returns A promise that resolves to true if payment is valid, false otherwise
+ * @returns A promise that resolves to true if payment is valid, or a Response object for errors
  */
 export async function verifyPayment(
-    c: any,
+    c: Context,
     paymentRequirements: SupportedPaymentRequirements[],
-): Promise<boolean> {
+): Promise<boolean | Response> {
     const payment = c.req.header("X-PAYMENT");
     if (!payment) {
         c.status(402);

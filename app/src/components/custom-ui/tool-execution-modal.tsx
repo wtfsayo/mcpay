@@ -30,7 +30,7 @@ import {
 } from "lucide-react"
 import { createPaymentTransport } from "mcpay/client"
 import Image from "next/image"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAccount, useChainId, useWalletClient } from "wagmi"
 
 // =============================================================================
@@ -134,6 +134,19 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
   const chainId = useChainId()
   const themeClasses = getThemeClasses(isDark)
   
+  // Create stable tool reference to avoid infinite loops
+  const stableTool = useMemo(() => {
+    if (!tool) return null
+    return {
+      id: tool.id,
+      name: tool.name,
+      inputSchema: tool.inputSchema,
+      description: tool.description,
+      isMonetized: tool.isMonetized,
+      pricing: tool.pricing
+    }
+  }, [tool?.id, tool?.name, JSON.stringify(tool?.inputSchema), tool?.description, tool?.isMonetized, JSON.stringify(tool?.pricing)])
+
   // State management
   const [toolInputs, setToolInputs] = useState<Record<string, unknown>>({})
   const [execution, setExecution] = useState<ToolExecution>({ status: 'idle' })
@@ -148,9 +161,9 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
   // =============================================================================
 
   const getRequiredNetwork = useCallback((): string | null => {
-    if (!tool?.isMonetized || !tool.pricing.length) return null
-    return tool.pricing[0].network
-  }, [tool])
+    if (!stableTool?.isMonetized || !stableTool.pricing.length) return null
+    return stableTool.pricing[0].network
+  }, [stableTool])
 
   const getCurrentNetwork = useCallback((): string | null => {
     const network = chainId ? getNetworkByChainId(chainId) : undefined
@@ -356,21 +369,21 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
   const [previousToolId, setPreviousToolId] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!tool) {
+    if (!stableTool) {
       setPreviousToolId(null)
       return
     }
 
     // Only reset MCP initialization if the tool actually changed
-    if (previousToolId !== tool.id) {
-      setPreviousToolId(tool.id)
+    if (previousToolId !== stableTool.id) {
+      setPreviousToolId(stableTool.id)
       setIsInitialized(false)
       setIsSwitchingNetwork(false)
     }
 
     // Initialize tool inputs (this doesn't depend on MCP being ready)
     const inputs: Record<string, unknown> = {}
-    const properties = getToolProperties(tool)
+    const properties = getToolProperties(stableTool as Tool)
 
     Object.entries(properties).forEach(([key, prop]) => {
       if (prop.type === 'array') {
@@ -382,14 +395,14 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
 
     setToolInputs(inputs)
     setExecution({ status: 'idle' })
-  }, [tool?.id, tool?.name, tool?.inputSchema, previousToolId, getToolProperties]) // Include all dependencies but use stable references
+  }, [stableTool, previousToolId, getToolProperties])
 
   // Update inputs when MCP data becomes available (enhances the initial inputs)
   useEffect(() => {
-    if (!tool || !isInitialized || !mcpToolsCollection[tool.name]) return
+    if (!stableTool || !isInitialized || !mcpToolsCollection[stableTool.name]) return
 
     const inputs: Record<string, unknown> = {}
-    const properties = getToolProperties(tool)
+    const properties = getToolProperties(stableTool as Tool)
 
     Object.entries(properties).forEach(([key, prop]) => {
       if (prop.type === 'array') {
@@ -400,14 +413,14 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     })
 
     setToolInputs(inputs)
-  }, [tool?.id, tool?.name, tool?.inputSchema, isInitialized, mcpToolsCollection, getToolProperties])
+  }, [stableTool, isInitialized, mcpToolsCollection, getToolProperties])
 
   // =============================================================================
   // MCP CLIENT INITIALIZATION
   // =============================================================================
 
   useEffect(() => {
-    if (!isOpen || !isConnected || !address || !tool || !walletClient || isInitialized) return
+    if (!isOpen || !isConnected || !address || !stableTool || !walletClient || isInitialized) return
 
     const initializeMcpClient = async () => {
       try {
@@ -445,17 +458,17 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
         setIsInitialized(true)
         setExecution({ status: 'idle' })
 
-        console.log(`MCP client initialized for tool: ${tool.name}`)
+        console.log(`MCP client initialized for tool: ${stableTool.name}`)
         console.log(`Available tools: ${Object.keys(tools).join(', ')}`)
 
         // Check if the current tool is available in MCP
-        if (tools[tool.name]) {
-          console.log(`Current tool found in MCP:`, tools[tool.name])
-          const mcpTool = tools[tool.name] as unknown as MCPToolFromClient
+        if (tools[stableTool.name]) {
+          console.log(`Current tool found in MCP:`, tools[stableTool.name])
+          const mcpTool = tools[stableTool.name] as unknown as MCPToolFromClient
           console.log(`Provider options:`, mcpTool)
           console.log(`Current tool schema:`, mcpTool.inputSchema || mcpTool.parameters)
         } else {
-          console.warn(`Warning: Tool "${tool.name}" not found in MCP server tools`)
+          console.warn(`Warning: Tool "${stableTool.name}" not found in MCP server tools`)
         }
       } catch (error) {
         console.error("Failed to initialize MCP client:", error)
@@ -467,7 +480,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     }
 
     initializeMcpClient()
-  }, [isOpen, isConnected, address, tool?.id, tool?.name, serverId, walletClient, isInitialized])
+  }, [isOpen, isConnected, address, stableTool, serverId, walletClient, isInitialized])
 
   // Cleanup when modal closes
   useEffect(() => {
@@ -492,19 +505,19 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
   }
 
   const executeTool = async () => {
-    if (!tool || !mcpClient || !isInitialized || !walletClient) return
+    if (!stableTool || !mcpClient || !isInitialized || !walletClient) return
 
     setExecution({ status: 'executing' })
 
     try {
       // Get the MCP tool by name
-      const mcpTool = mcpToolsCollection[tool.name] as MCPToolFromClient
+      const mcpTool = mcpToolsCollection[stableTool.name] as MCPToolFromClient
 
       if (!mcpTool) {
-        throw new Error(`Tool "${tool.name}" not found in MCP server`)
+        throw new Error(`Tool "${stableTool.name}" not found in MCP server`)
       }
 
-      console.log(`Executing MCP tool: ${tool.name}`, toolInputs)
+      console.log(`Executing MCP tool: ${stableTool.name}`, toolInputs)
       console.log(`MCP tool schema:`, mcpTool.parameters?.jsonSchema || mcpTool.inputSchema?.jsonSchema)
 
       // Execute the tool using the MCP client's callTool method
@@ -538,10 +551,10 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
 
   const renderInputField = (inputName: string, inputProp: InputProperty) => {
     console.log("Rendering input field:", inputName, inputProp)
-    if (!tool) return null
+    if (!stableTool) return null
 
     const currentValue = toolInputs[inputName] || ''
-    const requiredFields = getRequiredFields(tool)
+    const requiredFields = getRequiredFields(stableTool as Tool)
     const isRequired = requiredFields.includes(inputName)
 
     // Handle array inputs
@@ -831,12 +844,12 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
       )
     }
 
-    if (isInitialized && !mcpToolsCollection[tool?.name || '']) {
+    if (isInitialized && !mcpToolsCollection[stableTool?.name || '']) {
       return (
         <div className={`p-4 rounded-md border ${themeClasses.background.warning}`}>
           <div className="flex items-center gap-2">
             <AlertCircle className="h-4 w-4" />
-            <p className="text-sm">Tool &quot;{tool?.name}&quot; not found in MCP server.</p>
+            <p className="text-sm">Tool &quot;{stableTool?.name}&quot; not found in MCP server.</p>
           </div>
           <p className="text-xs mt-1 opacity-80">
             Available tools: {Object.keys(mcpToolsCollection).join(', ') || 'None'}
@@ -902,18 +915,18 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
   }
 
   const renderContent = () => {
-    if (!tool) return null
+    if (!stableTool) return null
 
-    const properties = getToolProperties(tool)
-    const hasInputs = hasToolInputs(tool)
+    const properties = getToolProperties(stableTool as Tool)
+    const hasInputs = hasToolInputs(stableTool as Tool)
 
     return (
       <div className="space-y-6">
         {/* Tool Info */}
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <h3 className="text-lg font-semibold">{tool.name}</h3>
-            {tool.isMonetized ? (
+            <h3 className="text-lg font-semibold">{stableTool.name}</h3>
+            {stableTool.isMonetized ? (
               <Badge variant="secondary" className={`text-xs flex items-center gap-1 ${isDark ? "bg-gray-600 text-gray-200" : ""}`}>
                 <Coins className="h-3 w-3" />
                 Paid
@@ -926,10 +939,10 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
           </div>
 
           <p className={`text-sm ${themeClasses.text.secondary}`}>
-            {(isInitialized && (mcpToolsCollection[tool.name] as MCPToolFromClient)?.description) || tool.description}
+            {(isInitialized && (mcpToolsCollection[stableTool.name] as MCPToolFromClient)?.description) || stableTool.description}
           </p>
 
-          {tool.isMonetized && tool.pricing.length > 0 && (
+          {stableTool.isMonetized && stableTool.pricing.length > 0 && (
             <div className={`p-3 rounded-md border ${themeClasses.background.success}`}>
               <div className="flex items-center gap-2 text-sm">
                 <Coins className="h-4 w-4" />
@@ -939,12 +952,12 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
                 <div className="flex items-center gap-1">
                   <span>Price:</span>
                   <TokenDisplay
-                    currency={tool.pricing[0].currency}
-                    network={tool.pricing[0].network}
-                    amount={tool.pricing[0].price}
+                    currency={stableTool.pricing[0].currency}
+                    network={stableTool.pricing[0].network}
+                    amount={stableTool.pricing[0].price}
                   />
                 </div>
-                <div>Network: {tool.pricing[0].network}</div>
+                <div>Network: {stableTool.pricing[0].network}</div>
               </div>
               <div className="mt-2 text-xs opacity-80">
                 Payment will be automatically handled when you execute this tool.
@@ -995,10 +1008,10 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
             !isConnected ||
             !walletClient ||
             !isInitialized ||
-            !mcpToolsCollection[tool.name] ||
+            !mcpToolsCollection[stableTool.name] ||
             execution.status === 'executing' ||
             execution.status === 'initializing' ||
-            (tool.isMonetized && !isOnCorrectNetwork()) ||
+            (stableTool.isMonetized && !isOnCorrectNetwork()) ||
             isSwitchingNetwork
           }
           className={`w-full ${isDark ? "bg-blue-600 hover:bg-blue-700" : ""}`}
@@ -1018,7 +1031,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               Switching Network...
             </>
-          ) : tool.isMonetized && !isOnCorrectNetwork() ? (
+          ) : stableTool.isMonetized && !isOnCorrectNetwork() ? (
             <>
               <RefreshCw className="h-4 w-4 mr-2" />
               Switch Network to Execute

@@ -311,17 +311,6 @@ export const SUPPORTED_CHAINS: Record<string, ChainConfig> = {
 
 export type SupportedChain = keyof typeof SUPPORTED_CHAINS
 
-// ERC-20 ABI for balanceOf function
-const erc20Abi = [
-  {
-    inputs: [{ name: '_owner', type: 'address' }],
-    name: 'balanceOf',
-    outputs: [{ name: 'balance', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-] as const
-
 // Type guards for different chain architectures
 export function isEVMChain(config: ChainConfig): config is EVMChainConfig {
   return config.architecture === 'evm'
@@ -921,7 +910,7 @@ export function getChainInfo(chain: SupportedChain) {
  */
 export function getChainsByArchitecture(architecture: BlockchainArchitecture): SupportedChain[] {
   return Object.entries(SUPPORTED_CHAINS)
-    .filter(([_, config]) => config.architecture === architecture)
+    .filter(([, config]) => config.architecture === architecture)
     .map(([chainKey]) => chainKey as SupportedChain)
 }
 
@@ -1172,8 +1161,8 @@ export function getBlockchainArchitecture(blockchain: string | null | undefined)
  */
 export function getBlockchainsForArchitecture(architecture: BlockchainArchitecture): string[] {
   return Object.entries(BLOCKCHAIN_TO_ARCHITECTURE)
-    .filter(([_, arch]) => arch === architecture)
-    .map(([blockchain, _]) => blockchain);
+    .filter(([, arch]) => arch === architecture)
+    .map(([blockchain]) => blockchain);
 }
 
 /**
@@ -1190,7 +1179,7 @@ export function isSupportedBlockchain(blockchain: string): boolean {
  */
 export function getMainnetChains(): SupportedChain[] {
   return Object.entries(SUPPORTED_CHAINS)
-    .filter(([_, config]) => !config.isTestnet)
+    .filter(([, config]) => !config.isTestnet)
     .map(([chainKey]) => chainKey as SupportedChain)
 }
 
@@ -1199,7 +1188,7 @@ export function getMainnetChains(): SupportedChain[] {
  */
 export function getTestnetChains(): SupportedChain[] {
   return Object.entries(SUPPORTED_CHAINS)
-    .filter(([_, config]) => config.isTestnet)
+    .filter(([, config]) => config.isTestnet)
     .map(([chainKey]) => chainKey as SupportedChain)
 }
 

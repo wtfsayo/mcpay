@@ -20,6 +20,38 @@ import { x402Version } from "@/lib/gateway/payments";
 import { createPaymentHeader, type ExtendedPaymentRequirements } from "@/lib/gateway/types";
 import type { PaymentSigningContext, PaymentSigningResult, PaymentSigningStrategy } from "@/lib/gateway/payment-strategies/index";
 
+// Interface for CDP wallet metadata structure
+interface CDPWalletMetadata {
+  cdpAccountId?: string;
+  cdpAccountName?: string;
+  cdpNetwork?: string;
+  isSmartAccount?: boolean;
+  ownerAccountId?: string;
+  provider?: string;
+  type?: string;
+  gasSponsored?: boolean;
+  [key: string]: unknown; // Allow additional properties
+}
+
+// Type for CDP wallet from database (matches the actual return type from database)
+interface CDPWallet {
+  id: string;
+  userId: string;
+  walletAddress: string;
+  walletType: string;
+  provider: string | null;
+  blockchain: string | null;
+  architecture: string | null;
+  isPrimary: boolean;
+  isActive: boolean;
+  walletMetadata: unknown; // Database returns unknown type for JSONB
+  externalWalletId: string | null;
+  externalUserId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  lastUsedAt: Date | null;
+}
+
 export class CDPSigningStrategy implements PaymentSigningStrategy {
     name = "CDP";
     priority = 100; // High priority - prefer managed wallets
@@ -50,7 +82,7 @@ export class CDPSigningStrategy implements PaymentSigningStrategy {
             console.log(`[CDP Strategy] Found ${cdpWallets.length} CDP wallets for user ${context.user!.id}`);
 
             const compatibleWallets = cdpWallets.filter(wallet => {
-                const walletNetwork = (wallet.walletMetadata as any)?.cdpNetwork;
+                const walletNetwork = (wallet.walletMetadata as CDPWalletMetadata)?.cdpNetwork;
                 return walletNetwork === network || walletNetwork === 'base-sepolia' || walletNetwork === 'sei-testnet';
             });
 
@@ -92,7 +124,7 @@ export class CDPSigningStrategy implements PaymentSigningStrategy {
             });
 
             const compatibleWallets = cdpWallets.filter(wallet => {
-                const walletNetwork = (wallet.walletMetadata as any)?.cdpNetwork;
+                const walletNetwork = (wallet.walletMetadata as CDPWalletMetadata)?.cdpNetwork;
                 return (walletNetwork === network || walletNetwork === 'base-sepolia' || walletNetwork === 'sei-testnet') && wallet.isActive;
             });
 
@@ -104,8 +136,8 @@ export class CDPSigningStrategy implements PaymentSigningStrategy {
             }
 
             // Prefer smart accounts (gas-sponsored) over regular accounts
-            const smartWallets = compatibleWallets.filter(w => (w.walletMetadata as any)?.isSmartAccount);
-            const regularWallets = compatibleWallets.filter(w => !(w.walletMetadata as any)?.isSmartAccount);
+            const smartWallets = compatibleWallets.filter(w => (w.walletMetadata as CDPWalletMetadata)?.isSmartAccount);
+            const regularWallets = compatibleWallets.filter(w => !(w.walletMetadata as CDPWalletMetadata)?.isSmartAccount);
 
             const walletsToTry = [...smartWallets, ...regularWallets];
 
@@ -146,12 +178,12 @@ export class CDPSigningStrategy implements PaymentSigningStrategy {
     }
 
     private async signWithCDPWallet(
-        wallet: any,
+        wallet: CDPWallet,
         paymentRequirement: ExtendedPaymentRequirements,
         network: CDPNetwork
     ): Promise<PaymentSigningResult> {
         try {
-            const walletMetadata = wallet.walletMetadata as any;
+            const walletMetadata = wallet.walletMetadata as CDPWalletMetadata;
             const isSmartAccount = walletMetadata?.isSmartAccount || false;
             const accountId = wallet.externalWalletId; // CDP account ID
 
