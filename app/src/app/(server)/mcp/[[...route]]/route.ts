@@ -644,7 +644,7 @@ async function processPayment(params: {
                 const paymentRecord = await txOperations.createPayment({
                     toolId: ensureString(toolCall.toolId),
                     userId: extractedUser?.id,
-                    amount: (paymentRequirement as ExtendedPaymentRequirements).maxAmountRequired || toolCall.payment?.maxAmountRequired || "0",
+                    amount: paymentRequirement.maxAmountRequired || toolCall.payment?.maxAmountRequired || "0",
                     currency: paymentRequirement.asset,
                     network: paymentRequirement.network,
                     transactionHash: settleResponse.transaction || `unknown-${Date.now()}`,
