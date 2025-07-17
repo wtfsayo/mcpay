@@ -5,36 +5,62 @@
  * It provides endpoints for user management, server configuration, and other core functionality.
  */
 
-import type { InferSelectModel } from "drizzle-orm";
-import { Hono, type Context, type Next } from "hono";
-import { randomUUID } from "node:crypto";
-import { PaymentRequirementsSchema } from "x402/types";
-import { z } from "zod";
-import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
-import db from "@/lib/gateway/db";
-import { session, users, userWallets } from "@/lib/gateway/db/schema";
 import { CDP, createCDPAccount, type CDPNetwork, type CreateCDPWalletOptions } from "@/lib/gateway/3rd-parties/cdp";
 import { createOneClickBuyUrl, getSupportedAssets, getSupportedNetworks } from "@/lib/gateway/3rd-parties/onramp";
 import { VLayer, type ExecutionContext } from "@/lib/gateway/3rd-parties/vlayer";
-import { generateApiKey } from "@/lib/gateway/auth-utils";
 import { auth, ensureUserHasCDPWallet, type AuthType } from "@/lib/gateway/auth";
+import { generateApiKey } from "@/lib/gateway/auth-utils";
 import { getBlockchainArchitecture, getStablecoinBalances, type BlockchainArchitecture } from "@/lib/gateway/crypto-accounts";
+import db from "@/lib/gateway/db";
+import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
 import { getMcpTools } from "@/lib/gateway/inspect-mcp";
+import { Hono, type Context, type Next } from "hono";
 import { handle } from "hono/vercel";
+import { randomUUID } from "node:crypto";
+
+// Type definitions for MCP Server objects - using inferred types from database operations
+type McpServerList = Awaited<ReturnType<ReturnType<typeof txOperations.listMcpServers>>>;
+type McpServerWithRelations = McpServerList[number];
+type McpServerWithActivity = Awaited<ReturnType<ReturnType<typeof txOperations.listMcpServersByActivity>>>[number];
+
+// Interface for CDP wallet metadata
+interface CDPWalletMetadata {
+    isSmartAccount?: boolean;
+    ownerAccountId?: string;
+    cdpNetwork?: string;
+    cdpAccountId?: string;
+    cdpAccountName?: string;
+    provider?: string;
+    type?: string;
+    createdByService?: boolean;
+    managedBy?: string;
+    gasSponsored?: boolean;
+    balanceCache?: Record<string, unknown>;
+    lastUpdated?: string;
+    [key: string]: unknown;
+}
+
+// Interface for payment information from tools
+interface ToolPaymentInfo {
+    maxAmountRequired: number;
+    asset: string;
+    network: string;
+    resource?: string;
+    description?: string;
+}
+
+// Interface for execution headers stored in database
+interface ExecutionHeaders {
+    headers: string[];
+}
     
 export const runtime = 'nodejs'
-
-// Infer types from Drizzle schema
-type User = InferSelectModel<typeof users>;
-type UserWallet = InferSelectModel<typeof userWallets>;
-type Session = InferSelectModel<typeof session>;
 
 // Better-auth session type (inferred from auth instance)
 type AuthSession = typeof auth.$Infer.Session;
 
 // Extend Hono context with proper typing
 type AppContext = {
-    Bindings: {};
     Variables: {
         // Optional session and user - will be undefined if not authenticated
         session?: AuthSession['session'];
@@ -49,30 +75,41 @@ const app = new Hono<{ Bindings: AuthType }>({
 }).basePath('/api')
 
 /**
+ * Type helper to recursively convert BigInt values to strings in type definitions
+ */
+type SerializeBigInts<T> = T extends bigint
+    ? string
+    : T extends Array<infer U>
+    ? Array<SerializeBigInts<U>>
+    : T extends Record<string, unknown>
+    ? { [K in keyof T]: SerializeBigInts<T[K]> }
+    : T;
+
+/**
  * Helper function to recursively convert BigInt values to strings for JSON serialization
  */
-function serializeBigInts(obj: any): any {
+function serializeBigInts<T>(obj: T): SerializeBigInts<T> {
     if (obj === null || obj === undefined) {
-        return obj;
+        return obj as SerializeBigInts<T>;
     }
     
     if (typeof obj === 'bigint') {
-        return obj.toString();
+        return obj.toString() as SerializeBigInts<T>;
     }
     
     if (Array.isArray(obj)) {
-        return obj.map(serializeBigInts);
+        return obj.map(serializeBigInts) as SerializeBigInts<T>;
     }
     
     if (typeof obj === 'object') {
-        const serialized: any = {};
+        const serialized = {} as Record<string, unknown>;
         for (const [key, value] of Object.entries(obj)) {
             serialized[key] = serializeBigInts(value);
         }
-        return serialized;
+        return serialized as SerializeBigInts<T>;
     }
     
-    return obj;
+    return obj as SerializeBigInts<T>;
 }
 
 /**
@@ -209,24 +246,27 @@ app.get('/servers', optionalAuthMiddleware, async (c) => {
     const offset = c.req.query('offset') ? parseInt(c.req.query('offset') as string) : 0
     const type = c.req.query('type') ? c.req.query('type') as string : "trending"
 
-    let servers: any[] = []
-
     if (type === "trending") {
-        servers = await withTransaction(async (tx) => {
+        const servers: McpServerWithActivity[] = await withTransaction(async (tx) => {
             return await txOperations.listMcpServersByActivity(limit, offset)(tx);
         })
 
+        if (servers.length === 0) {
+            return c.json({ error: 'No servers found' }, 404)
+        }
+
+        return c.json(servers)
     } else {
-        servers = await withTransaction(async (tx) => {
+        const servers: McpServerWithRelations[] = await withTransaction(async (tx) => {
             return await txOperations.listMcpServers(limit, offset)(tx);
         })
-    }
 
-    if (servers.length === 0) {
-        return c.json({ error: 'No servers found' }, 404)
-    }
+        if (servers.length === 0) {
+            return c.json({ error: 'No servers found' }, 404)
+        }
 
-    return c.json(servers)
+        return c.json(servers)
+    }
 })
 
 app.get('/servers/search', async (c) => {
@@ -346,8 +386,14 @@ app.post('/servers', authMiddleware, async (c) => {
             name?: string;
             tools?: Array<{
                 name: string;
-                payment?: z.infer<typeof PaymentRequirementsSchema>
+                payment?: ToolPaymentInfo
             }>;
+            walletInfo?: {
+                blockchain?: string;
+                walletType?: 'external' | 'managed' | 'custodial';
+                provider?: string;
+                network?: string;
+            };
         }
 
         // TODO: Replace with actual DB call
@@ -395,11 +441,10 @@ app.post('/servers', authMiddleware, async (c) => {
 
 
         try {
-            let server: any
             let userId: string
             console.log('Starting database transaction')
 
-            await db.transaction(async (tx) => {
+            const server = await db.transaction(async (tx) => {
                 // Check if user exists, create if not
                 console.log('Checking if user exists with wallet address:', data.receiverAddress)
                 
@@ -412,13 +457,13 @@ app.post('/servers', authMiddleware, async (c) => {
                 if (!user) {
                     console.log('User not found, creating new user with wallet address:', data.receiverAddress)
                     // Extract wallet info from request if provided
-                    const walletInfo = (data as any).walletInfo
+                    const walletInfo = data.walletInfo
                     user = await txOperations.createUser({
                         walletAddress: data.receiverAddress,
                         displayName: `User ${data.receiverAddress.substring(0, 8)}`,
                         // Use wallet info from frontend if available
                         blockchain: walletInfo?.blockchain || 'ethereum',
-                        walletType: walletInfo?.walletType || 'external',
+                        walletType: (walletInfo?.walletType as 'external' | 'managed' | 'custodial') || 'external',
                         walletProvider: walletInfo?.provider || 'unknown',
                         walletMetadata: {
                             registrationNetwork: walletInfo?.network || 'base-sepolia',
@@ -433,7 +478,7 @@ app.post('/servers', authMiddleware, async (c) => {
                 userId = user.id
 
                 console.log('Creating server record')
-                server = await txOperations.createServer({
+                const serverRecord = await txOperations.createServer({
                     serverId: id,
                     creatorId: user.id,
                     mcpOrigin: data.mcpOrigin,
@@ -451,28 +496,25 @@ app.post('/servers', authMiddleware, async (c) => {
                     console.log('Creating tool:', tool.name, 'Monetized:', !!monetizedTool)
 
                     const _tool = await txOperations.createTool({
-                        serverId: server.id,
+                        serverId: serverRecord.id,
                         name: tool.name,
                         description: tool.description || `Access to ${tool.name}`,
                         inputSchema: tool.inputSchema ? JSON.parse(JSON.stringify(tool.inputSchema)) : {},
                         isMonetized: monetizedTool?.payment ? true : false,
-                        // @ts-expect-error - TODO: fix this
-                        payment: monetizedTool?.payment
+                        payment: monetizedTool?.payment as Record<string, unknown> | undefined
                     })(tx)
 
                     if (monetizedTool?.payment) {
                         console.log('Creating pricing for tool:', tool.name)
+                        // Type the payment as the expected schema since we know it comes from user input
+                        const paymentInfo = monetizedTool.payment as ToolPaymentInfo
                         await txOperations.createToolPricing(
                             _tool.id,
                             {
-                                // @ts-expect-error - TODO: fix this
-                                price: monetizedTool.payment.maxAmountRequired,
-                                // @ts-expect-error - TODO: fix this
-                                currency: monetizedTool.payment.asset,
-                                // @ts-expect-error - TODO: fix this
-                                network: monetizedTool.payment.network,
-                                // @ts-expect-error - TODO: fix this
-                                assetAddress: monetizedTool.payment.asset,
+                                price: String(paymentInfo.maxAmountRequired || 0),
+                                currency: String(paymentInfo.asset || 'USDC'),
+                                network: String(paymentInfo.network || 'base-sepolia'),
+                                assetAddress: String(paymentInfo.asset || 'USDC'),
                             }
                         )(tx)
                     }
@@ -480,11 +522,11 @@ app.post('/servers', authMiddleware, async (c) => {
 
                 // Assign ownership of the server to the user
                 console.log('Assigning server ownership to user:', userId)
-                await txOperations.assignOwnership(server.id, userId, 'owner')(tx)
+                await txOperations.assignOwnership(serverRecord.id, userId, 'owner')(tx)
                 console.log('Server ownership assigned successfully')
 
                 console.log('Transaction completed successfully')
-                return server
+                return serverRecord
             })
 
             console.log('Server creation completed, returning response')
@@ -765,7 +807,7 @@ app.post('/proofs/:id/verify', async (c) => {
             timestamp: proof.executionTimestamp.getTime(),
             url: proof.executionUrl || undefined,
             method: proof.executionMethod as 'GET' | 'POST' || undefined,
-            headers: proof.executionHeaders ? (proof.executionHeaders as any).headers : undefined
+            headers: proof.executionHeaders ? (proof.executionHeaders as ExecutionHeaders).headers : undefined
         };
 
         // Re-verify using VLayer
@@ -1251,7 +1293,7 @@ app.get('/users/:userId/wallets/cdp/:accountId/balances', authMiddleware, async 
         }
 
         try {
-            const metadata = wallet.walletMetadata as any;
+            const metadata = wallet.walletMetadata as CDPWalletMetadata;
             const isSmartAccount = metadata?.isSmartAccount || false;
             const ownerAccountId = metadata?.ownerAccountId;
 
@@ -1334,8 +1376,8 @@ app.post('/users/:userId/wallets/cdp/ensure', authMiddleware, async (c) => {
                     id: w.id,
                     walletAddress: w.walletAddress,
                     isPrimary: w.isPrimary,
-                    isSmartAccount: (w.walletMetadata as any)?.isSmartAccount || false,
-                    network: (w.walletMetadata as any)?.cdpNetwork || 'base-sepolia'
+                    isSmartAccount: (w.walletMetadata as CDPWalletMetadata)?.isSmartAccount || false,
+                    network: (w.walletMetadata as CDPWalletMetadata)?.cdpNetwork || 'base-sepolia'
                 }))
             }, 201);
         } else {

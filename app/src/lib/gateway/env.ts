@@ -9,8 +9,7 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url('DATABASE_URL must be a valid URL'),
 
   // Authentication
-  BETTER_AUTH_SECRET: z.string().min(1, 'BETTER_AUTH_SECRET is required'),
-  CLIENT_AUTH_TRUSTED_ORIGINS: z.string().optional().transform((val) => val?.split(',') || []),
+  BETTER_AUTH_SECRET: z.string().min(1, 'BETTER_AUTH_SECRET is required'),  
   GITHUB_CLIENT_ID: z.string().min(1, 'GITHUB_CLIENT_ID is required'),
   GITHUB_CLIENT_SECRET: z.string().min(1, 'GITHUB_CLIENT_SECRET is required'),
 
@@ -97,9 +96,6 @@ export const getFacilitatorUrl = (network?: string): string => {
 // Helper for better-auth secret
 export const getBetterAuthSecret = (): string => env.BETTER_AUTH_SECRET;
 
-// Helper for safe array access
-export const getTrustedOrigins = (): string[] => env.CLIENT_AUTH_TRUSTED_ORIGINS;
-
 // Helper for database connection
 export const getDatabaseUrl = (): string => env.DATABASE_URL;
 
@@ -131,7 +127,6 @@ export const validateEnvironment = () => {
   if (isDevelopment()) {
     console.log('🔧 Running in development mode');
     console.log(`📊 Database: ${env.DATABASE_URL.split('@')[1] || 'local'}`);
-    console.log(`🌐 Trusted Origins: ${env.CLIENT_AUTH_TRUSTED_ORIGINS.length} origins`);
   }
 };
 

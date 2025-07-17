@@ -1,14 +1,13 @@
+import db from "@/lib/gateway/db";
+import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
+import * as schema from "@/lib/gateway/db/schema";
+import { getGitHubConfig } from "@/lib/gateway/env";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { randomUUID } from "crypto";
-import db from "@/lib/gateway/db";
-import * as schema from "@/lib/gateway/db/schema";
-import { getTrustedOrigins, getGitHubConfig } from "@/lib/gateway/env";
-import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
 
 
 export const auth = betterAuth({
-  trustedOrigins: getTrustedOrigins(),
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: {
