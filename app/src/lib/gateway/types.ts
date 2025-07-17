@@ -505,7 +505,7 @@ export type CreateHeaders = () => Promise<{
  * @param facilitator - The facilitator config to use. If not provided, the default facilitator will be used.
  * @returns An object containing verify and settle functions for interacting with the facilitator
  */
-export function useFacilitator(facilitator?: FacilitatorConfig) {
+export function createFacilitator(facilitator?: FacilitatorConfig) {
   /**
    * Verifies a payment payload with the facilitator service
    *
@@ -584,7 +584,7 @@ export function useFacilitator(facilitator?: FacilitatorConfig) {
   return { verify, settle };
 }
 
-export const { verify, settle } = useFacilitator();
+export const { verify, settle } = createFacilitator();
 
 /**
  * Converts an object to a JSON-safe format by converting bigint values to strings

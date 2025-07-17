@@ -24,7 +24,7 @@ import type { ERC20TokenAmount, Price, Resource } from "x402/types";
 import { moneySchema } from "x402/types";
 import type { Context } from "hono";
 import { PaymentPayloadSchema, safeBase64Decode, type SupportedNetwork, type PaymentPayload, type SupportedPaymentRequirements, type ExtendedPaymentRequirements } from "@/lib/gateway/types";
-import { useFacilitator } from "@/lib/gateway/types";
+import { createFacilitator } from "@/lib/gateway/types";
 import { getFacilitatorUrl } from "@/lib/gateway/env";
 
 /**
@@ -147,14 +147,13 @@ const DEFAULT_FACILITATOR_URL = getFacilitatorUrl("base-sepolia") as Resource;
 console.log(`[PAYMENTS] Facilitator URLs configured:`, FACILITATOR_URLS);
 
 // Create facilitator instances for each network
-const facilitatorInstances = new Map<SupportedNetwork, ReturnType<typeof useFacilitator>>();
+const facilitatorInstances = new Map<SupportedNetwork, ReturnType<typeof createFacilitator>>();
 
 function getFacilitatorForNetwork(network: SupportedNetwork) {
     if (!facilitatorInstances.has(network)) {
         const facilitatorUrl = FACILITATOR_URLS[network] || DEFAULT_FACILITATOR_URL;
         console.log(`[PAYMENTS] Creating facilitator instance for network ${network} with URL: ${facilitatorUrl}`);
-        // eslint-disable-next-line react-hooks/rules-of-hooks -- useFacilitator is not a React hook despite the naming
-        facilitatorInstances.set(network, useFacilitator({ url: facilitatorUrl }));
+        facilitatorInstances.set(network, createFacilitator({ url: facilitatorUrl }));
     }
     return facilitatorInstances.get(network)!;
 }
