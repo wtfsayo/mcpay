@@ -21,7 +21,7 @@ import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
 import { extractApiKeyFromHeaders, hashApiKey, isValidApiKeyFormat } from "@/lib/gateway/auth-utils";
 import { auth } from "@/lib/gateway/auth";
 import { createExactPaymentRequirements } from "@/lib/gateway/payments";
-import type { ExtendedPaymentRequirements } from "@/lib/gateway/types";
+import type { ExtendedPaymentRequirements, SupportedNetwork } from "@/lib/gateway/types";
 import { CDPSigningStrategy } from "@/lib/gateway/payment-strategies/cdp-strategy";
 import { getConfig, type PaymentStrategyConfig } from "@/lib/gateway/payment-strategies/config";
 
@@ -237,7 +237,7 @@ async function performAutoSigning(
     const paymentRequirements = [
         createExactPaymentRequirements(
             toolCall.payment.maxAmountRequired,
-            toolCall.payment.network as any,
+            toolCall.payment.network as SupportedNetwork,
             resourceUrl as `${string}://${string}`,
             toolCall.payment.description,
             payTo as `0x${string}`

@@ -202,7 +202,7 @@ export default function RegisterPage() {
 
       // Prepare enhanced result with complete tools data for the success page
       const enhancedResult = {
-        ...result,
+        ...(result as Record<string, unknown>),
         tools: completeToolsData
       }
 
@@ -234,7 +234,7 @@ export default function RegisterPage() {
     setToolsError("")
 
     try {
-      const fetchedTools: MCPTool[] = await api.getMcpTools(url)
+      const fetchedTools = await api.getMcpTools(url) as MCPTool[]
 
       if (!Array.isArray(fetchedTools)) {
         console.error("Fetched data is not an array:", fetchedTools)

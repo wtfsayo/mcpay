@@ -32,7 +32,7 @@ export function ConnectButton() {
   const currentNetwork = getNetworkByChainId(chainId) as Network
   const defaultNetwork: Network = 'base-sepolia'
   
-  const verification = verifyWalletConnection(isConnected, address, connector)
+  const verification = verifyWalletConnection(isConnected, address)
 
   // USDC addresses for supported networks
   const usdcAddresses: Record<Network, string> = {
