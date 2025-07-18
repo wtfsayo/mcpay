@@ -3,9 +3,7 @@
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
-import { AddressLink } from "./explorer-link"
-import { getNetworkByChainId, NETWORKS, type Network } from "@/lib/client/tokens"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
   isCoinbaseWalletConnector,
   isMetaMaskConnector,
@@ -13,9 +11,11 @@ import {
   switchToNetwork,
   verifyWalletConnection
 } from "@/lib/client/wallet-utils"
+import { getNetworkByChainId, NETWORKS, type Network } from "@/lib/commons"
 import { AlertTriangle, CheckCircle, ChevronDown, DollarSign, Loader2, LogOut, Wallet } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useAccount, useBalance, useChainId, useConnect, useDisconnect, type Connector } from "wagmi"
+import { AddressLink } from "./explorer-link"
 
 export function ConnectButton() {
   const [isLoading, setIsLoading] = useState(false)

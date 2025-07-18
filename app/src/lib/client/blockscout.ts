@@ -3,7 +3,7 @@
  * Supports different explorers for each network
  */
 
-import { NETWORKS, type Network } from './tokens'
+  import { NETWORKS, type Network } from '@/lib/commons'
 
 /**
  * Get the appropriate explorer URL for a network

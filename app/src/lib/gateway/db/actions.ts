@@ -47,7 +47,8 @@ import {
     users,
     userWallets,
     verification,
-    webhooks
+    webhooks,
+    type RevenueDetails
 } from "@/lib/gateway/db/schema";
 import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 
@@ -55,7 +56,7 @@ import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 export type TransactionType = Parameters<Parameters<typeof db['transaction']>[0]>[0];
 
 // Helper function to process revenue details from views into RevenueByCurrency format
-function processRevenueDetails(revenueDetails: any[]): { revenueByCurrency: RevenueByCurrency; totalRevenue: number } {
+function processRevenueDetails(revenueDetails: RevenueDetails): { revenueByCurrency: RevenueByCurrency; totalRevenue: number } {
     if (!revenueDetails || !Array.isArray(revenueDetails)) {
         return { revenueByCurrency: {}, totalRevenue: 0 };
     }

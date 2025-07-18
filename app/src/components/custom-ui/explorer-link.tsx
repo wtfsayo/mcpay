@@ -3,7 +3,7 @@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { openExplorer, copyExplorerUrl, getExplorerName, hasExplorer } from "@/lib/client/blockscout"
-import { type Network } from "@/lib/client/tokens"
+import { type Network } from "@/lib/commons"
 import { ExternalLink, Copy, Check } from "lucide-react"
 import { useState } from "react"
 

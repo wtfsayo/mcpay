@@ -14,7 +14,7 @@ import {
   getTokenInfo,
   NETWORKS,
   type Network
-} from "@/lib/client/tokens"
+} from "@/lib/commons"
 import { urlUtils } from "@/lib/client/utils"
 import { switchToNetwork } from "@/lib/client/wallet-utils"
 import { experimental_createMCPClient } from "ai"

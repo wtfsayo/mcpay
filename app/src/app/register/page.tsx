@@ -13,15 +13,14 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { openBlockscout } from "@/lib/client/blockscout"
-import { type Network, NETWORKS, getTokenInfo } from "@/lib/client/tokens"
 import { api } from "@/lib/client/utils"
-import { toBaseUnits } from "@/lib/utils/amounts"
+import { type Network, NETWORKS, getTokenInfo, toBaseUnits } from "@/lib/commons"
 import { AlertCircle, ArrowRight, BookOpen, CheckCircle, ExternalLink, Globe, Info, Loader2, Lock, RefreshCw, Server, Wallet, Zap } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useState } from "react"
 import { useAccount, useConnect, useDisconnect } from "wagmi"
 
-import { getNetworkByChainId } from "@/lib/client/tokens"
+import { getNetworkByChainId } from "@/lib/commons"
 import { useChainId } from "wagmi"
 
 interface MCPTool {

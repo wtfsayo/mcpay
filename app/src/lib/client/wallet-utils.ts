@@ -1,5 +1,5 @@
 import { type Connector } from 'wagmi'
-import { type Network, NETWORKS, getNetworkByChainId, type NetworkInfo } from './tokens'
+import { type Network, NETWORKS, getNetworkByChainId, type NetworkInfo } from '@/lib/commons'
 
 // Type definitions for wallet providers
 interface EthereumProvider {

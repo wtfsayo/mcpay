@@ -26,7 +26,17 @@
 import { sql } from "drizzle-orm";
 import { boolean, check, decimal, index, integer, jsonb, pgTable, pgView, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
-import type { BlockchainArchitecture } from "@/lib/gateway/crypto-accounts";
+import type { BlockchainArchitecture } from "@/lib/commons";
+
+// Type definitions for database view results
+export type RevenueDetail = {
+  currency: string;
+  network: string;
+  decimals: number;
+  amount_raw: string;
+};
+
+export type RevenueDetails = RevenueDetail[] | null;
 
 // Enhanced Users table - supporting both wallet and traditional auth
 export const users = pgTable('users', {
@@ -517,7 +527,7 @@ export const dailyServerAnalyticsView = pgView("daily_server_analytics").as((qb)
       errorCount: sql<number>`COUNT(DISTINCT CASE WHEN tool_usage.response_status NOT IN ('success', '200') THEN tool_usage.id END)`.as('error_count'),
       avgResponseTime: sql<number>`AVG(tool_usage.execution_time_ms)`.as('avg_response_time'),
       // Multi-currency revenue tracking using JSON arrays (no nested aggregation)
-      revenueDetails: sql<any>`
+      revenueDetails: sql<RevenueDetails>`
         JSON_AGG(
           JSONB_BUILD_OBJECT(
             'currency', payments.currency,
@@ -561,7 +571,7 @@ export const serverSummaryAnalyticsView = pgView("server_summary_analytics").as(
         END
       `.as('success_rate'),
       // Multi-currency revenue tracking using JSON arrays
-      revenueDetails: sql<any>`
+      revenueDetails: sql<RevenueDetails>`
         JSON_AGG(
           JSONB_BUILD_OBJECT(
             'currency', payments.currency,
@@ -615,7 +625,7 @@ export const globalAnalyticsView = pgView("global_analytics").as((qb) =>
       totalPayments: sql<number>`COUNT(DISTINCT CASE WHEN payments.status = 'completed' THEN payments.id END)`.as('total_payments'),
       avgResponseTime: sql<number>`AVG(tool_usage.execution_time_ms)`.as('avg_response_time'),
       // Multi-currency revenue tracking using JSON arrays
-      revenueDetails: sql<any>`
+      revenueDetails: sql<RevenueDetails>`
         JSON_AGG(
           JSONB_BUILD_OBJECT(
             'currency', payments.currency,
@@ -653,7 +663,7 @@ export const toolAnalyticsView = pgView("tool_analytics").as((qb) =>
       avgResponseTime: sql<number>`AVG(tool_usage.execution_time_ms)`.as('avg_response_time'),
       totalPayments: sql<number>`COUNT(DISTINCT CASE WHEN payments.status = 'completed' THEN payments.id END)`.as('total_payments'),
       // Multi-currency revenue tracking using JSON arrays
-      revenueDetails: sql<any>`
+      revenueDetails: sql<RevenueDetails>`
         JSON_AGG(
           JSONB_BUILD_OBJECT(
             'currency', payments.currency,
@@ -691,7 +701,7 @@ export const dailyActivityView = pgView("daily_activity").as((qb) =>
       totalPayments: sql<number>`COUNT(DISTINCT CASE WHEN payments.status = 'completed' THEN payments.id END)`.as('total_payments'),
       avgResponseTime: sql<number>`AVG(tool_usage.execution_time_ms)`.as('avg_response_time'),
       // Multi-currency daily revenue tracking using JSON arrays
-      revenueDetails: sql<any>`
+      revenueDetails: sql<RevenueDetails>`
         JSON_AGG(
           JSONB_BUILD_OBJECT(
             'currency', payments.currency,

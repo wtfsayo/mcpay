@@ -1,20 +1,21 @@
 "use client"
 
+import { AddressLink, TransactionLink } from "@/components/custom-ui/explorer-link"
+import { ToolExecutionModal } from "@/components/custom-ui/tool-execution-modal"
+import { useTheme } from "@/components/providers/theme-context"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useTheme } from "@/components/providers/theme-context"
-import { openExplorer, getExplorerName } from "@/lib/client/blockscout"
-import { AddressLink, TransactionLink } from "@/components/custom-ui/explorer-link"
+import { getExplorerName, openExplorer } from "@/lib/client/blockscout"
+import { api, urlUtils } from "@/lib/client/utils"
 import {
   formatTokenAmount,
+  fromBaseUnits,
   getTokenInfo,
   type Network
-} from "@/lib/client/tokens"
-import { api, urlUtils } from "@/lib/client/utils"
-import { fromBaseUnits } from "@/lib/utils/amounts"
+} from "@/lib/commons"
 import {
   Activity,
   AlertCircle,
@@ -39,7 +40,6 @@ import { useParams } from "next/navigation"
 import { useEffect, useState } from "react"
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { ToolExecutionModal } from "@/components/custom-ui/tool-execution-modal"
 
 // Types based on the database schema - matching the actual schema.ts structure
 interface ServerTool {

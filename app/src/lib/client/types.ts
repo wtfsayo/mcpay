@@ -64,4 +64,4 @@ export interface EnhancedServerRegistration {
 }
 
 // Re-export commonly used types from tokens
-export type { Network, TokenInfo, NetworkInfo } from './tokens'; 
+export type { Network, TokenInfo, NetworkInfo } from '@/lib/commons'; 
