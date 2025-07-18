@@ -184,7 +184,7 @@ export const api = {
     tools?: Array<{
       name: string
       payment?: {
-        maxAmountRequired: number
+        maxAmountRequired: string
         asset: string
         network: string
         resource?: string

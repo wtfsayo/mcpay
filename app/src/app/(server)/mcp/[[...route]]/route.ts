@@ -17,6 +17,8 @@ import { attemptAutoSign } from "@/lib/gateway/payment-strategies";
 import { createExactPaymentRequirements, decodePayment, settle, verifyPayment, x402Version } from "@/lib/gateway/payments";
 import { settleResponseHeader, type SupportedNetwork, type ExtendedPaymentRequirements } from "@/lib/gateway/types";
 import { handle } from "hono/vercel";
+// Add import for amounts utility
+import { fromBaseUnits } from "@/lib/utils/amounts";
 
 export const runtime = 'nodejs'
 
@@ -40,6 +42,15 @@ interface PaymentInfo {
     payTo?: string;
     resource: string;
     description: string;
+    // Optional pricing metadata when using tool_pricing table
+    _pricingInfo?: {
+        humanReadableAmount: string;
+        currency: string;
+        network: string;
+        tokenDecimals: number;
+        assetAddress?: string;
+        priceRaw: string; // Original base units from pricing table
+    };
 }
 
 // Define tool configuration type based on database query results
@@ -251,11 +262,50 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: ToolCall, body?:
                                 if (toolConfig) {
                                     toolId = toolConfig.id;
 
-                                    if (toolConfig.isMonetized && toolConfig.payment) {
-                                        isPaid = true;
-                                        paymentDetails = toolConfig.payment;
-                                        console.log('\x1b[33m%s\x1b[0m', `[${new Date().toISOString()}] Paid tool identified:`);
-                                        console.log('\x1b[33m%s\x1b[0m', `  Payment details: ${JSON.stringify(paymentDetails, null, 2)}`);
+                                    if (toolConfig.isMonetized) {
+                                        // Get active pricing from tool_pricing table
+                                        const activePricing = await withTransaction(async (tx) => {
+                                            return await txOperations.getActiveToolPricing(toolConfig.id)(tx);
+                                        });
+
+                                        if (activePricing && toolConfig.payment) {
+                                            isPaid = true;
+                                            
+                                            // Convert price from base units to human-readable amount
+                                            const humanReadableAmount = fromBaseUnits(
+                                                activePricing.priceRaw,
+                                                activePricing.tokenDecimals
+                                            );
+                                            
+                                            // Use the base payment structure from toolConfig.payment and override the amount
+                                            const basePayment = toolConfig.payment as PaymentInfo;
+                                            paymentDetails = {
+                                                ...basePayment,
+                                                // Use human-readable amount - createExactPaymentRequirements will convert to base units internally
+                                                maxAmountRequired: humanReadableAmount,
+                                                // Add pricing metadata for reference
+                                                _pricingInfo: {
+                                                    humanReadableAmount,
+                                                    currency: activePricing.currency,
+                                                    network: activePricing.network,
+                                                    tokenDecimals: activePricing.tokenDecimals,
+                                                    assetAddress: activePricing.assetAddress,
+                                                    priceRaw: activePricing.priceRaw // Keep original base units for reference
+                                                }
+                                            };
+                                            
+                                            console.log('\x1b[33m%s\x1b[0m', `[${new Date().toISOString()}] Paid tool identified:`);
+                                            console.log('\x1b[33m%s\x1b[0m', `  Human-readable amount: ${humanReadableAmount} ${activePricing.currency}`);
+                                            console.log('\x1b[33m%s\x1b[0m', `  Base units amount: ${activePricing.priceRaw}`);
+                                            console.log('\x1b[33m%s\x1b[0m', `  Token decimals: ${activePricing.tokenDecimals}`);
+                                            console.log('\x1b[33m%s\x1b[0m', `  Payment details: ${JSON.stringify(paymentDetails, null, 2)}`);
+                                        } else if (toolConfig.payment) {
+                                            // Fallback to legacy payment structure if no pricing table entry
+                                            isPaid = true;
+                                            paymentDetails = toolConfig.payment;
+                                            console.log('\x1b[33m%s\x1b[0m', `[${new Date().toISOString()}] Paid tool identified (legacy payment structure):`);
+                                            console.log('\x1b[33m%s\x1b[0m', `  Payment details: ${JSON.stringify(paymentDetails, null, 2)}`);
+                                        }
                                     }
                                 }
                             }
@@ -405,6 +455,40 @@ async function recordAnalytics(params: {
         
         // Update daily analytics using internal server ID
         const today = new Date();
+        
+        // Calculate converted revenue amount if payment was made
+        let convertedRevenue: number | undefined = undefined;
+        if (paymentAmount && toolCall.isPaid) {
+            // Get pricing information for accurate conversion
+            const activePricing = await txOperations.getActiveToolPricing(ensureString(toolCall.toolId))(tx);
+            if (activePricing) {
+                try {
+                    // Try to convert from base units to human-readable amount for analytics
+                    // Check if paymentAmount looks like base units (all digits) or human-readable (contains decimal)
+                    const isBaseUnits = /^\d+$/.test(paymentAmount);
+                    
+                    if (isBaseUnits) {
+                        // Convert from base units to human-readable amount
+                        const humanReadableAmount = fromBaseUnits(paymentAmount, activePricing.tokenDecimals);
+                        convertedRevenue = parseFloat(humanReadableAmount);
+                        console.log(`[${new Date().toISOString()}] Analytics: Recording revenue of ${humanReadableAmount} ${activePricing.currency} (base units: ${paymentAmount})`);
+                    } else {
+                        // Already in human-readable format
+                        convertedRevenue = parseFloat(paymentAmount);
+                        console.log(`[${new Date().toISOString()}] Analytics: Recording revenue of ${paymentAmount} ${activePricing.currency} (already human-readable)`);
+                    }
+                } catch (error) {
+                    // Fallback if conversion fails - treat as human-readable
+                    convertedRevenue = parseFloat(paymentAmount);
+                    console.log(`[${new Date().toISOString()}] Analytics: Revenue conversion failed, using amount as-is: ${paymentAmount} (error: ${error})`);
+                }
+            } else {
+                // Fallback: assume the paymentAmount is already in a reasonable format
+                convertedRevenue = parseFloat(paymentAmount);
+                console.log(`[${new Date().toISOString()}] Analytics: Recording revenue (no pricing data): ${convertedRevenue}`);
+            }
+        }
+        
         const analyticsData = {
             totalRequests: 1,
             userId: user?.id,
@@ -413,7 +497,7 @@ async function recordAnalytics(params: {
                 [ensureString(toolCall.toolId)]: 1 
             },
             ...(upstream.status >= 400 && { errorCount: 1 }),
-            ...(paymentAmount && { totalRevenue: parseFloat(paymentAmount) })
+            ...(convertedRevenue !== undefined && { totalRevenue: convertedRevenue })
         };
 
         await txOperations.updateOrCreateDailyAnalytics(
@@ -640,23 +724,41 @@ async function processPayment(params: {
         // Record successful payment in database
         if (toolCall.toolId && toolCall.serverId) {
             await withTransaction(async (tx) => {
-                // Create payment record
+                // Get pricing information for accurate decimals
+                const activePricing = await txOperations.getActiveToolPricing(ensureString(toolCall.toolId))(tx);
+                
+                // Use pricing table data if available, otherwise fallback to payment data
+                const currency = activePricing?.currency || paymentRequirement.asset;
+                const tokenDecimals = activePricing?.tokenDecimals || 6; // Default to USDC decimals if no pricing data
+                // Use original priceRaw from pricing table for database accuracy, fallback to converted amount
+                const amountRaw = activePricing?.priceRaw || paymentRequirement.maxAmountRequired || "0";
+                
                 const paymentRecord = await txOperations.createPayment({
                     toolId: ensureString(toolCall.toolId),
                     userId: extractedUser?.id,
-                    amount: paymentRequirement.maxAmountRequired || toolCall.payment?.maxAmountRequired || "0",
-                    currency: paymentRequirement.asset,
+                    amountRaw,
+                    tokenDecimals,
+                    currency,
                     network: paymentRequirement.network,
                     transactionHash: settleResponse.transaction || `unknown-${Date.now()}`,
                     status: 'completed',
                     signature: payment,
                     paymentData: {
                         decodedPayment,
-                        settleResponse
+                        settleResponse,
+                        // Include pricing metadata for reference
+                        pricingInfo: activePricing ? {
+                            priceRaw: activePricing.priceRaw,
+                            tokenDecimals: activePricing.tokenDecimals,
+                            currency: activePricing.currency,
+                            network: activePricing.network,
+                            assetAddress: activePricing.assetAddress
+                        } : undefined
                     }
                 })(tx);
                 
                 console.log(`[${new Date().toISOString()}] Payment recorded with ID: ${paymentRecord.id}`);
+                console.log(`[${new Date().toISOString()}] Payment amount: ${fromBaseUnits(amountRaw, tokenDecimals)} ${currency}`);
             });
         }
 
@@ -754,7 +856,10 @@ verbs.forEach(verb => {
                 upstream,
                 c,
                 responseData,
-                paymentAmount: toolCall.isPaid ? toolCall.payment?.maxAmountRequired : undefined
+                // Pass base units amount from pricing metadata if available, otherwise use the amount as-is
+                paymentAmount: toolCall.isPaid ? 
+                    (toolCall.payment?._pricingInfo?.priceRaw || toolCall.payment?.maxAmountRequired) : 
+                    undefined
             });
         }
 

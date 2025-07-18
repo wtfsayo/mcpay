@@ -1,3 +1,28 @@
+/**
+ * MCPay Database Schema
+ * 
+ * IMPORTANT - Amount Handling:
+ * All monetary amounts are stored as NUMERIC(38,0) containing base units (atomic units) 
+ * to avoid floating point precision issues while still allowing database operations.
+ * Each record includes token_decimals for self-sufficient amount reconstruction.
+ * 
+ * Examples:
+ * - 0.1 USDC: amount_raw = 100000, token_decimals = 6
+ * - 1.5 ETH: amount_raw = 1500000000000000000, token_decimals = 18
+ * 
+ * Use the utilities in @/lib/utils/amounts.ts for conversions:
+ * - toBaseUnits(humanAmount, decimals) -> baseUnits
+ * - fromBaseUnits(baseUnits, decimals) -> humanAmount
+ * - formatAmount(baseUnits, decimals, options) -> displayString
+ * 
+ * Tables with amount_raw + token_decimals:
+ * - toolPricing (price_raw, token_decimals)
+ * - payments (amount_raw, token_decimals)
+ * - analytics (total_revenue_raw, uses mixed currencies - handle in app layer)
+ * 
+ * Non-monetary decimals (avgResponseTime, confidenceScore) remain as DECIMAL.
+ */
+
 import { sql } from "drizzle-orm";
 import { boolean, check, decimal, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
@@ -163,8 +188,9 @@ export const mcpTools = pgTable('mcp_tools', {
 export const toolPricing = pgTable('tool_pricing', {
   id: uuid('id').primaryKey().defaultRandom(),
   toolId: uuid('tool_id').references(() => mcpTools.id, { onDelete: 'cascade' }).notNull(),
-  price: decimal('price', { precision: 18, scale: 8 }).notNull(),
-  currency: text('currency').notNull(),
+  priceRaw: decimal('price_raw', { precision: 38, scale: 0 }).notNull(), // Base units as NUMERIC(38,0)
+  tokenDecimals: integer('token_decimals').notNull(), // Token decimals for self-sufficient records
+  currency: text('currency').notNull(), // Token symbol or contract address
   network: text('network').notNull(),
   assetAddress: text('asset_address'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -175,7 +201,7 @@ export const toolPricing = pgTable('tool_pricing', {
   index('tool_pricing_active_idx').on(table.active),
   index('tool_pricing_network_idx').on(table.network),
   index('tool_pricing_tool_network_idx').on(table.toolId, table.network),
-  check('price_positive_check', sql`"price" >= 0`),
+  check('price_raw_positive_check', sql`"price_raw" >= 0`), // Can validate numeric values
 ]);
 
 export const toolUsage = pgTable('tool_usage', {
@@ -201,8 +227,9 @@ export const payments = pgTable('payments', {
   id: uuid('id').primaryKey().defaultRandom(),
   toolId: uuid('tool_id').references(() => mcpTools.id).notNull(),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
-  amount: decimal('amount', { precision: 18, scale: 8 }).notNull(),
-  currency: text('currency').notNull(),
+  amountRaw: decimal('amount_raw', { precision: 38, scale: 0 }).notNull(), // Base units as NUMERIC(38,0)
+  tokenDecimals: integer('token_decimals').notNull(), // Token decimals for self-sufficient records
+  currency: text('currency').notNull(), // Token symbol or contract address
   network: text('network').notNull(),
   transactionHash: text('transaction_hash').unique(),
   status: text('status').default('pending').notNull(),
@@ -217,7 +244,7 @@ export const payments = pgTable('payments', {
   index('payment_created_at_idx').on(table.createdAt),
   index('payment_network_idx').on(table.network),
   index('payment_tool_user_idx').on(table.toolId, table.userId),
-  check('amount_positive_check', sql`"amount" >= 0`),
+  check('amount_raw_positive_check', sql`"amount_raw" >= 0`), // Can validate numeric values
 ]);
 
 export const serverOwnership = pgTable('server_ownership', {
@@ -257,9 +284,13 @@ export const analytics = pgTable('analytics', {
   serverId: uuid('server_id').references(() => mcpServers.id, { onDelete: 'cascade' }).notNull(),
   date: timestamp('date').notNull(),
   totalRequests: integer('total_requests').default(0).notNull(),
-  totalRevenue: decimal('total_revenue', { precision: 18, scale: 8 }).default('0').notNull(),
+  // DEPRECATED: Single currency aggregation - use revenueByCurrency instead
+  totalRevenueRaw: decimal('total_revenue_raw', { precision: 38, scale: 0 }).default('0').notNull(),
+  // Multi-currency revenue tracking: { "USDC-6": "1000000", "ETH-18": "500000000000000000" }
+  // Format: { "[CURRENCY]-[DECIMALS]": "amount_in_base_units" }
+  revenueByCurrency: jsonb('revenue_by_currency'),
   uniqueUsers: integer('unique_users').default(0).notNull(),
-  avgResponseTime: decimal('avg_response_time', { precision: 10, scale: 2 }),
+  avgResponseTime: decimal('avg_response_time', { precision: 10, scale: 2 }), // Keep as decimal for response time
   toolUsage: jsonb('tool_usage'),
   errorCount: integer('error_count').default(0).notNull(),
   userIdsList: jsonb('user_ids_list'),

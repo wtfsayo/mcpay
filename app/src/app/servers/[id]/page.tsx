@@ -14,6 +14,7 @@ import {
   type Network
 } from "@/lib/client/tokens"
 import { api, urlUtils } from "@/lib/client/utils"
+import { fromBaseUnits, formatAmount } from "@/lib/utils/amounts"
 import {
   Activity,
   AlertCircle,
@@ -40,8 +41,8 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { ToolExecutionModal } from "@/components/custom-ui/tool-execution-modal"
 
-// Types based on the API response structure
-interface Tool {
+// Types based on the database schema - matching the actual schema.ts structure
+interface ServerTool {
   id: string
   name: string
   description: string
@@ -54,17 +55,20 @@ interface Tool {
   updatedAt: string
   pricing: Array<{
     id: string
-    price: string
-    currency: string
+    priceRaw: string // Base units as string (from NUMERIC(38,0))
+    tokenDecimals: number // Decimals for the token
+    currency: string // Token symbol or contract address
     network: string
-    assetAddress: string
+    assetAddress?: string
     active: boolean
     createdAt: string
+    updatedAt: string
   }>
   payments: Array<{
     id: string
-    amount: string
-    currency: string
+    amountRaw: string // Base units as string (from NUMERIC(38,0))
+    tokenDecimals: number // Decimals for the token
+    currency: string // Token symbol or contract address
     network: string
     status: string
     createdAt: string
@@ -72,33 +76,36 @@ interface Tool {
     transactionHash?: string
     user: {
       id: string
-      walletAddress: string
-      displayName: string
+      walletAddress?: string
+      displayName?: string
+      name?: string
     }
   }>
   usage: Array<{
     id: string
     timestamp: string
-    responseStatus: string
+    responseStatus?: string
     executionTimeMs?: number
     user: {
       id: string
-      walletAddress: string
-      displayName: string
+      walletAddress?: string
+      displayName?: string
+      name?: string
     }
   }>
   proofs: Array<{
     id: string
     isConsistent: boolean
-    confidenceScore: string
+    confidenceScore: string // Decimal as string
     status: string
     verificationType: string
     createdAt: string
     webProofPresentation?: string
     user: {
       id: string
-      walletAddress: string
-      displayName: string
+      walletAddress?: string
+      displayName?: string
+      name?: string
     }
   }>
 }
@@ -106,29 +113,32 @@ interface Tool {
 interface ServerData {
   id: string
   serverId: string
-  name: string
+  name?: string
   mcpOrigin: string
   receiverAddress: string
-  description: string
+  description?: string
   metadata?: Record<string, unknown>
   status: string
   createdAt: string
   updatedAt: string
   creator: {
     id: string
-    walletAddress: string
-    displayName: string
+    walletAddress?: string
+    displayName?: string
+    name?: string
     avatarUrl?: string
+    image?: string // From better-auth
   }
-  tools: Tool[]
+  tools: ServerTool[]
   analytics: Array<{
     id: string
     date: string
     totalRequests: number
-    totalRevenue: string
+    totalRevenueRaw: string // Deprecated - base units as string
+    revenueByCurrency?: Record<string, string> // New multi-currency format: { "USDC-6": "1000000" }
     uniqueUsers: number
-    avgResponseTime?: string
-    toolUsage: Record<string, number>
+    avgResponseTime?: string // Decimal as string
+    toolUsage?: Record<string, number>
     errorCount: number
   }>
   ownership: Array<{
@@ -138,20 +148,23 @@ interface ServerData {
     active: boolean
     user: {
       id: string
-      walletAddress: string
-      displayName: string
+      walletAddress?: string
+      displayName?: string
+      name?: string
       avatarUrl?: string
+      image?: string
     }
     grantedByUser?: {
       id: string
-      walletAddress: string
-      displayName: string
+      walletAddress?: string
+      displayName?: string
+      name?: string
     }
   }>
   proofs: Array<{
     id: string
     isConsistent: boolean
-    confidenceScore: string
+    confidenceScore: string // Decimal as string
     status: string
     verificationType: string
     createdAt: string
@@ -162,15 +175,16 @@ interface ServerData {
     }
     user: {
       id: string
-      walletAddress: string
-      displayName: string
+      walletAddress?: string
+      displayName?: string
+      name?: string
     }
   }>
   stats: {
     totalTools: number
     monetizedTools: number
     totalPayments: number
-    totalRevenue: number
+    totalRevenue: number // Computed value in USD
     totalUsage: number
     totalProofs: number
     consistentProofs: number
@@ -188,7 +202,7 @@ export default function ServerDashboard() {
   const [serverData, setServerData] = useState<ServerData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedTool, setSelectedTool] = useState<Tool | null>(null)
+  const [selectedTool, setSelectedTool] = useState<any | null>(null) // Use any to handle converted tool format
   const [showToolModal, setShowToolModal] = useState(false)
   const [activeTab, setActiveTab] = useState("overview")
   const [markdownCopied, setMarkdownCopied] = useState(false)
@@ -358,8 +372,20 @@ await client.connect(transport)
     navigator.clipboard.writeText(text)
   }
 
-  const handleToolExecution = (tool: Tool) => {
-    setSelectedTool(tool)
+  const handleToolExecution = (tool: ServerTool) => {
+    // Convert ServerTool to the Tool format expected by ToolExecutionModal
+    const convertedTool = {
+      ...tool,
+      pricing: tool.pricing.map(p => ({
+        id: p.id,
+        price: fromBaseUnits(p.priceRaw, p.tokenDecimals),
+        currency: p.currency,
+        network: p.network,
+        assetAddress: p.assetAddress || '',
+        active: p.active
+      }))
+    };
+    setSelectedTool(convertedTool as any)
     setShowToolModal(true)
   }
 
@@ -371,12 +397,13 @@ await client.connect(transport)
     if (network) {
       const tokenInfo = getTokenInfo(currency, network as Network)
       if (tokenInfo) {
-        // Use our awesome token registry formatting
+        // Use formatTokenAmount for precise formatting
+        // Since we already have human-readable amounts, pass them directly
         return formatTokenAmount(num, currency, network as Network, {
           showSymbol: true,
           precision: tokenInfo.isStablecoin ? 2 : 4,
           compact: num >= 1000
-        })
+        });
       }
     }
 
@@ -432,17 +459,6 @@ await client.connect(transport)
             </span>
           )}
         </div>
-
-        {/* Stablecoin Badge */}
-        {tokenInfo?.isStablecoin && (
-          <Badge
-            variant="outline"
-            className={`text-xs ${isDark ? "border-blue-500 text-blue-400" : "border-blue-600 text-blue-600"
-              }`}
-          >
-            Stable
-          </Badge>
-        )}
       </div>
     )
   }
@@ -689,7 +705,7 @@ await client.connect(transport)
                     {serverData.creator.avatarUrl ? (
                       <Image
                         src={serverData.creator.avatarUrl}
-                        alt={serverData.creator.displayName}
+                        alt={serverData.creator.displayName || serverData.creator.name || ''}
                         width={40}
                         height={40}
                         className="w-10 h-10 rounded-full"
@@ -699,13 +715,13 @@ await client.connect(transport)
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{serverData.creator.displayName}</div>
+                    <div className="font-medium truncate">{serverData.creator.displayName || serverData.creator.name}</div>
                     <button
-                      onClick={() => openExplorer(serverData.creator.walletAddress, 'base-sepolia')}
+                      onClick={() => openExplorer(serverData.creator.walletAddress || '', 'base-sepolia')}
                       className={`text-xs hover:underline font-mono ${isDark ? "text-gray-400 hover:text-gray-300" : "text-gray-600 hover:text-gray-700"}`}
-                      title={serverData.creator.walletAddress}
+                      title={serverData.creator.walletAddress || ''}
                     >
-                      {serverData.creator.walletAddress.slice(0, 6)}...{serverData.creator.walletAddress.slice(-4)}
+                      {serverData.creator.walletAddress?.slice(0, 6)}...{serverData.creator.walletAddress?.slice(-4)}
                     </button>
                   </div>
                 </div>
@@ -774,7 +790,7 @@ await client.connect(transport)
                       variant="outline"
                       onClick={() => copyToClipboard(JSON.stringify({
                         "mcpServers": {
-                          [serverData.name]: {
+                          [serverData.name || 'server-name']: {
                             "command": "npx",
                             "args": [
                               "mcpay",
@@ -801,7 +817,7 @@ await client.connect(transport)
                   >
                     {JSON.stringify({
                       "mcpServers": {
-                        [serverData.name]: {
+                        [serverData.name || 'server-name']: {
                           "command": "npx",
                           "args": [
                             "mcpay",
@@ -1127,7 +1143,7 @@ await client.connect(transport)`}
                           <TokenDisplay
                             currency={tool.pricing[0].currency}
                             network={tool.pricing[0].network}
-                            amount={tool.pricing[0].price}
+                            amount={fromBaseUnits(tool.pricing[0].priceRaw, tool.pricing[0].tokenDecimals)}
                           />
                         ) : (
                           <span className={isDark ? "text-gray-400" : "text-gray-500"}>Free</span>
@@ -1202,7 +1218,7 @@ await client.connect(transport)`}
                         </span>
                         <div className="flex items-center gap-4 text-sm">
                           <span>{day.totalRequests} requests</span>
-                          <span className="text-green-500">${parseFloat(day.totalRevenue).toFixed(2)}</span>
+                          <span className="text-green-500">${parseFloat(day.totalRevenueRaw).toFixed(2)}</span>
                           <span>{day.uniqueUsers} users</span>
                         </div>
                       </div>
@@ -1243,11 +1259,11 @@ await client.connect(transport)`}
                               <p className="text-sm font-medium">{proof.tool.name}</p>
                               <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                                 <button
-                                  onClick={() => openExplorer(proof.user.walletAddress, 'base-sepolia')}
+                                  onClick={() => openExplorer(proof.user.walletAddress || '', 'base-sepolia')}
                                   className={`hover:underline ${isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-700"}`}
                                   title={`View address on ${getExplorerName('base-sepolia')}`}
                                 >
-                                  {proof.user.displayName}
+                                  {proof.user.displayName || proof.user.name}
                                 </button>
                                 {" • "}
                                 {formatDate(proof.createdAt)}
@@ -1325,16 +1341,16 @@ await client.connect(transport)`}
                             <TokenDisplay
                               currency={payment.currency}
                               network={payment.network}
-                              amount={payment.amount}
+                              amount={fromBaseUnits(payment.amountRaw, payment.tokenDecimals)}
                             />
                           </TableCell>
                           <TableCell>
                             <AddressLink
-                              address={payment.user.walletAddress}
+                              address={payment.user.walletAddress || ''}
                               network={payment.network as Network}
                               className="text-sm"
                             >
-                              {payment.user.displayName}
+                              {payment.user.displayName || payment.user.name || "No name"}
                             </AddressLink>
                           </TableCell>
                           <TableCell>

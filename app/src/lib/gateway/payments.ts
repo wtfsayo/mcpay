@@ -5,6 +5,8 @@
  * using network-specific facilitators. Each network can have its own facilitator URL configured
  * via environment variables.
  * 
+ * Updated to use precise amount handling with NUMERIC(38,0) base units and proper conversions.
+ * 
  * Supported Networks:
  * - base-sepolia: Base testnet (default)
  * - sei-testnet: Sei testnet
@@ -26,9 +28,10 @@ import type { Context } from "hono";
 import { PaymentPayloadSchema, safeBase64Decode, type SupportedNetwork, type PaymentPayload, type SupportedPaymentRequirements, type ExtendedPaymentRequirements } from "@/lib/gateway/types";
 import { createFacilitator } from "@/lib/gateway/types";
 import { getFacilitatorUrl } from "@/lib/gateway/env";
+import { toBaseUnits } from "@/lib/utils/amounts";
 
 /**
- * Parses the amount from the given price
+ * Parses the amount from the given price using precise arithmetic
  *
  * @param price - The price to parse
  * @param network - The network to get the default asset for
@@ -43,18 +46,27 @@ export function processPriceToAtomicAmount(
     let asset: ERC20TokenAmount["asset"];
 
     if (typeof price === "string" || typeof price === "number") {
-        // USDC amount in dollars
+        // USDC amount in dollars - use precise conversion
         const parsedAmount = moneySchema.safeParse(price);
         if (!parsedAmount.success) {
             return {
                 error: `Invalid price (price: ${price}). Must be in the form "$3.10", 0.10, "0.001", ${parsedAmount.error}`,
             };
         }
-        const parsedUsdAmount = parsedAmount.data;
-        asset = getDefaultAsset(network);
-        maxAmountRequired = (parsedUsdAmount * 10 ** asset.decimals).toString();
+        
+        try {
+            const parsedUsdAmount = parsedAmount.data;
+            asset = getDefaultAsset(network);
+            
+            // Use precise BigInt-based conversion instead of floating point arithmetic
+            maxAmountRequired = toBaseUnits(parsedUsdAmount.toString(), asset.decimals);
+        } catch (error) {
+            return {
+                error: `Failed to convert amount ${parsedAmount.data} to base units: ${error}`,
+            };
+        }
     } else {
-        // Token amount in atomic units
+        // Token amount already in atomic units
         maxAmountRequired = price.amount;
         asset = price.asset;
     }

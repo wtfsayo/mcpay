@@ -42,7 +42,7 @@ interface CDPWalletMetadata {
 
 // Interface for payment information from tools
 interface ToolPaymentInfo {
-    maxAmountRequired: number;
+    maxAmountRequired: string; // Base units as string for precision
     asset: string;
     network: string;
     resource?: string;
@@ -508,11 +508,17 @@ app.post('/servers', authMiddleware, async (c) => {
                         console.log('Creating pricing for tool:', tool.name)
                         // Type the payment as the expected schema since we know it comes from user input
                         const paymentInfo = monetizedTool.payment as ToolPaymentInfo
+                        // Import token utilities to get decimals
+                        const { COMMON_DECIMALS } = await import('@/lib/utils/amounts');
+                        const currency = String(paymentInfo.asset || 'USDC');
+                        const tokenDecimals = COMMON_DECIMALS[currency as keyof typeof COMMON_DECIMALS] || 6; // Default to USDC decimals
+                        
                         await txOperations.createToolPricing(
                             _tool.id,
                             {
-                                price: String(paymentInfo.maxAmountRequired || 0),
-                                currency: String(paymentInfo.asset || 'USDC'),
+                                priceRaw: String(paymentInfo.maxAmountRequired || 0),
+                                tokenDecimals,
+                                currency,
                                 network: String(paymentInfo.network || 'base-sepolia'),
                                 assetAddress: String(paymentInfo.asset || 'USDC'),
                             }

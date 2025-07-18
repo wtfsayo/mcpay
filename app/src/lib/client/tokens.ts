@@ -366,7 +366,13 @@ export const isValidToken = (address: string, network: Network): boolean => {
 };
 
 /**
- * Format token amount with proper decimals
+ * Format token amount with proper decimals using precise arithmetic
+ * 
+ * @param amount - Amount in base units (string/number/bigint)
+ * @param tokenAddress - Token contract address or symbol
+ * @param network - Network the token is on
+ * @param options - Formatting options
+ * @returns Formatted amount string
  */
 export const formatTokenAmount = (
   amount: string | number | bigint,
@@ -383,34 +389,40 @@ export const formatTokenAmount = (
 
   const { showSymbol = true, precision, compact = false } = options;
   
-  // Convert to number for formatting
-  const numAmount = typeof amount === 'bigint' 
-    ? Number(amount) / Math.pow(10, token.decimals)
-    : typeof amount === 'string'
-    ? parseFloat(amount)
-    : amount;
-
-  // Determine precision
-  const decimals = precision ?? (token.isStablecoin ? 2 : 4);
-  
-  // Format number
-  let formatted = numAmount.toFixed(decimals);
-  
-  // Remove trailing zeros
-  formatted = formatted.replace(/\.?0+$/, '');
-  
-  // Compact notation for large numbers
-  if (compact && numAmount >= 1000) {
-    const suffixes = ['', 'K', 'M', 'B', 'T'];
-    const tier = Math.log10(Math.abs(numAmount)) / 3 | 0;
-    if (tier > 0) {
-      const scale = Math.pow(10, tier * 3);
-      const scaled = numAmount / scale;
-      formatted = scaled.toFixed(1).replace(/\.0$/, '') + suffixes[tier];
+  try {
+    // Import the precise formatting function
+    const { formatAmount } = require('@/lib/utils/amounts');
+    
+    // Convert amount to base units string
+    let baseUnits: string;
+    if (typeof amount === 'bigint') {
+      baseUnits = amount.toString();
+    } else if (typeof amount === 'number') {
+      // If it's already a human-readable number, convert to base units first
+      const { toBaseUnits } = require('@/lib/utils/amounts');
+      baseUnits = toBaseUnits(amount.toString(), token.decimals);
+    } else {
+      // Assume it's already base units as string
+      baseUnits = amount;
     }
+    
+    // Determine precision
+    const finalPrecision = precision ?? (token.isStablecoin ? 2 : 4);
+    
+    // Use our precise formatting function
+    return formatAmount(baseUnits, token.decimals, {
+      symbol: showSymbol ? token.symbol : undefined,
+      precision: finalPrecision,
+      compact,
+      showSymbol
+    });
+    
+  } catch (error) {
+    // Fallback to simple string representation if formatting fails
+    console.warn('Failed to format token amount:', error);
+    const fallback = amount.toString();
+    return showSymbol ? `${fallback} ${token.symbol}` : fallback;
   }
-
-  return showSymbol ? `${formatted} ${token.symbol}` : formatted;
 };
 
 /**

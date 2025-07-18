@@ -52,7 +52,7 @@ export interface EnhancedServerRegistration {
   tools?: Array<{
     name: string;
     payment?: {
-      maxAmountRequired: number;
+      maxAmountRequired: string; // Base units as string for precision
       asset: string;
       network: string;
       resource?: string;

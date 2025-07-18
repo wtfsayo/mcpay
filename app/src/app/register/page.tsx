@@ -2,26 +2,27 @@
 
 import type React from "react"
 
-import { useState, useEffect, useCallback } from "react"
-import { Card, CardContent } from "@/components/ui/card"
+import { ConnectButton } from "@/components/custom-ui/connect-button"
+import { useTheme } from "@/components/providers/theme-context"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
+import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import { Badge } from "@/components/ui/badge"
-import { Server, Globe, CheckCircle, Loader2, Wallet, RefreshCw, AlertCircle, Lock, Info, ExternalLink, BookOpen, Zap, ArrowRight } from "lucide-react"
-import { useAccount, useConnect, useDisconnect } from "wagmi"
-import { api } from "@/lib/client/utils"
-import { useTheme } from "@/components/providers/theme-context"
-import { ConnectButton } from "@/components/custom-ui/connect-button"
+import { Textarea } from "@/components/ui/textarea"
 import { openBlockscout } from "@/lib/client/blockscout"
+import { type Network, NETWORKS, getTokenInfo } from "@/lib/client/tokens"
+import { api } from "@/lib/client/utils"
+import { toBaseUnits } from "@/lib/utils/amounts"
+import { AlertCircle, ArrowRight, BookOpen, CheckCircle, ExternalLink, Globe, Info, Loader2, Lock, RefreshCw, Server, Wallet, Zap } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { type Network, NETWORKS } from "@/lib/client/tokens"
+import { useCallback, useEffect, useState } from "react"
+import { useAccount, useConnect, useDisconnect } from "wagmi"
 
-import { useChainId } from "wagmi"
 import { getNetworkByChainId } from "@/lib/client/tokens"
+import { useChainId } from "wagmi"
 
 interface MCPTool {
   name: string
@@ -135,13 +136,17 @@ export default function RegisterPage() {
       const paymentTokenAddress = selectedPaymentToken || defaultPaymentTokens[selectedNetwork] || 
         '0x0000000000000000000000000000000000000000' // fallback to native token
 
-      // Prepare tools data with payment information
+      // Get token info for decimal conversion
+      const tokenInfo = getTokenInfo(paymentTokenAddress, selectedNetwork)
+      const tokenDecimals = tokenInfo?.decimals || 18 // Default to 18 for native tokens
+
+      // Prepare tools data with payment information - convert prices to base units as strings
       const toolsWithPayment = tools
         .filter(tool => tool.price && parseFloat(tool.price) > 0)
         .map(tool => ({
           name: tool.name,
           payment: {
-            maxAmountRequired: parseFloat(tool.price || "0"),
+            maxAmountRequired: toBaseUnits(tool.price || "0", tokenDecimals), // Convert to base units as string
             asset: paymentTokenAddress,
             network: selectedNetwork,
             resource: `tool://${tool.name}`,
@@ -158,7 +163,7 @@ export default function RegisterPage() {
         price: tool.price,
         ...(tool.price && parseFloat(tool.price) > 0 && {
           payment: {
-            maxAmountRequired: parseFloat(tool.price || "0"),
+            maxAmountRequired: toBaseUnits(tool.price || "0", tokenDecimals), // Convert to base units as string
             asset: paymentTokenAddress,
             network: selectedNetwork,
             resource: `tool://${tool.name}`,

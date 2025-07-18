@@ -43,6 +43,12 @@ import {
 } from "@/lib/gateway/db/schema";
 import { createCDPAccount } from '@/lib/gateway/3rd-parties/cdp';
 import { getBlockchainArchitecture, type BlockchainArchitecture } from '@/lib/gateway/crypto-accounts';
+import {
+    addRevenueToCurrency,
+    mergeRevenueByCurrency,
+    formatRevenueByCurrency,
+    type RevenueByCurrency
+} from '@/lib/utils/amounts';
 
 // Define proper transaction type
 export type TransactionType = Parameters<Parameters<typeof db['transaction']>[0]>[0];
@@ -166,7 +172,8 @@ export const txOperations = {
                             where: eq(toolPricing.active, true),
                             columns: {
                                 id: true,
-                                price: true,
+                                priceRaw: true,
+                                tokenDecimals: true,
                                 currency: true,
                                 network: true,
                                 assetAddress: true,
@@ -177,7 +184,8 @@ export const txOperations = {
                         payments: {
                             columns: {
                                 id: true,
-                                amount: true,
+                                amountRaw: true,
+                                tokenDecimals: true,
                                 currency: true,
                                 network: true,
                                 status: true,
@@ -246,7 +254,7 @@ export const txOperations = {
                         id: true,
                         date: true,
                         totalRequests: true,
-                        totalRevenue: true,
+                        totalRevenueRaw: true,
                         uniqueUsers: true,
                         avgResponseTime: true,
                         toolUsage: true,
@@ -401,7 +409,8 @@ export const txOperations = {
                             where: eq(payments.status, 'completed'),
                             columns: {
                                 id: true,
-                                amount: true,
+                                amountRaw: true,
+                                tokenDecimals: true,
                                 currency: true,
                                 userId: true,
                                 createdAt: true
@@ -429,7 +438,7 @@ export const txOperations = {
             // Calculate metrics
             const totalPayments = allPayments.length;
             const totalRevenue = allPayments.reduce((sum, payment) => 
-                sum + parseFloat(payment.amount), 0
+                sum + parseFloat(payment.amountRaw), 0
             );
             const totalUsage = allUsage.length;
             const successfulUsage = allUsage.filter(usage => 
@@ -558,7 +567,8 @@ export const txOperations = {
                             where: eq(payments.status, 'completed'),
                             columns: {
                                 id: true,
-                                amount: true,
+                                amountRaw: true,
+                                tokenDecimals: true,
                                 currency: true,
                                 userId: true,
                                 createdAt: true
@@ -633,13 +643,14 @@ export const txOperations = {
                         with: {
                             payments: {
                                 where: eq(payments.status, 'completed'),
-                                columns: {
-                                    id: true,
-                                    amount: true,
-                                    currency: true,
-                                    userId: true,
-                                    createdAt: true
-                                }
+                                                            columns: {
+                                id: true,
+                                amountRaw: true,
+                                tokenDecimals: true,
+                                currency: true,
+                                userId: true,
+                                createdAt: true
+                            }
                             },
                             usage: {
                                 columns: {
@@ -689,7 +700,7 @@ export const txOperations = {
             
             const totalPayments = allPayments.length;
             const totalRevenue = allPayments.reduce((sum: number, payment) => 
-                sum + parseFloat(payment.amount), 0
+                sum + parseFloat(payment.amountRaw), 0
             );
             const totalUsage = allUsage.length;
             const successfulUsage = allUsage.filter((usage) => 
@@ -1624,16 +1635,16 @@ export const txOperations = {
 
     // Tool Pricing
     createToolPricing: (toolId: string, data: {
-        price: string | number;
+        priceRaw: string; // Base units as string (e.g., "100000" for 0.1 USDC)
+        tokenDecimals: number; // Token decimals (e.g., 6 for USDC)
         currency: string;
         network: string;
         assetAddress?: string;
     }) => async (tx: TransactionType) => {
-        const price = typeof data.price === 'number' ? data.price.toString() : data.price;
-
         const pricing = await tx.insert(toolPricing).values({
             toolId,
-            price,
+            priceRaw: data.priceRaw,
+            tokenDecimals: data.tokenDecimals,
             currency: data.currency,
             network: data.network,
             assetAddress: data.assetAddress,
@@ -1676,7 +1687,8 @@ export const txOperations = {
     createPayment: (data: {
         toolId: string;
         userId?: string;
-        amount: string | number;
+        amountRaw: string; // Base units as string (e.g., "100000" for 0.1 USDC)
+        tokenDecimals: number; // Token decimals (e.g., 6 for USDC)
         currency: string;
         network: string;
         transactionHash?: string;
@@ -1684,12 +1696,11 @@ export const txOperations = {
         signature?: string;
         paymentData?: Record<string, unknown>;
     }) => async (tx: TransactionType) => {
-        const amountStr = typeof data.amount === 'number' ? data.amount.toString() : data.amount;
-
         const result = await tx.insert(payments).values({
             toolId: data.toolId,
             userId: data.userId,
-            amount: amountStr,
+            amountRaw: data.amountRaw,
+            tokenDecimals: data.tokenDecimals,
             currency: data.currency,
             network: data.network,
             transactionHash: data.transactionHash,
@@ -1907,7 +1918,7 @@ export const txOperations = {
             serverId,
             date: startOfDay,
             totalRequests: data?.totalRequests ?? 0,
-            totalRevenue: data?.totalRevenue ? data.totalRevenue.toString() : '0',
+            totalRevenueRaw: data?.totalRevenue ? data.totalRevenue.toString() : '0',
             uniqueUsers: data?.uniqueUsers ?? 0,
             errorCount: data?.errorCount ?? 0,
             ...(data?.avgResponseTime !== undefined ? { avgResponseTime: data.avgResponseTime.toString() } : {}),
@@ -1923,7 +1934,10 @@ export const txOperations = {
         date: Date,
         data: {
             totalRequests?: number;
-            totalRevenue?: number;
+            totalRevenue?: number; // DEPRECATED: Use revenueByCurrency instead
+            revenueByCurrency?: RevenueByCurrency;
+            currency?: string; // For single currency updates (will be converted to revenueByCurrency)
+            decimals?: number; // Token decimals for single currency updates
             uniqueUsers?: number;
             avgResponseTime?: number;
             toolUsage?: Record<string, unknown>;
@@ -1944,7 +1958,8 @@ export const txOperations = {
         if (existing) {
             // Initialize updated data with existing values
             let updatedTotalRequests = existing.totalRequests;
-            let updatedTotalRevenue = existing.totalRevenue;
+            let updatedTotalRevenue = existing.totalRevenueRaw;
+            let updatedRevenueByCurrency = existing.revenueByCurrency as RevenueByCurrency || {};
             let updatedUniqueUsers = existing.uniqueUsers;
             let updatedAvgResponseTime = existing.avgResponseTime;
             let updatedErrorCount = existing.errorCount;
@@ -1956,7 +1971,20 @@ export const txOperations = {
                 updatedTotalRequests += data.totalRequests;
             }
 
-            if (data.totalRevenue !== undefined) {
+            // Handle revenue updates with proper multi-currency support
+            if (data.revenueByCurrency) {
+                updatedRevenueByCurrency = mergeRevenueByCurrency(updatedRevenueByCurrency, data.revenueByCurrency);
+            } else if (data.totalRevenue !== undefined && data.currency && data.decimals !== undefined) {
+                // Convert single currency update to multi-currency format
+                const amountRaw = data.totalRevenue.toString();
+                updatedRevenueByCurrency = addRevenueToCurrency(
+                    updatedRevenueByCurrency,
+                    data.currency,
+                    data.decimals,
+                    amountRaw
+                );
+            } else if (data.totalRevenue !== undefined) {
+                // DEPRECATED: Fall back to old totalRevenueRaw for backward compatibility
                 updatedTotalRevenue = (parseFloat(updatedTotalRevenue) + data.totalRevenue).toString();
             }
 
@@ -1994,7 +2022,8 @@ export const txOperations = {
 
             const dbData = {
                 totalRequests: updatedTotalRequests,
-                totalRevenue: updatedTotalRevenue,
+                totalRevenueRaw: updatedTotalRevenue, // Keep for backward compatibility
+                revenueByCurrency: updatedRevenueByCurrency,
                 uniqueUsers: updatedUniqueUsers,
                 avgResponseTime: updatedAvgResponseTime,
                 errorCount: updatedErrorCount,
@@ -2012,12 +2041,33 @@ export const txOperations = {
             // For new records, initialize with provided data
             const toolUsage = data.toolUsage || {};
             const userIdsList = data.userId ? [data.userId] : [];
+            
+            // Handle initial revenue setup with multi-currency support
+            let initialRevenueByCurrency: RevenueByCurrency = {};
+            let initialTotalRevenueRaw = '0';
+            
+            if (data.revenueByCurrency) {
+                initialRevenueByCurrency = data.revenueByCurrency;
+            } else if (data.totalRevenue && data.currency && data.decimals !== undefined) {
+                // Convert single currency to multi-currency format
+                const amountRaw = data.totalRevenue.toString();
+                initialRevenueByCurrency = addRevenueToCurrency(
+                    null,
+                    data.currency,
+                    data.decimals,
+                    amountRaw
+                );
+            } else if (data.totalRevenue) {
+                // DEPRECATED: Fall back to old totalRevenueRaw
+                initialTotalRevenueRaw = data.totalRevenue.toString();
+            }
 
             return await tx.insert(analytics).values({
                 serverId,
                 date: startOfDay,
                 totalRequests: data.totalRequests ?? 0,
-                totalRevenue: data.totalRevenue ? data.totalRevenue.toString() : '0',
+                totalRevenueRaw: initialTotalRevenueRaw, // Keep for backward compatibility
+                revenueByCurrency: initialRevenueByCurrency,
                 uniqueUsers: userIdsList.length || (data.uniqueUsers ?? 0),
                 errorCount: data.errorCount ?? 0,
                 avgResponseTime: data.avgResponseTime?.toString() || null,
@@ -2441,10 +2491,12 @@ export const txOperations = {
                     toolId: true
                 }
             }),
-            tx.query.payments.findMany({ 
+            tx.query.            payments.findMany({ 
                 columns: { 
                     id: true, 
-                    amount: true, 
+                    amountRaw: true, 
+                    tokenDecimals: true,
+                    currency: true,
                     status: true,
                     userId: true,
                     createdAt: true,
@@ -2481,10 +2533,23 @@ export const txOperations = {
             ? executionTimes.reduce((sum, time) => sum + time, 0) / executionTimes.length
             : 0;
 
-        // Process payment data
+        // Process payment data with multi-currency support
         const completedPayments = payments.filter(p => p.status === 'completed');
         const totalPayments = completedPayments.length;
-        const totalRevenue = completedPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+        
+        // Aggregate revenue by currency
+        let revenueByCurrency: RevenueByCurrency = {};
+        completedPayments.forEach(p => {
+            revenueByCurrency = addRevenueToCurrency(
+                revenueByCurrency,
+                p.currency,
+                p.tokenDecimals,
+                p.amountRaw
+            );
+        });
+        
+        // For backward compatibility, calculate a simple total (not recommended for display)
+        const totalRevenue = completedPayments.reduce((sum, p) => sum + parseFloat(p.amountRaw), 0);
         const averagePaymentValue = totalPayments > 0 ? totalRevenue / totalPayments : 0;
 
         // Process proof data
@@ -2515,7 +2580,7 @@ export const txOperations = {
         completedPayments.forEach(p => {
             if (p.toolId) {
                 const current = toolRevenueCounts.get(p.toolId) || 0;
-                toolRevenueCounts.set(p.toolId, current + parseFloat(p.amount));
+                toolRevenueCounts.set(p.toolId, current + parseFloat(p.amountRaw));
             }
         });
 
@@ -2553,10 +2618,25 @@ export const txOperations = {
             dayUsage.forEach(u => { if (u.userId) dayUsers.add(u.userId); });
             dayPayments.forEach(p => { if (p.userId) dayUsers.add(p.userId); });
             
+            // Calculate daily revenue by currency
+            let dayRevenueByCurrency: RevenueByCurrency = {};
+            dayPayments.forEach(p => {
+                dayRevenueByCurrency = addRevenueToCurrency(
+                    dayRevenueByCurrency,
+                    p.currency,
+                    p.tokenDecimals,
+                    p.amountRaw
+                );
+            });
+            
+            // For backward compatibility, provide a simple total (not recommended for display)
+            const dayRevenueTotal = dayPayments.reduce((sum, p) => sum + parseFloat(p.amountRaw), 0);
+            
             last30Days.push({
                 date: dateStr,
                 requests: dayUsage.length,
-                revenue: Math.round(dayPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0) * 100) / 100,
+                revenue: Math.round(dayRevenueTotal * 100) / 100, // DEPRECATED: Use revenueByCurrency instead
+                revenueByCurrency: dayRevenueByCurrency,
                 uniqueUsers: dayUsers.size
             });
         }
@@ -2569,10 +2649,12 @@ export const txOperations = {
             successRate: Math.round(successRate * 100) / 100,
             averageExecutionTime: Math.round(averageExecutionTime),
             
-            // Financial metrics
-            totalRevenue: Math.round(totalRevenue * 100) / 100,
+            // Financial metrics (multi-currency support)
+            totalRevenue: Math.round(totalRevenue * 100) / 100, // DEPRECATED: Use revenueByCurrency instead
+            revenueByCurrency,
+            formattedRevenue: formatRevenueByCurrency(revenueByCurrency),
             totalPayments,
-            averagePaymentValue: Math.round(averagePaymentValue * 100) / 100,
+            averagePaymentValue: Math.round(averagePaymentValue * 100) / 100, // DEPRECATED: Not meaningful across currencies
             
             // Platform metrics
             totalServers,
@@ -2591,7 +2673,7 @@ export const txOperations = {
             topToolsByRevenue,
             topServersByActivity: [], // Simplified for now
             
-            // Time series data for charts
+            // Time series data for charts (now includes per-day multi-currency revenue)
             dailyActivity: last30Days,
             
             // Period info
@@ -2643,7 +2725,8 @@ export const txOperations = {
                             where: eq(toolPricing.active, true),
                             columns: {
                                 id: true,
-                                price: true,
+                                priceRaw: true,
+                                tokenDecimals: true,
                                 currency: true,
                                 network: true,
                                 assetAddress: true,
@@ -2654,7 +2737,8 @@ export const txOperations = {
                         payments: {
                             columns: {
                                 id: true,
-                                amount: true,
+                                amountRaw: true,
+                                tokenDecimals: true,
                                 currency: true,
                                 network: true,
                                 status: true,
@@ -2724,7 +2808,7 @@ export const txOperations = {
                         id: true,
                         date: true,
                         totalRequests: true,
-                        totalRevenue: true,
+                        totalRevenueRaw: true,
                         uniqueUsers: true,
                         avgResponseTime: true,
                         toolUsage: true,
@@ -2813,7 +2897,7 @@ export const txOperations = {
             totalRevenue: server.tools.reduce((sum, tool) => 
                 sum + tool.payments
                     .filter(p => p.status === 'completed')
-                    .reduce((toolSum, payment) => toolSum + parseFloat(payment.amount), 0), 0
+                    .reduce((toolSum, payment) => toolSum + parseFloat(payment.amountRaw), 0), 0
             ),
             totalUsage: server.tools.reduce((sum, tool) => sum + tool.usage.length, 0),
             totalProofs: server.proofs.length,
@@ -2965,7 +3049,10 @@ export const processPaymentWithUsage = async (
             today,
             {
                 totalRequests: 1,
-                totalRevenue: parseFloat(paymentData.amount.toString()),
+                // Use new multi-currency approach
+                totalRevenue: parseFloat(paymentData.amountRaw.toString()),
+                currency: paymentData.currency,
+                decimals: paymentData.tokenDecimals,
                 uniqueUsers: paymentData.userId ? 1 : 0,
                 errorCount: usageData.responseStatus === 'error' ? 1 : 0,
                 toolUsage: { [paymentData.toolId]: 1 }
@@ -3012,7 +3099,7 @@ export const createApiKeyWithTracking = async (
             serverId: 'system',
             date: new Date(),
             totalRequests: 0,
-            totalRevenue: '0',
+            totalRevenueRaw: '0',
             uniqueUsers: 0,
             errorCount: 0,
             toolUsage: metadata
