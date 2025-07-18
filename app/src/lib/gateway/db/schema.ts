@@ -519,8 +519,9 @@ export const dailyServerAnalyticsView = pgView("daily_server_analytics").as((qb)
       // Multi-currency revenue tracking using JSON arrays (no nested aggregation)
       revenueDetails: sql<any>`
         JSON_AGG(
-          DISTINCT JSONB_BUILD_OBJECT(
+          JSONB_BUILD_OBJECT(
             'currency', payments.currency,
+            'network', payments.network,
             'decimals', payments.token_decimals,
             'amount_raw', payments.amount_raw
           )
@@ -562,8 +563,9 @@ export const serverSummaryAnalyticsView = pgView("server_summary_analytics").as(
       // Multi-currency revenue tracking using JSON arrays
       revenueDetails: sql<any>`
         JSON_AGG(
-          DISTINCT JSONB_BUILD_OBJECT(
+          JSONB_BUILD_OBJECT(
             'currency', payments.currency,
+            'network', payments.network,
             'decimals', payments.token_decimals,
             'amount_raw', payments.amount_raw
           )
@@ -615,8 +617,9 @@ export const globalAnalyticsView = pgView("global_analytics").as((qb) =>
       // Multi-currency revenue tracking using JSON arrays
       revenueDetails: sql<any>`
         JSON_AGG(
-          DISTINCT JSONB_BUILD_OBJECT(
+          JSONB_BUILD_OBJECT(
             'currency', payments.currency,
+            'network', payments.network,
             'decimals', payments.token_decimals,
             'amount_raw', payments.amount_raw
           )
@@ -652,8 +655,9 @@ export const toolAnalyticsView = pgView("tool_analytics").as((qb) =>
       // Multi-currency revenue tracking using JSON arrays
       revenueDetails: sql<any>`
         JSON_AGG(
-          DISTINCT JSONB_BUILD_OBJECT(
+          JSONB_BUILD_OBJECT(
             'currency', payments.currency,
+            'network', payments.network,
             'decimals', payments.token_decimals,
             'amount_raw', payments.amount_raw
           )
@@ -689,8 +693,9 @@ export const dailyActivityView = pgView("daily_activity").as((qb) =>
       // Multi-currency daily revenue tracking using JSON arrays
       revenueDetails: sql<any>`
         JSON_AGG(
-          DISTINCT JSONB_BUILD_OBJECT(
+          JSONB_BUILD_OBJECT(
             'currency', payments.currency,
+            'network', payments.network,
             'decimals', payments.token_decimals,
             'amount_raw', payments.amount_raw
           )
