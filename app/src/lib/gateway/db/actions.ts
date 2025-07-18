@@ -1860,6 +1860,7 @@ export const txOperations = {
     recordToolUsage: (data: {
         toolId: string;
         userId?: string;
+        pricingId?: string; // Optional reference to the pricing used for this usage
         responseStatus: string;
         executionTimeMs?: number;
         ipAddress?: string;
@@ -1872,6 +1873,7 @@ export const txOperations = {
         const result = await tx.insert(toolUsage).values({
             toolId: data.toolId,
             userId: data.userId,
+            pricingId: data.pricingId, // Include pricing reference
             responseStatus: data.responseStatus,
             executionTimeMs: executionTime,
             ipAddress: data.ipAddress,

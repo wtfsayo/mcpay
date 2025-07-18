@@ -207,6 +207,7 @@ export const toolPricing = pgTable('tool_pricing', {
 export const toolUsage = pgTable('tool_usage', {
   id: uuid('id').primaryKey().defaultRandom(),
   toolId: uuid('tool_id').references(() => mcpTools.id).notNull(),
+  pricingId: uuid('pricing_id').references(() => toolPricing.id, { onDelete: 'set null' }), // Direct reference to pricing used
   timestamp: timestamp('timestamp').defaultNow().notNull(),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
   requestData: jsonb('request_data'),
@@ -217,10 +218,12 @@ export const toolUsage = pgTable('tool_usage', {
   result: jsonb('result'),
 }, (table) => [
   index('tool_usage_tool_id_idx').on(table.toolId),
+  index('tool_usage_pricing_id_idx').on(table.pricingId), // Add index for pricing lookup
   index('tool_usage_user_id_idx').on(table.userId),
   index('tool_usage_timestamp_idx').on(table.timestamp),
   index('tool_usage_status_idx').on(table.responseStatus),
   index('tool_usage_tool_timestamp_idx').on(table.toolId, table.timestamp),
+  index('tool_usage_tool_pricing_idx').on(table.toolId, table.pricingId), // Composite index for queries
 ]);
 
 export const payments = pgTable('payments', {
@@ -415,17 +418,22 @@ export const accountRelations = relations(account, ({ one }) => ({
   }),
 }));
 
-export const toolPricingRelations = relations(toolPricing, ({ one }) => ({
+export const toolPricingRelations = relations(toolPricing, ({ one, many }) => ({
   tool: one(mcpTools, {
     fields: [toolPricing.toolId],
     references: [mcpTools.id],
   }),
+  usage: many(toolUsage), // One pricing can be used by many tool usages
 }));
 
 export const toolUsageRelations = relations(toolUsage, ({ one }) => ({
   tool: one(mcpTools, {
     fields: [toolUsage.toolId],
     references: [mcpTools.id],
+  }),
+  pricing: one(toolPricing, {
+    fields: [toolUsage.pricingId],
+    references: [toolPricing.id],
   }),
   user: one(users, {
     fields: [toolUsage.userId],

@@ -50,6 +50,7 @@ interface PaymentInfo {
         tokenDecimals: number;
         assetAddress?: string;
         priceRaw: string; // Original base units from pricing table
+        pricingId: string; // Pricing ID for usage tracking
     };
 }
 
@@ -77,6 +78,7 @@ type ToolCall = {
     id?: string;
     toolId?: string;
     serverId?: string;
+    pricingId?: string; // Include pricing ID for usage tracking
 };
 
 // Headers that must NOT be forwarded (RFC‑7230 §6.1)
@@ -290,7 +292,8 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: ToolCall, body?:
                                                     network: activePricing.network,
                                                     tokenDecimals: activePricing.tokenDecimals,
                                                     assetAddress: activePricing.assetAddress,
-                                                    priceRaw: activePricing.priceRaw // Keep original base units for reference
+                                                    priceRaw: activePricing.priceRaw, // Keep original base units for reference
+                                                    pricingId: activePricing.id // Store pricing ID for usage tracking
                                                 }
                                             };
                                             
@@ -321,7 +324,8 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: ToolCall, body?:
                             ...(paymentDetails && { payment: paymentDetails as PaymentInfo }),
                             ...(id && { id: id }),
                             ...(toolId && { toolId }),
-                            ...(serverId && { serverId })
+                            ...(serverId && { serverId }),
+                            ...(paymentDetails && (paymentDetails as PaymentInfo)._pricingInfo?.pricingId && { pricingId: (paymentDetails as PaymentInfo)._pricingInfo!.pricingId })
                         };
 
                         if (jsonData.params._meta) {
@@ -430,8 +434,9 @@ async function recordAnalytics(params: {
     c: Context;
     responseData?: Record<string, unknown>;
     paymentAmount?: string;
+    pricingId?: string; // Optional pricing ID to associate with usage
 }) {
-    const { toolCall, user, startTime, upstream, c, responseData, paymentAmount } = params;
+    const { toolCall, user, startTime, upstream, c, responseData, paymentAmount, pricingId } = params;
 
     if (!toolCall.toolId || !toolCall.serverId) {
         return;
@@ -442,6 +447,7 @@ async function recordAnalytics(params: {
         await txOperations.recordToolUsage({
             toolId: ensureString(toolCall.toolId),
             userId: user?.id,
+            pricingId, // Include pricing reference if available
             responseStatus: upstream.status.toString(),
             executionTimeMs: Date.now() - startTime,
             ipAddress: c.req.header('x-forwarded-for') || c.req.header('x-real-ip'),
@@ -832,7 +838,9 @@ verbs.forEach(verb => {
                 // Pass base units amount from pricing metadata if available, otherwise use the amount as-is
                 paymentAmount: toolCall.isPaid ? 
                     (toolCall.payment?._pricingInfo?.priceRaw || toolCall.payment?.maxAmountRequired) : 
-                    undefined
+                    undefined,
+                // Pass pricing ID for usage tracking
+                pricingId: toolCall.pricingId
             });
         }
 
