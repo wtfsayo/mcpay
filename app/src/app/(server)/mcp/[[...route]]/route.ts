@@ -489,22 +489,8 @@ async function recordAnalytics(params: {
             }
         }
         
-        const analyticsData = {
-            totalRequests: 1,
-            userId: user?.id,
-            avgResponseTime: Date.now() - startTime,
-            toolUsage: { 
-                [ensureString(toolCall.toolId)]: 1 
-            },
-            ...(upstream.status >= 400 && { errorCount: 1 }),
-            ...(convertedRevenue !== undefined && { totalRevenue: convertedRevenue })
-        };
-
-        await txOperations.updateOrCreateDailyAnalytics(
-            ensureString(toolCall.serverId),
-            today,
-            analyticsData
-        )(tx);
+        // Analytics are now computed in real-time from database views
+        // No need to manually update analytics data
     });
 }
 
@@ -644,21 +630,8 @@ async function processPayment(params: {
                     }
                 })(tx);
                 
-                // Update daily analytics using internal server ID
-                const today = new Date();
-                await txOperations.updateOrCreateDailyAnalytics(
-                    ensureString(toolCall.serverId),
-                    today,
-                    {
-                        totalRequests: 1,
-                        errorCount: 1,
-                        userId: extractedUser?.id,
-                        avgResponseTime: Date.now() - startTime,
-                        toolUsage: { 
-                            [ensureString(toolCall.toolId)]: 1 
-                        }
-                    }
-                )(tx);
+                // Analytics are now computed in real-time from database views
+                // No need to manually update analytics data
             });
         }
 

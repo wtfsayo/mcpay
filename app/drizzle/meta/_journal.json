@@ -57,6 +57,20 @@
       "when": 1752766446558,
       "tag": "0007_workable_proemial_gods",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1752838064282,
+      "tag": "0008_certain_firedrake",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1752838355156,
+      "tag": "0009_charming_skin",
+      "breakpoints": true
     }
   ]
 }

@@ -24,7 +24,7 @@
  */
 
 import { sql } from "drizzle-orm";
-import { boolean, check, decimal, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, decimal, index, integer, jsonb, pgTable, pgView, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import type { BlockchainArchitecture } from "@/lib/gateway/crypto-accounts";
 
@@ -279,26 +279,7 @@ export const webhooks = pgTable('webhooks', {
   index('webhook_failure_count_idx').on(table.failureCount),
 ]);
 
-export const analytics = pgTable('analytics', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  serverId: uuid('server_id').references(() => mcpServers.id, { onDelete: 'cascade' }).notNull(),
-  date: timestamp('date').notNull(),
-  totalRequests: integer('total_requests').default(0).notNull(),
-  // DEPRECATED: Single currency aggregation - use revenueByCurrency instead
-  totalRevenueRaw: decimal('total_revenue_raw', { precision: 38, scale: 0 }).default('0').notNull(),
-  // Multi-currency revenue tracking: { "USDC-6": "1000000", "ETH-18": "500000000000000000" }
-  // Format: { "[CURRENCY]-[DECIMALS]": "amount_in_base_units" }
-  revenueByCurrency: jsonb('revenue_by_currency'),
-  uniqueUsers: integer('unique_users').default(0).notNull(),
-  avgResponseTime: decimal('avg_response_time', { precision: 10, scale: 2 }), // Keep as decimal for response time
-  toolUsage: jsonb('tool_usage'),
-  errorCount: integer('error_count').default(0).notNull(),
-  userIdsList: jsonb('user_ids_list'),
-}, (table) => [
-  index('analytics_server_id_idx').on(table.serverId),
-  index('analytics_date_idx').on(table.date),
-  uniqueIndex('analytics_server_date_idx').on(table.serverId, table.date),
-]);
+// Analytics table removed - now computed from views in real-time
 
 export const apiKeys = pgTable('api_keys', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -376,7 +357,7 @@ export const mcpServersRelations = relations(mcpServers, ({ one, many }) => ({
     references: [users.id],
   }),
   tools: many(mcpTools),
-  analytics: many(analytics),
+  // analytics removed - now computed from views
   ownership: many(serverOwnership),
   webhooks: many(webhooks),
   proofs: many(proofs),
@@ -487,12 +468,7 @@ export const webhooksRelations = relations(webhooks, ({ one }) => ({
   }),
 }));
 
-export const analyticsRelations = relations(analytics, ({ one }) => ({
-  server: one(mcpServers, {
-    fields: [analytics.serverId],
-    references: [mcpServers.id],
-  }),
-}));
+// analyticsRelations removed - analytics table no longer exists
 
 export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
   user: one(users, {
@@ -515,3 +491,167 @@ export const proofsRelations = relations(proofs, ({ one }) => ({
     references: [users.id],
   }),
 }));
+
+// Database Views for Analytics
+// These views replace the analytics table with real-time computed analytics
+
+/**
+ * Daily Server Analytics View
+ * Computes daily analytics for each server by aggregating tool_usage and payments data
+ */
+export const dailyServerAnalyticsView = pgView("daily_server_analytics").as((qb) => 
+  qb
+    .select({
+      serverId: sql<string>`mcp_servers.id`.as('server_id'),
+      date: sql<string>`DATE(COALESCE(tool_usage.timestamp, payments.created_at))`.as('date'),
+      totalRequests: sql<number>`COUNT(DISTINCT tool_usage.id)`.as('total_requests'),
+      uniqueUsers: sql<number>`COUNT(DISTINCT COALESCE(tool_usage.user_id, payments.user_id))`.as('unique_users'),
+      errorCount: sql<number>`COUNT(DISTINCT CASE WHEN tool_usage.response_status NOT IN ('success', '200') THEN tool_usage.id END)`.as('error_count'),
+      avgResponseTime: sql<number>`AVG(tool_usage.execution_time_ms)`.as('avg_response_time'),
+      // Simplified revenue tracking - store as total only for now
+      totalRevenue: sql<number>`COALESCE(SUM(CASE WHEN payments.status = 'completed' THEN CAST(payments.amount_raw AS NUMERIC) ELSE 0 END), 0)`.as('total_revenue'),
+      totalPayments: sql<number>`COUNT(DISTINCT CASE WHEN payments.status = 'completed' THEN payments.id END)`.as('total_payments'),
+    })
+    .from(mcpServers)
+    .leftJoin(mcpTools, sql`mcp_tools.server_id = mcp_servers.id`)
+    .leftJoin(toolUsage, sql`tool_usage.tool_id = mcp_tools.id`)
+    .leftJoin(payments, sql`payments.tool_id = mcp_tools.id`)
+    .where(sql`COALESCE(tool_usage.timestamp, payments.created_at) IS NOT NULL`)
+    .groupBy(sql`mcp_servers.id, DATE(COALESCE(tool_usage.timestamp, payments.created_at))`)
+);
+
+/**
+ * Server Summary Analytics View  
+ * Provides aggregated analytics per server across all time
+ */
+export const serverSummaryAnalyticsView = pgView("server_summary_analytics").as((qb) =>
+  qb
+    .select({
+      serverId: sql<string>`mcp_servers.id`.as('server_id'),
+      serverName: sql<string>`mcp_servers.name`.as('server_name'),
+      totalRequests: sql<number>`COUNT(DISTINCT tool_usage.id)`.as('total_requests'),
+      totalTools: sql<number>`COUNT(DISTINCT mcp_tools.id)`.as('total_tools'),
+      monetizedTools: sql<number>`COUNT(DISTINCT CASE WHEN mcp_tools.is_monetized THEN mcp_tools.id END)`.as('monetized_tools'),
+      uniqueUsers: sql<number>`COUNT(DISTINCT COALESCE(tool_usage.user_id, payments.user_id))`.as('unique_users'),
+      totalPayments: sql<number>`COUNT(DISTINCT CASE WHEN payments.status = 'completed' THEN payments.id END)`.as('total_payments'),
+      errorCount: sql<number>`COUNT(DISTINCT CASE WHEN tool_usage.response_status NOT IN ('success', '200') THEN tool_usage.id END)`.as('error_count'),
+      avgResponseTime: sql<number>`AVG(tool_usage.execution_time_ms)`.as('avg_response_time'),
+      successRate: sql<number>`
+        CASE 
+          WHEN COUNT(DISTINCT tool_usage.id) > 0 THEN
+            (COUNT(DISTINCT CASE WHEN tool_usage.response_status IN ('success', '200') THEN tool_usage.id END)::float / COUNT(DISTINCT tool_usage.id)) * 100
+          ELSE 0
+        END
+      `.as('success_rate'),
+      // Simplified revenue tracking
+      totalRevenue: sql<number>`COALESCE(SUM(CASE WHEN payments.status = 'completed' THEN CAST(payments.amount_raw AS NUMERIC) ELSE 0 END), 0)`.as('total_revenue'),
+      // Recent activity indicators (last 30 days)
+      recentRequests: sql<number>`
+        COUNT(DISTINCT CASE 
+          WHEN tool_usage.timestamp > NOW() - INTERVAL '30 days' 
+          THEN tool_usage.id 
+        END)
+      `.as('recent_requests'),
+      recentPayments: sql<number>`
+        COUNT(DISTINCT CASE 
+          WHEN payments.created_at > NOW() - INTERVAL '30 days' AND payments.status = 'completed' 
+          THEN payments.id 
+        END)
+      `.as('recent_payments'),
+      lastActivity: sql<string>`
+        GREATEST(
+          MAX(tool_usage.timestamp),
+          MAX(payments.created_at)
+        )
+      `.as('last_activity'),
+    })
+    .from(mcpServers)
+    .leftJoin(mcpTools, sql`mcp_tools.server_id = mcp_servers.id`)
+    .leftJoin(toolUsage, sql`tool_usage.tool_id = mcp_tools.id`)
+    .leftJoin(payments, sql`payments.tool_id = mcp_tools.id`)
+    .groupBy(sql`mcp_servers.id, mcp_servers.name`)
+);
+
+/**
+ * Global Platform Analytics View
+ * Provides platform-wide statistics for dashboard and landing page
+ */
+export const globalAnalyticsView = pgView("global_analytics").as((qb) =>
+  qb
+    .select({
+      totalServers: sql<number>`COUNT(DISTINCT mcp_servers.id)`.as('total_servers'),
+      activeServers: sql<number>`COUNT(DISTINCT CASE WHEN mcp_servers.status = 'active' THEN mcp_servers.id END)`.as('active_servers'),
+      totalTools: sql<number>`COUNT(DISTINCT mcp_tools.id)`.as('total_tools'),
+      monetizedTools: sql<number>`COUNT(DISTINCT CASE WHEN mcp_tools.is_monetized THEN mcp_tools.id END)`.as('monetized_tools'),
+      totalRequests: sql<number>`COUNT(DISTINCT tool_usage.id)`.as('total_requests'),
+      successfulRequests: sql<number>`COUNT(DISTINCT CASE WHEN tool_usage.response_status IN ('success', '200') THEN tool_usage.id END)`.as('successful_requests'),
+      uniqueUsers: sql<number>`COUNT(DISTINCT COALESCE(tool_usage.user_id, payments.user_id))`.as('unique_users'),
+      totalPayments: sql<number>`COUNT(DISTINCT CASE WHEN payments.status = 'completed' THEN payments.id END)`.as('total_payments'),
+      avgResponseTime: sql<number>`AVG(tool_usage.execution_time_ms)`.as('avg_response_time'),
+      // Simplified revenue tracking
+      totalRevenue: sql<number>`COALESCE(SUM(CASE WHEN payments.status = 'completed' THEN CAST(payments.amount_raw AS NUMERIC) ELSE 0 END), 0)`.as('total_revenue'),
+      // Proof verification stats
+      totalProofs: sql<number>`COUNT(DISTINCT proofs.id)`.as('total_proofs'),
+      consistentProofs: sql<number>`COUNT(DISTINCT CASE WHEN proofs.is_consistent THEN proofs.id END)`.as('consistent_proofs'),
+    })
+    .from(mcpServers)
+    .leftJoin(mcpTools, sql`mcp_tools.server_id = mcp_servers.id`)
+    .leftJoin(toolUsage, sql`tool_usage.tool_id = mcp_tools.id`)
+    .leftJoin(payments, sql`payments.tool_id = mcp_tools.id`)
+    .leftJoin(proofs, sql`proofs.server_id = mcp_servers.id`)
+);
+
+/**
+ * Tool Performance Analytics View
+ * Provides detailed analytics per tool for optimization insights
+ */
+export const toolAnalyticsView = pgView("tool_analytics").as((qb) =>
+  qb
+    .select({
+      toolId: sql<string>`mcp_tools.id`.as('tool_id'),
+      toolName: sql<string>`mcp_tools.name`.as('tool_name'),
+      serverId: sql<string>`mcp_tools.server_id`.as('server_id'),
+      isMonetized: sql<boolean>`mcp_tools.is_monetized`.as('is_monetized'),
+      totalRequests: sql<number>`COUNT(DISTINCT tool_usage.id)`.as('total_requests'),
+      successfulRequests: sql<number>`COUNT(DISTINCT CASE WHEN tool_usage.response_status IN ('success', '200') THEN tool_usage.id END)`.as('successful_requests'),
+      uniqueUsers: sql<number>`COUNT(DISTINCT tool_usage.user_id)`.as('unique_users'),
+      avgResponseTime: sql<number>`AVG(tool_usage.execution_time_ms)`.as('avg_response_time'),
+      totalPayments: sql<number>`COUNT(DISTINCT CASE WHEN payments.status = 'completed' THEN payments.id END)`.as('total_payments'),
+      // Simplified revenue tracking
+      totalRevenue: sql<number>`COALESCE(SUM(CASE WHEN payments.status = 'completed' THEN CAST(payments.amount_raw AS NUMERIC) ELSE 0 END), 0)`.as('total_revenue'),
+      lastUsed: sql<string>`MAX(tool_usage.timestamp)`.as('last_used'),
+      // Recent activity (last 30 days)
+      recentRequests: sql<number>`
+        COUNT(DISTINCT CASE 
+          WHEN tool_usage.timestamp > NOW() - INTERVAL '30 days' 
+          THEN tool_usage.id 
+        END)
+      `.as('recent_requests'),
+    })
+    .from(mcpTools)
+    .leftJoin(toolUsage, sql`tool_usage.tool_id = mcp_tools.id`)
+    .leftJoin(payments, sql`payments.tool_id = mcp_tools.id`)
+    .groupBy(sql`mcp_tools.id, mcp_tools.name, mcp_tools.server_id, mcp_tools.is_monetized`)
+);
+
+/**
+ * Daily Activity Timeline View
+ * Provides day-by-day activity metrics for charts and trends
+ */
+export const dailyActivityView = pgView("daily_activity").as((qb) =>
+  qb
+    .select({
+      date: sql<string>`DATE(COALESCE(tool_usage.timestamp, payments.created_at))`.as('date'),
+      totalRequests: sql<number>`COUNT(DISTINCT tool_usage.id)`.as('total_requests'),
+      uniqueUsers: sql<number>`COUNT(DISTINCT COALESCE(tool_usage.user_id, payments.user_id))`.as('unique_users'),
+      totalPayments: sql<number>`COUNT(DISTINCT CASE WHEN payments.status = 'completed' THEN payments.id END)`.as('total_payments'),
+      avgResponseTime: sql<number>`AVG(tool_usage.execution_time_ms)`.as('avg_response_time'),
+      // Simplified daily revenue
+      totalRevenue: sql<number>`COALESCE(SUM(CASE WHEN payments.status = 'completed' THEN CAST(payments.amount_raw AS NUMERIC) ELSE 0 END), 0)`.as('total_revenue'),
+    })
+    .from(toolUsage)
+    .fullJoin(payments, sql`DATE(tool_usage.timestamp) = DATE(payments.created_at)`)
+    .where(sql`COALESCE(tool_usage.timestamp, payments.created_at) IS NOT NULL`)
+    .groupBy(sql`DATE(COALESCE(tool_usage.timestamp, payments.created_at))`)
+    .orderBy(sql`DATE(COALESCE(tool_usage.timestamp, payments.created_at)) DESC`)
+);

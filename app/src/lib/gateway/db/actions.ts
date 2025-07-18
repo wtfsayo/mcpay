@@ -25,7 +25,6 @@
 import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import db from "@/lib/gateway/db";
 import {
-    analytics,
     apiKeys,
     mcpServers,
     mcpTools,
@@ -39,16 +38,17 @@ import {
     webhooks,
     session,
     account,
-    verification
+    verification,
+    dailyServerAnalyticsView,
+    serverSummaryAnalyticsView,
+    globalAnalyticsView,
+    toolAnalyticsView,
+    dailyActivityView
 } from "@/lib/gateway/db/schema";
 import { createCDPAccount } from '@/lib/gateway/3rd-parties/cdp';
 import { getBlockchainArchitecture, type BlockchainArchitecture } from '@/lib/gateway/crypto-accounts';
-import {
-    addRevenueToCurrency,
-    mergeRevenueByCurrency,
-    formatRevenueByCurrency,
-    type RevenueByCurrency
-} from '@/lib/utils/amounts';
+// Multi-currency utilities removed for simplified analytics
+// Could be re-added later if needed for more complex revenue tracking
 
 // Define proper transaction type
 export type TransactionType = Parameters<Parameters<typeof db['transaction']>[0]>[0];
@@ -249,20 +249,7 @@ export const txOperations = {
                     },
                     orderBy: [mcpTools.name]
                 },
-                analytics: {
-                    columns: {
-                        id: true,
-                        date: true,
-                        totalRequests: true,
-                        totalRevenueRaw: true,
-                        uniqueUsers: true,
-                        avgResponseTime: true,
-                        toolUsage: true,
-                        errorCount: true
-                    },
-                    orderBy: [desc(analytics.date)],
-                    limit: 30 // Last 30 days
-                },
+                // Analytics will be computed from views, not included in main query
                 ownership: {
                     where: eq(serverOwnership.active, true),
                     columns: {
@@ -1860,221 +1847,77 @@ export const txOperations = {
         return result[0];
     },
 
-    // Analytics
-    getDailyAnalytics: (serverId: string, date: Date) => async (tx: TransactionType) => {
-        const startOfDay = new Date(date);
-        startOfDay.setHours(0, 0, 0, 0);
+    // Analytics (Now computed from views - these are helper functions for compatibility)
+    getDailyServerAnalytics: (serverId: string, date?: Date) => async (tx: TransactionType) => {
+        const targetDate = date ? date.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+        
+        const result = await tx.select()
+            .from(dailyServerAnalyticsView)
+            .where(and(
+                eq(dailyServerAnalyticsView.serverId, serverId),
+                eq(dailyServerAnalyticsView.date, targetDate)
+            ))
+            .limit(1);
 
-        return await tx.query.analytics.findFirst({
-            where: and(
-                eq(analytics.serverId, serverId),
-                eq(analytics.date, startOfDay)
-            )
-        });
+        return result[0] || null;
     },
 
-    updateAnalytics: (id: string, data: {
-        totalRequests?: number;
-        totalRevenue?: number;
-        uniqueUsers?: number;
-        avgResponseTime?: number;
-        toolUsage?: Record<string, unknown>;
-        errorCount?: number;
-    }) => async (tx: TransactionType) => {
-        const dbData = {
-            ...(data.totalRequests !== undefined ? { totalRequests: data.totalRequests } : {}),
-            ...(data.totalRevenue !== undefined ? { totalRevenue: data.totalRevenue.toString() } : {}),
-            ...(data.uniqueUsers !== undefined ? { uniqueUsers: data.uniqueUsers } : {}),
-            ...(data.avgResponseTime !== undefined ? { avgResponseTime: data.avgResponseTime.toString() } : {}),
-            ...(data.errorCount !== undefined ? { errorCount: data.errorCount } : {}),
-            ...(data.toolUsage !== undefined ? { toolUsage: data.toolUsage } : {})
-        };
+    getServerSummaryAnalytics: (serverId: string) => async (tx: TransactionType) => {
+        const result = await tx.select()
+            .from(serverSummaryAnalyticsView)
+            .where(eq(serverSummaryAnalyticsView.serverId, serverId))
+            .limit(1);
 
-        const result = await tx.update(analytics)
-            .set(dbData)
-            .where(eq(analytics.id, id))
-            .returning();
-
-        if (!result[0]) throw new Error(`Analytics with ID ${id} not found`);
-        return result[0];
+        return result[0] || null;
     },
 
-    createDailyAnalytics: (
-        serverId: string,
-        date: Date,
-        data?: {
-            totalRequests?: number;
-            totalRevenue?: number;
-            uniqueUsers?: number;
-            avgResponseTime?: number;
-            toolUsage?: Record<string, unknown>;
-            errorCount?: number;
+    getGlobalAnalytics: () => async (tx: TransactionType) => {
+        const result = await tx.select()
+            .from(globalAnalyticsView)
+            .limit(1);
+
+        return result[0] || null;
+    },
+
+    getToolAnalytics: (toolId?: string) => async (tx: TransactionType) => {
+        const query = tx.select().from(toolAnalyticsView);
+        
+        if (toolId) {
+            query.where(eq(toolAnalyticsView.toolId, toolId));
         }
-    ) => async (tx: TransactionType) => {
-        const startOfDay = new Date(date);
-        startOfDay.setHours(0, 0, 0, 0);
-
-        const result = await tx.insert(analytics).values({
-            serverId,
-            date: startOfDay,
-            totalRequests: data?.totalRequests ?? 0,
-            totalRevenueRaw: data?.totalRevenue ? data.totalRevenue.toString() : '0',
-            uniqueUsers: data?.uniqueUsers ?? 0,
-            errorCount: data?.errorCount ?? 0,
-            ...(data?.avgResponseTime !== undefined ? { avgResponseTime: data.avgResponseTime.toString() } : {}),
-            ...(data?.toolUsage !== undefined ? { toolUsage: data.toolUsage } : {})
-        }).returning();
-
-        if (!result[0]) throw new Error("Failed to create daily analytics");
-        return result[0];
+        
+        return await query;
     },
 
+    getDailyActivity: (days = 30) => async (tx: TransactionType) => {
+        const result = await tx.select()
+            .from(dailyActivityView)
+            .limit(days);
+
+        return result;
+    },
+
+    // Legacy compatibility function - now does nothing but prevents errors
     updateOrCreateDailyAnalytics: (
         serverId: string,
         date: Date,
         data: {
             totalRequests?: number;
-            totalRevenue?: number; // DEPRECATED: Use revenueByCurrency instead
-            revenueByCurrency?: RevenueByCurrency;
-            currency?: string; // For single currency updates (will be converted to revenueByCurrency)
-            decimals?: number; // Token decimals for single currency updates
+            totalRevenue?: number;
+            revenueByCurrency?: Record<string, unknown>;
+            currency?: string;
+            decimals?: number;
             uniqueUsers?: number;
             avgResponseTime?: number;
             toolUsage?: Record<string, unknown>;
             errorCount?: number;
-            userId?: string; // Optional user ID to track for uniqueUsers
+            userId?: string;
         }
     ) => async (tx: TransactionType) => {
-        const startOfDay = new Date(date);
-        startOfDay.setHours(0, 0, 0, 0);
-
-        const existing = await tx.query.analytics.findFirst({
-            where: and(
-                eq(analytics.serverId, serverId),
-                eq(analytics.date, startOfDay)
-            )
-        });
-
-        if (existing) {
-            // Initialize updated data with existing values
-            let updatedTotalRequests = existing.totalRequests;
-            let updatedTotalRevenue = existing.totalRevenueRaw;
-            let updatedRevenueByCurrency = existing.revenueByCurrency as RevenueByCurrency || {};
-            let updatedUniqueUsers = existing.uniqueUsers;
-            let updatedAvgResponseTime = existing.avgResponseTime;
-            let updatedErrorCount = existing.errorCount;
-            const updatedToolUsage = existing.toolUsage as Record<string, number> || {};
-            const updatedUserIdsList = existing.userIdsList as string[] || [];
-
-            // Update values incrementally
-            if (data.totalRequests !== undefined) {
-                updatedTotalRequests += data.totalRequests;
-            }
-
-            // Handle revenue updates with proper multi-currency support
-            if (data.revenueByCurrency) {
-                updatedRevenueByCurrency = mergeRevenueByCurrency(updatedRevenueByCurrency, data.revenueByCurrency);
-            } else if (data.totalRevenue !== undefined && data.currency && data.decimals !== undefined) {
-                // Convert single currency update to multi-currency format
-                const amountRaw = data.totalRevenue.toString();
-                updatedRevenueByCurrency = addRevenueToCurrency(
-                    updatedRevenueByCurrency,
-                    data.currency,
-                    data.decimals,
-                    amountRaw
-                );
-            } else if (data.totalRevenue !== undefined) {
-                // DEPRECATED: Fall back to old totalRevenueRaw for backward compatibility
-                updatedTotalRevenue = (parseFloat(updatedTotalRevenue) + data.totalRevenue).toString();
-            }
-
-            if (data.errorCount !== undefined) {
-                updatedErrorCount += data.errorCount;
-            }
-
-            // Add user ID to list if provided and not already included
-            if (data.userId && !updatedUserIdsList.includes(data.userId)) {
-                updatedUserIdsList.push(data.userId);
-                // Update uniqueUsers count based on actual unique users
-                updatedUniqueUsers = updatedUserIdsList.length;
-            } else if (data.uniqueUsers !== undefined) {
-                // Fallback if no userId provided
-                updatedUniqueUsers += data.uniqueUsers;
-            }
-
-            // Update avgResponseTime using weighted average
-            if (data.avgResponseTime !== undefined) {
-                if (updatedAvgResponseTime !== null) {
-                    const totalTime = parseFloat(updatedAvgResponseTime) * (updatedTotalRequests - (data.totalRequests || 1));
-                    const newTotalTime = totalTime + data.avgResponseTime;
-                    updatedAvgResponseTime = (newTotalTime / updatedTotalRequests).toString();
-                } else {
-                    updatedAvgResponseTime = data.avgResponseTime.toString();
-                }
-            }
-
-            // Merge toolUsage data
-            if (data.toolUsage) {
-                for (const [toolId, count] of Object.entries(data.toolUsage)) {
-                    updatedToolUsage[toolId] = (updatedToolUsage[toolId] || 0) + (count as number);
-                }
-            }
-
-            const dbData = {
-                totalRequests: updatedTotalRequests,
-                totalRevenueRaw: updatedTotalRevenue, // Keep for backward compatibility
-                revenueByCurrency: updatedRevenueByCurrency,
-                uniqueUsers: updatedUniqueUsers,
-                avgResponseTime: updatedAvgResponseTime,
-                errorCount: updatedErrorCount,
-                toolUsage: updatedToolUsage,
-                userIdsList: updatedUserIdsList
-            };
-
-            const updated = await tx.update(analytics)
-                .set(dbData)
-                .where(eq(analytics.id, existing.id))
-                .returning();
-
-            return updated[0];
-        } else {
-            // For new records, initialize with provided data
-            const toolUsage = data.toolUsage || {};
-            const userIdsList = data.userId ? [data.userId] : [];
-            
-            // Handle initial revenue setup with multi-currency support
-            let initialRevenueByCurrency: RevenueByCurrency = {};
-            let initialTotalRevenueRaw = '0';
-            
-            if (data.revenueByCurrency) {
-                initialRevenueByCurrency = data.revenueByCurrency;
-            } else if (data.totalRevenue && data.currency && data.decimals !== undefined) {
-                // Convert single currency to multi-currency format
-                const amountRaw = data.totalRevenue.toString();
-                initialRevenueByCurrency = addRevenueToCurrency(
-                    null,
-                    data.currency,
-                    data.decimals,
-                    amountRaw
-                );
-            } else if (data.totalRevenue) {
-                // DEPRECATED: Fall back to old totalRevenueRaw
-                initialTotalRevenueRaw = data.totalRevenue.toString();
-            }
-
-            return await tx.insert(analytics).values({
-                serverId,
-                date: startOfDay,
-                totalRequests: data.totalRequests ?? 0,
-                totalRevenueRaw: initialTotalRevenueRaw, // Keep for backward compatibility
-                revenueByCurrency: initialRevenueByCurrency,
-                uniqueUsers: userIdsList.length || (data.uniqueUsers ?? 0),
-                errorCount: data.errorCount ?? 0,
-                avgResponseTime: data.avgResponseTime?.toString() || null,
-                toolUsage,
-                userIdsList
-            }).returning().then(res => res[0]);
-        }
+        // Analytics are now computed from views, so this is a no-op
+        // Keep for backward compatibility but log that it's deprecated
+        console.warn('updateOrCreateDailyAnalytics is deprecated - analytics are now computed from views');
+        return null;
     },
 
     // Server Ownership
@@ -2462,7 +2305,7 @@ export const txOperations = {
         });
     },
 
-    // Comprehensive Analytics for Landing Page
+    // Comprehensive Analytics for Landing Page (Now using views)
     getComprehensiveAnalytics: (filters?: {
         startDate?: Date;
         endDate?: Date; 
@@ -2473,208 +2316,120 @@ export const txOperations = {
         const startDate = filters?.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
         const endDate = filters?.endDate || new Date();
 
-        // Get basic counts with simpler queries
-        const [servers, tools, usage, payments, proofs] = await Promise.all([
-            tx.query.mcpServers.findMany({ 
-                columns: { id: true, status: true, name: true } 
-            }),
-            tx.query.mcpTools.findMany({ 
-                columns: { id: true, name: true, isMonetized: true } 
-            }),
-            tx.query.toolUsage.findMany({ 
-                columns: { 
-                    id: true, 
-                    responseStatus: true, 
-                    executionTimeMs: true,
-                    userId: true,
-                    timestamp: true,
-                    toolId: true
-                }
-            }),
-            tx.query.            payments.findMany({ 
-                columns: { 
-                    id: true, 
-                    amountRaw: true, 
-                    tokenDecimals: true,
-                    currency: true,
-                    status: true,
-                    userId: true,
-                    createdAt: true,
-                    toolId: true
-                }
-            }),
-            tx.query.proofs.findMany({ 
-                columns: { 
-                    id: true, 
-                    isConsistent: true,
-                    createdAt: true
-                }
-            })
+        // Get analytics from views
+        const [globalAnalytics, dailyActivity, toolAnalytics] = await Promise.all([
+            tx.select().from(globalAnalyticsView).limit(1),
+            tx.select().from(dailyActivityView).limit(30),
+            tx.select().from(toolAnalyticsView).orderBy(desc(toolAnalyticsView.totalRequests)).limit(10)
         ]);
 
-        // Calculate core metrics
-        const totalServers = servers.length;
-        const activeServers = servers.filter(s => s.status === 'active').length;
-        const totalTools = tools.length;
-        const monetizedTools = tools.filter(t => t.isMonetized).length;
+        // Extract analytics from views
+        const analytics = globalAnalytics[0];
+        
+        if (!analytics) {
+            // Return empty analytics if no data
+            return {
+                totalRequests: 0,
+                successfulRequests: 0,
+                failedRequests: 0,
+                successRate: 0,
+                averageExecutionTime: 0,
+                totalRevenue: 0,
+                revenueByCurrency: {},
+                formattedRevenue: [],
+                totalPayments: 0,
+                averagePaymentValue: 0,
+                totalServers: 0,
+                activeServers: 0,
+                totalTools: 0,
+                monetizedTools: 0,
+                uniqueUsers: 0,
+                totalProofs: 0,
+                consistentProofs: 0,
+                consistencyRate: 0,
+                topToolsByRequests: [],
+                topToolsByRevenue: [],
+                topServersByActivity: [],
+                dailyActivity: [],
+                periodStart: startDate.toISOString(),
+                periodEnd: endDate.toISOString(),
+                periodDays: Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
+            };
+        }
 
-        // Process usage data
-        const totalRequests = usage.length;
-        const successfulRequests = usage.filter(u => 
-            u.responseStatus === 'success' || u.responseStatus === '200'
-        ).length;
-        const failedRequests = totalRequests - successfulRequests;
-        const successRate = totalRequests > 0 ? (successfulRequests / totalRequests) * 100 : 0;
+        // Process tool analytics for top performers
+        const topToolsByRequests = toolAnalytics.map(tool => ({
+            id: tool.toolId,
+            name: tool.toolName,
+            requests: tool.totalRequests || 0,
+            revenue: tool.totalRevenue || 0
+        }));
 
-        const executionTimes = usage
-            .filter(u => u.executionTimeMs !== null && u.executionTimeMs !== undefined)
-            .map(u => u.executionTimeMs!);
-        const averageExecutionTime = executionTimes.length > 0 
-            ? executionTimes.reduce((sum, time) => sum + time, 0) / executionTimes.length
+        const topToolsByRevenue = [...toolAnalytics]
+            .sort((a, b) => (b.totalRevenue || 0) - (a.totalRevenue || 0))
+            .slice(0, 10)
+            .map(tool => ({
+                id: tool.toolId,
+                name: tool.toolName,
+                requests: tool.totalRequests || 0,
+                revenue: tool.totalRevenue || 0
+            }));
+
+        // Calculate derived metrics from analytics view
+        const failedRequests = (analytics.totalRequests || 0) - (analytics.successfulRequests || 0);
+        const successRate = analytics.totalRequests > 0 
+            ? ((analytics.successfulRequests || 0) / analytics.totalRequests) * 100 
             : 0;
 
-        // Process payment data with multi-currency support
-        const completedPayments = payments.filter(p => p.status === 'completed');
-        const totalPayments = completedPayments.length;
-        
-        // Aggregate revenue by currency
-        let revenueByCurrency: RevenueByCurrency = {};
-        completedPayments.forEach(p => {
-            revenueByCurrency = addRevenueToCurrency(
-                revenueByCurrency,
-                p.currency,
-                p.tokenDecimals,
-                p.amountRaw
-            );
-        });
-        
-        // For backward compatibility, calculate a simple total (not recommended for display)
-        const totalRevenue = completedPayments.reduce((sum, p) => sum + parseFloat(p.amountRaw), 0);
-        const averagePaymentValue = totalPayments > 0 ? totalRevenue / totalPayments : 0;
+        const consistencyRate = analytics.totalProofs > 0 
+            ? ((analytics.consistentProofs || 0) / analytics.totalProofs) * 100 
+            : 0;
 
-        // Process proof data
-        const totalProofs = proofs.length;
-        const consistentProofs = proofs.filter(p => p.isConsistent).length;
-        const consistencyRate = totalProofs > 0 ? (consistentProofs / totalProofs) * 100 : 0;
-
-        // Calculate unique users (simple approach)
-        const uniqueUserIds = new Set<string>();
-        usage.forEach(u => { if (u.userId) uniqueUserIds.add(u.userId); });
-        completedPayments.forEach(p => { if (p.userId) uniqueUserIds.add(p.userId); });
-
-        // Create tool name lookup
-        const toolNames = new Map<string, string>();
-        tools.forEach(t => toolNames.set(t.id, t.name));
-
-        // Simple top tools calculation
-        const toolRequestCounts = new Map<string, number>();
-        const toolRevenueCounts = new Map<string, number>();
-
-        usage.forEach(u => {
-            if (u.toolId) {
-                const current = toolRequestCounts.get(u.toolId) || 0;
-                toolRequestCounts.set(u.toolId, current + 1);
-            }
-        });
-
-        completedPayments.forEach(p => {
-            if (p.toolId) {
-                const current = toolRevenueCounts.get(p.toolId) || 0;
-                toolRevenueCounts.set(p.toolId, current + parseFloat(p.amountRaw));
-            }
-        });
-
-        const topToolsByRequests = Array.from(toolRequestCounts.entries())
-            .sort(([,a], [,b]) => b - a)
-            .slice(0, 10)
-            .map(([toolId, count]) => ({
-                id: toolId,
-                name: toolNames.get(toolId) || 'Unknown Tool',
-                requests: count,
-                revenue: toolRevenueCounts.get(toolId) || 0
-            }));
-
-        const topToolsByRevenue = Array.from(toolRevenueCounts.entries())
-            .sort(([,a], [,b]) => b - a)
-            .slice(0, 10)
-            .map(([toolId, revenue]) => ({
-                id: toolId,
-                name: toolNames.get(toolId) || 'Unknown Tool',
-                requests: toolRequestCounts.get(toolId) || 0,
-                revenue
-            }));
-
-        // Simple daily activity (last 30 days)
-        const last30Days = [];
-        for (let i = 29; i >= 0; i--) {
-            const date = new Date();
-            date.setDate(date.getDate() - i);
-            const dateStr = date.toISOString().split('T')[0];
-            
-            const dayUsage = usage.filter(u => u.timestamp.toISOString().split('T')[0] === dateStr);
-            const dayPayments = completedPayments.filter(p => p.createdAt.toISOString().split('T')[0] === dateStr);
-            const dayUsers = new Set<string>();
-            
-            dayUsage.forEach(u => { if (u.userId) dayUsers.add(u.userId); });
-            dayPayments.forEach(p => { if (p.userId) dayUsers.add(p.userId); });
-            
-            // Calculate daily revenue by currency
-            let dayRevenueByCurrency: RevenueByCurrency = {};
-            dayPayments.forEach(p => {
-                dayRevenueByCurrency = addRevenueToCurrency(
-                    dayRevenueByCurrency,
-                    p.currency,
-                    p.tokenDecimals,
-                    p.amountRaw
-                );
-            });
-            
-            // For backward compatibility, provide a simple total (not recommended for display)
-            const dayRevenueTotal = dayPayments.reduce((sum, p) => sum + parseFloat(p.amountRaw), 0);
-            
-            last30Days.push({
-                date: dateStr,
-                requests: dayUsage.length,
-                revenue: Math.round(dayRevenueTotal * 100) / 100, // DEPRECATED: Use revenueByCurrency instead
-                revenueByCurrency: dayRevenueByCurrency,
-                uniqueUsers: dayUsers.size
-            });
-        }
+        // Use the total revenue from analytics view
+        const totalRevenue = analytics.totalRevenue || 0;
 
         return {
             // Core metrics
-            totalRequests,
-            successfulRequests,
+            totalRequests: analytics.totalRequests || 0,
+            successfulRequests: analytics.successfulRequests || 0,
             failedRequests,
             successRate: Math.round(successRate * 100) / 100,
-            averageExecutionTime: Math.round(averageExecutionTime),
+            averageExecutionTime: Math.round(analytics.avgResponseTime || 0),
             
-            // Financial metrics (multi-currency support)
-            totalRevenue: Math.round(totalRevenue * 100) / 100, // DEPRECATED: Use revenueByCurrency instead
-            revenueByCurrency,
-            formattedRevenue: formatRevenueByCurrency(revenueByCurrency),
-            totalPayments,
-            averagePaymentValue: Math.round(averagePaymentValue * 100) / 100, // DEPRECATED: Not meaningful across currencies
+            // Financial metrics (simplified for now)
+            totalRevenue: Math.round((analytics.totalRevenue || 0) * 100) / 100,
+            revenueByCurrency: {}, // Simplified - could be enhanced later
+            formattedRevenue: [],
+            totalPayments: analytics.totalPayments || 0,
+            averagePaymentValue: 0, // DEPRECATED: Not meaningful across currencies
             
             // Platform metrics
-            totalServers,
-            activeServers,
-            totalTools,
-            monetizedTools,
-            uniqueUsers: uniqueUserIds.size,
+            totalServers: analytics.totalServers || 0,
+            activeServers: analytics.activeServers || 0,
+            totalTools: analytics.totalTools || 0,
+            monetizedTools: analytics.monetizedTools || 0,
+            uniqueUsers: analytics.uniqueUsers || 0,
             
             // Proof/verification metrics
-            totalProofs,
-            consistentProofs,
+            totalProofs: analytics.totalProofs || 0,
+            consistentProofs: analytics.consistentProofs || 0,
             consistencyRate: Math.round(consistencyRate * 100) / 100,
             
             // Top performers
             topToolsByRequests,
             topToolsByRevenue,
-            topServersByActivity: [], // Simplified for now
+            topServersByActivity: [], // Could be enhanced with server summary view
             
-            // Time series data for charts (now includes per-day multi-currency revenue)
-            dailyActivity: last30Days,
+            // Time series data for charts
+            dailyActivity: dailyActivity.map(day => ({
+                date: day.date,
+                requests: day.totalRequests || 0,
+                users: day.uniqueUsers || 0,
+                payments: day.totalPayments || 0,
+                revenue: day.totalRevenue || 0,
+                revenueByCurrency: {}, // Simplified
+                avgResponseTime: Math.round(day.avgResponseTime || 0)
+            })),
             
             // Period info
             periodStart: startDate.toISOString(),
@@ -2803,20 +2558,7 @@ export const txOperations = {
                     },
                     orderBy: [mcpTools.name]
                 },
-                analytics: {
-                    columns: {
-                        id: true,
-                        date: true,
-                        totalRequests: true,
-                        totalRevenueRaw: true,
-                        uniqueUsers: true,
-                        avgResponseTime: true,
-                        toolUsage: true,
-                        errorCount: true
-                    },
-                    orderBy: [desc(analytics.date)],
-                    limit: 30
-                },
+                // Analytics will be computed from views
                 ownership: {
                     where: eq(serverOwnership.active, true),
                     columns: {
@@ -3036,28 +2778,8 @@ export const processPaymentWithUsage = async (
         // Record tool usage
         const usage = await txOperations.recordToolUsage(usageData)(tx);
 
-        // Update analytics if needed
-        const today = new Date();
-
-        // Get the server ID for this tool
-        const tool = await txOperations.getMcpTool(paymentData.toolId)(tx);
-        if (!tool) throw new Error(`Tool with ID ${paymentData.toolId} not found`);
-
-        // Update daily analytics
-        await txOperations.updateOrCreateDailyAnalytics(
-            tool.serverId,
-            today,
-            {
-                totalRequests: 1,
-                // Use new multi-currency approach
-                totalRevenue: parseFloat(paymentData.amountRaw.toString()),
-                currency: paymentData.currency,
-                decimals: paymentData.tokenDecimals,
-                uniqueUsers: paymentData.userId ? 1 : 0,
-                errorCount: usageData.responseStatus === 'error' ? 1 : 0,
-                toolUsage: { [paymentData.toolId]: 1 }
-            }
-        )(tx);
+        // Analytics are now computed in real-time from database views
+        // No need to manually update analytics data
 
         return { payment, usage };
     });
@@ -3094,16 +2816,9 @@ export const createApiKeyWithTracking = async (
         };
 
         // For demonstration - in real app we'd have a proper audit log table
-        // Insert into audit log or similar tracking mechanism
-        await tx.insert(analytics).values({
-            serverId: 'system',
-            date: new Date(),
-            totalRequests: 0,
-            totalRevenueRaw: '0',
-            uniqueUsers: 0,
-            errorCount: 0,
-            toolUsage: metadata
-        });
+        // Note: Analytics are now computed from views, so audit logging would need
+        // to be implemented with a proper audit log table if needed
+        console.log('API key created:', metadata);
 
         return { apiKey, metadata };
     });
