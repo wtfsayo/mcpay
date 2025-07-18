@@ -47,11 +47,49 @@ import {
 } from "@/lib/gateway/db/schema";
 import { createCDPAccount } from '@/lib/gateway/3rd-parties/cdp';
 import { getBlockchainArchitecture, type BlockchainArchitecture } from '@/lib/gateway/crypto-accounts';
-// Multi-currency utilities removed for simplified analytics
-// Could be re-added later if needed for more complex revenue tracking
+import {
+    addRevenueToCurrency,
+    mergeRevenueByCurrency,
+    formatRevenueByCurrency,
+    fromBaseUnits,
+    type RevenueByCurrency
+} from '@/lib/utils/amounts';
 
 // Define proper transaction type
 export type TransactionType = Parameters<Parameters<typeof db['transaction']>[0]>[0];
+
+// Helper function to process revenue details from views into RevenueByCurrency format
+function processRevenueDetails(revenueDetails: any[]): { revenueByCurrency: RevenueByCurrency; totalRevenue: number } {
+    if (!revenueDetails || !Array.isArray(revenueDetails)) {
+        return { revenueByCurrency: {}, totalRevenue: 0 };
+    }
+
+    let revenueByCurrency: RevenueByCurrency = {};
+    let totalRevenue = 0;
+
+    revenueDetails.forEach((detail) => {
+        if (detail && detail.currency && detail.decimals !== undefined && detail.amount_raw) {
+            // Add to multi-currency tracking
+            revenueByCurrency = addRevenueToCurrency(
+                revenueByCurrency,
+                detail.currency,
+                detail.decimals,
+                detail.amount_raw
+            );
+
+            // Add to simple total for backward compatibility (approximate)
+            try {
+                const humanAmount = parseFloat(fromBaseUnits(detail.amount_raw, detail.decimals));
+                totalRevenue += humanAmount;
+            } catch (error) {
+                // If conversion fails, add raw amount (not ideal but prevents errors)
+                totalRevenue += parseFloat(detail.amount_raw) || 0;
+            }
+        }
+    });
+
+    return { revenueByCurrency, totalRevenue };
+}
 
 // Enhanced transaction helper with better typing
 export const withTransaction = async <T>(callback: (tx: TransactionType) => Promise<T>): Promise<T> => {
@@ -1904,7 +1942,7 @@ export const txOperations = {
         data: {
             totalRequests?: number;
             totalRevenue?: number;
-            revenueByCurrency?: Record<string, unknown>;
+            revenueByCurrency?: RevenueByCurrency;
             currency?: string;
             decimals?: number;
             uniqueUsers?: number;
@@ -2358,21 +2396,28 @@ export const txOperations = {
         }
 
         // Process tool analytics for top performers
-        const topToolsByRequests = toolAnalytics.map(tool => ({
-            id: tool.toolId,
-            name: tool.toolName,
-            requests: tool.totalRequests || 0,
-            revenue: tool.totalRevenue || 0
-        }));
+        const topToolsByRequests = toolAnalytics.map(tool => {
+            const { totalRevenue } = processRevenueDetails(tool.revenueDetails);
+            return {
+                id: tool.toolId,
+                name: tool.toolName,
+                requests: tool.totalRequests || 0,
+                revenue: totalRevenue
+            };
+        });
 
         const topToolsByRevenue = [...toolAnalytics]
-            .sort((a, b) => (b.totalRevenue || 0) - (a.totalRevenue || 0))
+            .map(tool => ({
+                ...tool,
+                calculatedRevenue: processRevenueDetails(tool.revenueDetails).totalRevenue
+            }))
+            .sort((a, b) => (b.calculatedRevenue || 0) - (a.calculatedRevenue || 0))
             .slice(0, 10)
             .map(tool => ({
                 id: tool.toolId,
                 name: tool.toolName,
                 requests: tool.totalRequests || 0,
-                revenue: tool.totalRevenue || 0
+                revenue: tool.calculatedRevenue
             }));
 
         // Calculate derived metrics from analytics view
@@ -2385,8 +2430,8 @@ export const txOperations = {
             ? ((analytics.consistentProofs || 0) / analytics.totalProofs) * 100 
             : 0;
 
-        // Use the total revenue from analytics view
-        const totalRevenue = analytics.totalRevenue || 0;
+        // Process revenue details from the global analytics view
+        const { revenueByCurrency, totalRevenue } = processRevenueDetails(analytics.revenueDetails);
 
         return {
             // Core metrics
@@ -2396,10 +2441,10 @@ export const txOperations = {
             successRate: Math.round(successRate * 100) / 100,
             averageExecutionTime: Math.round(analytics.avgResponseTime || 0),
             
-            // Financial metrics (simplified for now)
-            totalRevenue: Math.round((analytics.totalRevenue || 0) * 100) / 100,
-            revenueByCurrency: {}, // Simplified - could be enhanced later
-            formattedRevenue: [],
+            // Financial metrics (multi-currency support restored)
+            totalRevenue: Math.round(totalRevenue * 100) / 100,
+            revenueByCurrency,
+            formattedRevenue: formatRevenueByCurrency(revenueByCurrency),
             totalPayments: analytics.totalPayments || 0,
             averagePaymentValue: 0, // DEPRECATED: Not meaningful across currencies
             
@@ -2421,15 +2466,18 @@ export const txOperations = {
             topServersByActivity: [], // Could be enhanced with server summary view
             
             // Time series data for charts
-            dailyActivity: dailyActivity.map(day => ({
-                date: day.date,
-                requests: day.totalRequests || 0,
-                users: day.uniqueUsers || 0,
-                payments: day.totalPayments || 0,
-                revenue: day.totalRevenue || 0,
-                revenueByCurrency: {}, // Simplified
-                avgResponseTime: Math.round(day.avgResponseTime || 0)
-            })),
+            dailyActivity: dailyActivity.map(day => {
+                const { revenueByCurrency: dayRevenueByCurrency, totalRevenue: dayTotalRevenue } = processRevenueDetails(day.revenueDetails);
+                return {
+                    date: day.date,
+                    requests: day.totalRequests || 0,
+                    users: day.uniqueUsers || 0,
+                    payments: day.totalPayments || 0,
+                    revenue: dayTotalRevenue,
+                    revenueByCurrency: dayRevenueByCurrency,
+                    avgResponseTime: Math.round(day.avgResponseTime || 0)
+                };
+            }),
             
             // Period info
             periodStart: startDate.toISOString(),

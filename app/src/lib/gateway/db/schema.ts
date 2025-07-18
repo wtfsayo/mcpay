@@ -508,8 +508,16 @@ export const dailyServerAnalyticsView = pgView("daily_server_analytics").as((qb)
       uniqueUsers: sql<number>`COUNT(DISTINCT COALESCE(tool_usage.user_id, payments.user_id))`.as('unique_users'),
       errorCount: sql<number>`COUNT(DISTINCT CASE WHEN tool_usage.response_status NOT IN ('success', '200') THEN tool_usage.id END)`.as('error_count'),
       avgResponseTime: sql<number>`AVG(tool_usage.execution_time_ms)`.as('avg_response_time'),
-      // Simplified revenue tracking - store as total only for now
-      totalRevenue: sql<number>`COALESCE(SUM(CASE WHEN payments.status = 'completed' THEN CAST(payments.amount_raw AS NUMERIC) ELSE 0 END), 0)`.as('total_revenue'),
+      // Multi-currency revenue tracking using JSON arrays (no nested aggregation)
+      revenueDetails: sql<any>`
+        JSON_AGG(
+          DISTINCT JSONB_BUILD_OBJECT(
+            'currency', payments.currency,
+            'decimals', payments.token_decimals,
+            'amount_raw', payments.amount_raw
+          )
+        ) FILTER (WHERE payments.status = 'completed' AND payments.amount_raw IS NOT NULL)
+      `.as('revenue_details'),
       totalPayments: sql<number>`COUNT(DISTINCT CASE WHEN payments.status = 'completed' THEN payments.id END)`.as('total_payments'),
     })
     .from(mcpServers)
@@ -543,8 +551,16 @@ export const serverSummaryAnalyticsView = pgView("server_summary_analytics").as(
           ELSE 0
         END
       `.as('success_rate'),
-      // Simplified revenue tracking
-      totalRevenue: sql<number>`COALESCE(SUM(CASE WHEN payments.status = 'completed' THEN CAST(payments.amount_raw AS NUMERIC) ELSE 0 END), 0)`.as('total_revenue'),
+      // Multi-currency revenue tracking using JSON arrays
+      revenueDetails: sql<any>`
+        JSON_AGG(
+          DISTINCT JSONB_BUILD_OBJECT(
+            'currency', payments.currency,
+            'decimals', payments.token_decimals,
+            'amount_raw', payments.amount_raw
+          )
+        ) FILTER (WHERE payments.status = 'completed' AND payments.amount_raw IS NOT NULL)
+      `.as('revenue_details'),
       // Recent activity indicators (last 30 days)
       recentRequests: sql<number>`
         COUNT(DISTINCT CASE 
@@ -588,8 +604,16 @@ export const globalAnalyticsView = pgView("global_analytics").as((qb) =>
       uniqueUsers: sql<number>`COUNT(DISTINCT COALESCE(tool_usage.user_id, payments.user_id))`.as('unique_users'),
       totalPayments: sql<number>`COUNT(DISTINCT CASE WHEN payments.status = 'completed' THEN payments.id END)`.as('total_payments'),
       avgResponseTime: sql<number>`AVG(tool_usage.execution_time_ms)`.as('avg_response_time'),
-      // Simplified revenue tracking
-      totalRevenue: sql<number>`COALESCE(SUM(CASE WHEN payments.status = 'completed' THEN CAST(payments.amount_raw AS NUMERIC) ELSE 0 END), 0)`.as('total_revenue'),
+      // Multi-currency revenue tracking using JSON arrays
+      revenueDetails: sql<any>`
+        JSON_AGG(
+          DISTINCT JSONB_BUILD_OBJECT(
+            'currency', payments.currency,
+            'decimals', payments.token_decimals,
+            'amount_raw', payments.amount_raw
+          )
+        ) FILTER (WHERE payments.status = 'completed' AND payments.amount_raw IS NOT NULL)
+      `.as('revenue_details'),
       // Proof verification stats
       totalProofs: sql<number>`COUNT(DISTINCT proofs.id)`.as('total_proofs'),
       consistentProofs: sql<number>`COUNT(DISTINCT CASE WHEN proofs.is_consistent THEN proofs.id END)`.as('consistent_proofs'),
@@ -617,8 +641,16 @@ export const toolAnalyticsView = pgView("tool_analytics").as((qb) =>
       uniqueUsers: sql<number>`COUNT(DISTINCT tool_usage.user_id)`.as('unique_users'),
       avgResponseTime: sql<number>`AVG(tool_usage.execution_time_ms)`.as('avg_response_time'),
       totalPayments: sql<number>`COUNT(DISTINCT CASE WHEN payments.status = 'completed' THEN payments.id END)`.as('total_payments'),
-      // Simplified revenue tracking
-      totalRevenue: sql<number>`COALESCE(SUM(CASE WHEN payments.status = 'completed' THEN CAST(payments.amount_raw AS NUMERIC) ELSE 0 END), 0)`.as('total_revenue'),
+      // Multi-currency revenue tracking using JSON arrays
+      revenueDetails: sql<any>`
+        JSON_AGG(
+          DISTINCT JSONB_BUILD_OBJECT(
+            'currency', payments.currency,
+            'decimals', payments.token_decimals,
+            'amount_raw', payments.amount_raw
+          )
+        ) FILTER (WHERE payments.status = 'completed' AND payments.amount_raw IS NOT NULL)
+      `.as('revenue_details'),
       lastUsed: sql<string>`MAX(tool_usage.timestamp)`.as('last_used'),
       // Recent activity (last 30 days)
       recentRequests: sql<number>`
@@ -646,8 +678,16 @@ export const dailyActivityView = pgView("daily_activity").as((qb) =>
       uniqueUsers: sql<number>`COUNT(DISTINCT COALESCE(tool_usage.user_id, payments.user_id))`.as('unique_users'),
       totalPayments: sql<number>`COUNT(DISTINCT CASE WHEN payments.status = 'completed' THEN payments.id END)`.as('total_payments'),
       avgResponseTime: sql<number>`AVG(tool_usage.execution_time_ms)`.as('avg_response_time'),
-      // Simplified daily revenue
-      totalRevenue: sql<number>`COALESCE(SUM(CASE WHEN payments.status = 'completed' THEN CAST(payments.amount_raw AS NUMERIC) ELSE 0 END), 0)`.as('total_revenue'),
+      // Multi-currency daily revenue tracking using JSON arrays
+      revenueDetails: sql<any>`
+        JSON_AGG(
+          DISTINCT JSONB_BUILD_OBJECT(
+            'currency', payments.currency,
+            'decimals', payments.token_decimals,
+            'amount_raw', payments.amount_raw
+          )
+        ) FILTER (WHERE payments.status = 'completed' AND payments.amount_raw IS NOT NULL)
+      `.as('revenue_details'),
     })
     .from(toolUsage)
     .fullJoin(payments, sql`DATE(tool_usage.timestamp) = DATE(payments.created_at)`)

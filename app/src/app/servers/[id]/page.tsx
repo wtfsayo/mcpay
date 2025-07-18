@@ -388,7 +388,7 @@ await client.connect(transport)
     // Convert ServerTool to the Tool format expected by ToolExecutionModal
     const convertedTool: ConvertedTool = {
       ...tool,
-      pricing: tool.pricing.map(p => ({
+      pricing: (tool.pricing || []).map(p => ({
         id: p.id,
         price: fromBaseUnits(p.priceRaw, p.tokenDecimals),
         currency: p.currency,
@@ -404,6 +404,11 @@ await client.connect(transport)
   // Enhanced formatCurrency function using token registry
   const formatCurrency = (amount: string | number, currency: string, network?: string) => {
     const num = typeof amount === 'string' ? parseFloat(amount) : amount
+
+    // Handle undefined or null currency
+    if (!currency) {
+      return `${num.toFixed(6)} Unknown`
+    }
 
     // If we have network info, try to get token info from registry
     if (network) {
@@ -465,11 +470,11 @@ await client.connect(transport)
           {!amount && tokenInfo && (
             <span className="font-medium">{tokenInfo.symbol}</span>
           )}
-          {!amount && !tokenInfo && (
-            <span className="font-mono text-xs">
-              {currency.startsWith('0x') ? `${currency.slice(0, 6)}...` : currency}
-            </span>
-          )}
+                  {!amount && !tokenInfo && (
+          <span className="font-mono text-xs">
+            {currency && currency.startsWith('0x') ? `${currency.slice(0, 6)}...` : currency || 'Unknown'}
+          </span>
+        )}
         </div>
       </div>
     )
@@ -1129,7 +1134,7 @@ await client.connect(transport)`}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {serverData.tools.map((tool) => (
+                  {(serverData.tools || []).map((tool) => (
                     <TableRow key={tool.id}>
                       <TableCell className="font-medium">
                         <div>
@@ -1151,7 +1156,7 @@ await client.connect(transport)`}
                         )}
                       </TableCell>
                       <TableCell>
-                        {tool.pricing.length > 0 ? (
+                        {(tool.pricing || []).length > 0 ? (
                           <TokenDisplay
                             currency={tool.pricing[0].currency}
                             network={tool.pricing[0].network}
@@ -1163,24 +1168,24 @@ await client.connect(transport)`}
                       </TableCell>
                       <TableCell>
                         <div className="text-sm">
-                          <div>{tool.usage.length} uses</div>
+                          <div>{(tool.usage || []).length} uses</div>
                           <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                            {tool.payments.length} payments
+                            {(tool.payments || []).length} payments
                           </div>
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        {tool.proofs.length > 0 ? (
+                        {(tool.proofs || []).length > 0 ? (
                           <div className="flex items-center justify-end gap-2 text-xs">
-                            <div className={`flex items-center gap-1 ${tool.proofs.filter(p => p.isConsistent).length > 0 ? "text-green-500" : "text-red-500"
+                            <div className={`flex items-center gap-1 ${(tool.proofs || []).filter(p => p.isConsistent).length > 0 ? "text-green-500" : "text-red-500"
                               }`}>
-                              {tool.proofs.filter(p => p.isConsistent).length > 0 ? (
+                              {(tool.proofs || []).filter(p => p.isConsistent).length > 0 ? (
                                 <CheckCircle className="h-3 w-3" />
                               ) : (
                                 <XCircle className="h-3 w-3" />
                               )}
                               <span>
-                                {tool.proofs.filter(p => p.isConsistent).length}/{tool.proofs.length}
+                                {(tool.proofs || []).filter(p => p.isConsistent).length}/{(tool.proofs || []).length}
                               </span>
                             </div>
                           </div>
@@ -1223,7 +1228,7 @@ await client.connect(transport)`}
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {serverData.analytics.slice(0, 7).map((day) => (
+                    {(serverData.analytics || []).slice(0, 7).map((day) => (
                       <div key={day.id} className="flex items-center justify-between">
                         <span className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}>
                           {new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -1258,8 +1263,8 @@ await client.connect(transport)`}
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {serverData.proofs.length > 0 ? (
-                      serverData.proofs.slice(0, 5).map((proof) => (
+                    {(serverData.proofs || []).length > 0 ? (
+                      (serverData.proofs || []).slice(0, 5).map((proof) => (
                         <div key={proof.id} className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             {proof.isConsistent ? (
@@ -1331,7 +1336,8 @@ await client.connect(transport)`}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {serverData.tools.flatMap(tool => tool.payments)
+                      {(serverData.tools || [])
+                        .flatMap(tool => (tool.payments || []))
                         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
                         .slice(0, 10).map((payment) => (
                         <TableRow key={payment.id}>
