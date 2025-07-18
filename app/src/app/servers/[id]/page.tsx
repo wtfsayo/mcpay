@@ -14,7 +14,7 @@ import {
   type Network
 } from "@/lib/client/tokens"
 import { api, urlUtils } from "@/lib/client/utils"
-import { fromBaseUnits, formatAmount } from "@/lib/utils/amounts"
+import { fromBaseUnits } from "@/lib/utils/amounts"
 import {
   Activity,
   AlertCircle,
@@ -110,6 +110,18 @@ interface ServerTool {
   }>
 }
 
+// Type for the converted tool format used by ToolExecutionModal
+interface ConvertedTool extends Omit<ServerTool, 'pricing'> {
+  pricing: Array<{
+    id: string
+    price: string
+    currency: string
+    network: string
+    assetAddress: string
+    active: boolean
+  }>
+}
+
 interface ServerData {
   id: string
   serverId: string
@@ -202,7 +214,7 @@ export default function ServerDashboard() {
   const [serverData, setServerData] = useState<ServerData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedTool, setSelectedTool] = useState<any | null>(null) // Use any to handle converted tool format
+  const [selectedTool, setSelectedTool] = useState<ConvertedTool | null>(null)
   const [showToolModal, setShowToolModal] = useState(false)
   const [activeTab, setActiveTab] = useState("overview")
   const [markdownCopied, setMarkdownCopied] = useState(false)
@@ -374,7 +386,7 @@ await client.connect(transport)
 
   const handleToolExecution = (tool: ServerTool) => {
     // Convert ServerTool to the Tool format expected by ToolExecutionModal
-    const convertedTool = {
+    const convertedTool: ConvertedTool = {
       ...tool,
       pricing: tool.pricing.map(p => ({
         id: p.id,
@@ -385,7 +397,7 @@ await client.connect(transport)
         active: p.active
       }))
     };
-    setSelectedTool(convertedTool as any)
+    setSelectedTool(convertedTool)
     setShowToolModal(true)
   }
 

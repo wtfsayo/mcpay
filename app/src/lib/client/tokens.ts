@@ -12,6 +12,8 @@
  * - Arbitrum Docs: https://docs.arbitrum.io/
  */
 
+import { formatAmount, toBaseUnits } from '@/lib/utils/amounts';
+
 // =============================================================================
 // TYPES & INTERFACES
 // =============================================================================
@@ -390,16 +392,12 @@ export const formatTokenAmount = (
   const { showSymbol = true, precision, compact = false } = options;
   
   try {
-    // Import the precise formatting function
-    const { formatAmount } = require('@/lib/utils/amounts');
-    
     // Convert amount to base units string
     let baseUnits: string;
     if (typeof amount === 'bigint') {
       baseUnits = amount.toString();
     } else if (typeof amount === 'number') {
       // If it's already a human-readable number, convert to base units first
-      const { toBaseUnits } = require('@/lib/utils/amounts');
       baseUnits = toBaseUnits(amount.toString(), token.decimals);
     } else {
       // Assume it's already base units as string

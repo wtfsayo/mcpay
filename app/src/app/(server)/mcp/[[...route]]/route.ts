@@ -9,13 +9,13 @@
  * It is also used to add a layer of error handling to the requests.
  */
 
-import { type Context, Hono } from "hono";
+import { type AuthType } from "@/lib/gateway/auth";
 import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
 import { users } from "@/lib/gateway/db/schema";
-import { type AuthType } from "@/lib/gateway/auth";
 import { attemptAutoSign } from "@/lib/gateway/payment-strategies";
 import { createExactPaymentRequirements, decodePayment, settle, verifyPayment, x402Version } from "@/lib/gateway/payments";
-import { settleResponseHeader, type SupportedNetwork, type ExtendedPaymentRequirements } from "@/lib/gateway/types";
+import { settleResponseHeader, type SupportedNetwork } from "@/lib/gateway/types";
+import { type Context, Hono } from "hono";
 import { handle } from "hono/vercel";
 // Add import for amounts utility
 import { fromBaseUnits } from "@/lib/utils/amounts";
