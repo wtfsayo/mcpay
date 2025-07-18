@@ -10,7 +10,7 @@ import { createOneClickBuyUrl, getSupportedAssets, getSupportedNetworks } from "
 import { VLayer, type ExecutionContext } from "@/lib/gateway/3rd-parties/vlayer";
 import { auth, ensureUserHasCDPWallet, type AuthType } from "@/lib/gateway/auth";
 import { generateApiKey } from "@/lib/gateway/auth-utils";
-import { getBlockchainArchitecture, getStablecoinBalances, type BlockchainArchitecture } from "@/lib/gateway/crypto-accounts";
+import { COMMON_DECIMALS, getBlockchainArchitecture, getBlockchainsForArchitecture, getMainnetStablecoinBalances, getStablecoinBalances, getTestnetStablecoinBalances, isSupportedBlockchain, type BlockchainArchitecture } from "@/lib/commons";
 import db from "@/lib/gateway/db";
 import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
 import { getMcpTools } from "@/lib/gateway/inspect-mcp";
@@ -508,8 +508,6 @@ app.post('/servers', authMiddleware, async (c) => {
                         console.log('Creating pricing for tool:', tool.name)
                         // Type the payment as the expected schema since we know it comes from user input
                         const paymentInfo = monetizedTool.payment as ToolPaymentInfo
-                        // Import token utilities to get decimals
-                        const { COMMON_DECIMALS } = await import('@/lib/utils/amounts');
                         const currency = String(paymentInfo.asset || 'USDC');
                         const tokenDecimals = COMMON_DECIMALS[currency as keyof typeof COMMON_DECIMALS] || 6; // Default to USDC decimals
                         
@@ -1481,8 +1479,6 @@ app.get('/onramp/config', async (c) => {
 // Add new endpoint to get supported architectures and blockchain mappings
 app.get('/wallets/architectures', async (c) => {
     try {
-        const { getBlockchainsForArchitecture, isSupportedBlockchain } = await import('@/lib/gateway/crypto-accounts');
-        
         return c.json({
             supportedArchitectures: ['evm', 'solana', 'near', 'cosmos', 'bitcoin'],
             blockchainsByArchitecture: {
@@ -1518,8 +1514,6 @@ app.get('/users/:userId/wallets/mainnet-balances', authMiddleware, async (c) => 
             return await txOperations.getUserWallets(userId, !includeInactive)(tx);
         });
 
-        // Get only mainnet stablecoin balances (real money)
-        const { getMainnetStablecoinBalances } = await import('@/lib/gateway/crypto-accounts');
         const stablecoinBalances = await getMainnetStablecoinBalances(wallets.map(w => w.walletAddress));
 
         const response = {
@@ -1562,8 +1556,6 @@ app.get('/users/:userId/wallets/testnet-balances', authMiddleware, async (c) => 
             return await txOperations.getUserWallets(userId, !includeInactive)(tx);
         });
 
-        // Get only testnet stablecoin balances
-        const { getTestnetStablecoinBalances } = await import('@/lib/gateway/crypto-accounts');
         const stablecoinBalances = await getTestnetStablecoinBalances(wallets.map(w => w.walletAddress));
 
         const response = {

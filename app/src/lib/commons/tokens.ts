@@ -1,5 +1,5 @@
 /**
- * 🚀 Awesome Token Registry for MCPay
+ * Consolidated Token Registry for MCPay Commons
  * 
  * A comprehensive token registry supporting multiple networks with efficient
  * address + network searching, extensive token metadata, and utility functions.
@@ -9,56 +9,10 @@
  * - Ethplorer: https://ethplorer.io/
  * - BaseScan: https://basescan.org/
  * - CoinGecko API: https://docs.coingecko.com/
- * - Arbitrum Docs: https://docs.arbitrum.io/
  */
 
-import { formatAmount, toBaseUnits } from '@/lib/utils/amounts';
-
-// =============================================================================
-// TYPES & INTERFACES
-// =============================================================================
-
-export type Network = /*'base' | */ 'base-sepolia' /*| 'ethereum' | 'arbitrum' | 'optimism' | 'polygon'*/ | 'sei-testnet';
-export type TokenCategory = 'stablecoin' | 'utility' | 'defi' | 'meme' | 'governance' | 'wrapped';
-
-export interface TokenInfo {
-  symbol: string;
-  name: string;
-  network: Network;
-  decimals: number;
-  category: TokenCategory;
-  logoUri?: string;
-  coingeckoId?: string;
-  isStablecoin: boolean;
-  isNative: boolean;
-  chainId: number;
-  tags: string[];
-  description?: string;
-  website?: string;
-  twitter?: string;
-  discord?: string;
-  // Payment-specific metadata
-  popularityScore: number; // 1-100, higher = more popular for payments
-  liquidityTier: 'high' | 'medium' | 'low';
-  recommendedForPayments: boolean;
-  // Data source verification
-  verified: boolean;
-  verificationSource?: string;
-}
-
-export interface NetworkInfo {
-  name: string;
-  chainId: number;
-  nativeCurrency: {
-    name: string;
-    symbol: string;
-    decimals: number;
-  };
-  rpcUrls: string[];
-  blockExplorerUrls: string[];
-  iconUrl?: string;
-  isTestnet: boolean;
-}
+import { formatAmount, toBaseUnits } from './amounts';
+import type { Network, TokenInfo, NetworkInfo } from './types';
 
 // =============================================================================
 // NETWORK CONFIGURATIONS
@@ -86,17 +40,15 @@ export const NETWORKS: Record<Network, NetworkInfo> = {
 };
 
 // =============================================================================
-// TOKEN REGISTRY - VERIFIED DATA FROM OFFICIAL SOURCES
+// TOKEN REGISTRY
 // =============================================================================
 
 /**
  * Comprehensive token registry organized by network and address
  * Format: network -> address -> TokenInfo
- * 
- * 🔐 All addresses verified from official sources
  */
 export const TOKEN_REGISTRY: Record<Network, Record<string, TokenInfo>> = {
-  // BASE SEPOLIA (TESTNET) - Verified via Circle & Faucets
+  // BASE SEPOLIA (TESTNET)
   'base-sepolia': {
     // Native ETH
     '0x0000000000000000000000000000000000000000': {
@@ -118,7 +70,7 @@ export const TOKEN_REGISTRY: Record<Network, Record<string, TokenInfo>> = {
       verified: true,
       verificationSource: 'Base Network Official',
     },
-    // USDC (Testnet) - Verified by Circle Official  
+    // USDC (Testnet)
     '0x036cbd53842c5426634e7929541ec2318f3dcf7e': {
       symbol: 'USDC',
       name: 'USD Coin',
@@ -138,7 +90,7 @@ export const TOKEN_REGISTRY: Record<Network, Record<string, TokenInfo>> = {
       verified: true,
       verificationSource: 'Circle Official Documentation',
     },
-    // USDT (Testnet) - Community verified
+    // USDT (Testnet)
     '0x036cec1a199234fc02f72d29e596a58034100694': {
       symbol: 'USDT',
       name: 'Tether USD',
@@ -180,7 +132,7 @@ export const TOKEN_REGISTRY: Record<Network, Record<string, TokenInfo>> = {
     },
   },
 
-  // SEI TESTNET - Sei Testnet Configuration
+  // SEI TESTNET
   'sei-testnet': {
     // Native SEI
     '0x0000000000000000000000000000000000000000': {
@@ -202,7 +154,7 @@ export const TOKEN_REGISTRY: Record<Network, Record<string, TokenInfo>> = {
       verified: true,
       verificationSource: 'Sei Protocol Official',
     },
-    // USDC (Testnet) - User provided address
+    // USDC (Testnet)
     '0x4fcf1784b31630811181f670aea7a7bef803eaed': {
       symbol: 'USDC',
       name: 'USD Coin',
@@ -338,7 +290,7 @@ export const searchTokensByName = (query: string): TokenInfo[] => {
 
   return results
     .sort((a, b) => b.popularityScore - a.popularityScore)
-    .slice(0, 20); // Limit results
+    .slice(0, 20);
 };
 
 /**
@@ -369,12 +321,6 @@ export const isValidToken = (address: string, network: Network): boolean => {
 
 /**
  * Format token amount with proper decimals using precise arithmetic
- * 
- * @param amount - Amount in base units (string/number/bigint)
- * @param tokenAddress - Token contract address or symbol
- * @param network - Network the token is on
- * @param options - Formatting options
- * @returns Formatted amount string
  */
 export const formatTokenAmount = (
   amount: string | number | bigint,
@@ -475,24 +421,7 @@ export const getTokenVerification = (address: string, network: Network): {
 };
 
 // =============================================================================
-// LEGACY COMPATIBILITY
-// =============================================================================
-
-/**
- * Legacy token addresses mapping for backward compatibility
- * @deprecated Use getTokenInfo(address, network) instead
- */
-export const TOKEN_ADDRESSES: Record<string, TokenInfo & { network: string }> = {};
-
-// Populate legacy mapping
-for (const [network, tokens] of Object.entries(TOKEN_REGISTRY)) {
-  for (const [address, token] of Object.entries(tokens)) {
-    TOKEN_ADDRESSES[address] = { ...token, network: network as Network };
-  }
-}
-
-// =============================================================================
 // EXPORTS
 // =============================================================================
 
-export { TOKEN_REGISTRY as default };
+export { TOKEN_REGISTRY as default }; 

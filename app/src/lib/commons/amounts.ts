@@ -1,5 +1,5 @@
 /**
- * Token Amount Conversion Utilities
+ * Token Amount Conversion Utilities for MCPay Commons
  * 
  * This module provides precise amount conversion utilities for handling token amounts
  * across different decimal places without floating point precision issues.
@@ -16,23 +16,14 @@
  * - Database NUMERIC integration
  * - Validation and error handling
  * - Type-safe amount operations
- * 
- * Usage:
- * ```typescript
- * // Convert human-readable amount to base units (for API/DB)
- * const baseUnits = toBaseUnits("0.1", 6); // "100000" (0.1 USDC)
- * 
- * // Convert base units to human-readable amount
- * const readable = fromBaseUnits("100000", 6); // "0.1"
- * 
- * // Format for display
- * const formatted = formatAmount("100000", 6, { symbol: "USDC" }); // "0.10 USDC"
- * 
- * // Database helpers
- * const dbAmount = toDbAmount("0.1", 6); // Returns { amount_raw: "100000", token_decimals: 6 }
- * const fromDb = fromDbAmount("100000", 6); // "0.1"
- * ```
+ * - Multi-currency revenue tracking
  */
+
+import type { FormatAmountOptions, DbAmountRecord, RevenueByCurrency } from './types';
+
+// =============================================================================
+// ERROR HANDLING
+// =============================================================================
 
 export class AmountConversionError extends Error {
   constructor(message: string, public readonly cause?: unknown) {
@@ -41,9 +32,10 @@ export class AmountConversionError extends Error {
   }
 }
 
-/**
- * Validates that a string represents a valid decimal number
- */
+// =============================================================================
+// VALIDATION UTILITIES
+// =============================================================================
+
 function validateDecimalString(amount: string): void {
   if (!amount || typeof amount !== 'string') {
     throw new AmountConversionError('Amount must be a non-empty string');
@@ -61,14 +53,34 @@ function validateDecimalString(amount: string): void {
   }
 }
 
-/**
- * Validates token decimals
- */
 function validateDecimals(decimals: number): void {
   if (!Number.isInteger(decimals) || decimals < 0 || decimals > 77) {
     throw new AmountConversionError(`Invalid decimals: ${decimals}. Must be integer between 0 and 77`);
   }
 }
+
+export function validateBaseAmount(amount: string): boolean {
+  if (!amount || typeof amount !== 'string') {
+    throw new AmountConversionError('Amount must be a non-empty string');
+  }
+  
+  // Allow negative numbers
+  const regex = /^-?\d+$/;
+  if (!regex.test(amount)) {
+    throw new AmountConversionError(`Invalid base amount format: ${amount}`);
+  }
+  
+  try {
+    BigInt(amount); // This will throw if the string is not a valid integer
+    return true;
+  } catch (error) {
+    throw new AmountConversionError(`Invalid base amount: ${amount}`, error);
+  }
+}
+
+// =============================================================================
+// CORE CONVERSION FUNCTIONS
+// =============================================================================
 
 /**
  * Converts a human-readable amount to base units (atomic units)
@@ -76,11 +88,6 @@ function validateDecimals(decimals: number): void {
  * @param amount - Human-readable amount as string (e.g., "0.1", "1.5")
  * @param decimals - Number of decimal places for the token (e.g., 6 for USDC, 18 for ETH)
  * @returns Base units as string (e.g., "100000" for 0.1 USDC)
- * 
- * @example
- * toBaseUnits("0.1", 6) // "100000" (0.1 USDC)
- * toBaseUnits("1.5", 18) // "1500000000000000000" (1.5 ETH)
- * toBaseUnits("100", 0) // "100" (100 of a token with 0 decimals)
  */
 export function toBaseUnits(amount: string, decimals: number): string {
   validateDecimalString(amount);
@@ -128,11 +135,6 @@ export function toBaseUnits(amount: string, decimals: number): string {
  * @param baseAmount - Base units as string (e.g., "100000")
  * @param decimals - Number of decimal places for the token
  * @returns Human-readable amount as string (e.g., "0.1")
- * 
- * @example
- * fromBaseUnits("100000", 6) // "0.1" (0.1 USDC)
- * fromBaseUnits("1500000000000000000", 18) // "1.5" (1.5 ETH)
- * fromBaseUnits("100", 0) // "100" (100 of a token with 0 decimals)
  */
 export function fromBaseUnits(baseAmount: string, decimals: number): string {
   if (!baseAmount || typeof baseAmount !== 'string') {
@@ -186,21 +188,9 @@ export function fromBaseUnits(baseAmount: string, decimals: number): string {
   }
 }
 
-/**
- * Options for formatting amounts
- */
-export interface FormatAmountOptions {
-  /** Token symbol to display (e.g., "USDC", "ETH") */
-  symbol?: string;
-  /** Maximum number of decimal places to show */
-  precision?: number;
-  /** Whether to use compact notation for large numbers (K, M, B, T) */
-  compact?: boolean;
-  /** Minimum number of decimal places to show (pads with zeros) */
-  minDecimals?: number;
-  /** Whether to show the symbol */
-  showSymbol?: boolean;
-}
+// =============================================================================
+// FORMATTING FUNCTIONS
+// =============================================================================
 
 /**
  * Formats a base unit amount for display
@@ -209,11 +199,6 @@ export interface FormatAmountOptions {
  * @param decimals - Number of decimal places for the token
  * @param options - Formatting options
  * @returns Formatted amount string
- * 
- * @example
- * formatAmount("100000", 6, { symbol: "USDC" }) // "0.1 USDC"
- * formatAmount("1500000000000000000", 18, { symbol: "ETH", precision: 4 }) // "1.5 ETH"
- * formatAmount("1000000000", 6, { symbol: "USDC", compact: true }) // "1K USDC"
  */
 export function formatAmount(
   baseAmount: string,
@@ -277,12 +262,12 @@ export function formatAmount(
   }
 }
 
+// =============================================================================
+// ARITHMETIC OPERATIONS
+// =============================================================================
+
 /**
  * Adds two amounts in base units
- * 
- * @param amount1 - First amount in base units
- * @param amount2 - Second amount in base units
- * @returns Sum in base units
  */
 export function addAmounts(amount1: string, amount2: string): string {
   try {
@@ -299,10 +284,6 @@ export function addAmounts(amount1: string, amount2: string): string {
 
 /**
  * Subtracts two amounts in base units
- * 
- * @param amount1 - Amount to subtract from (base units)
- * @param amount2 - Amount to subtract (base units)
- * @returns Difference in base units
  */
 export function subtractAmounts(amount1: string, amount2: string): string {
   try {
@@ -319,9 +300,6 @@ export function subtractAmounts(amount1: string, amount2: string): string {
 
 /**
  * Compares two amounts in base units
- * 
- * @param amount1 - First amount in base units
- * @param amount2 - Second amount in base units
  * @returns -1 if amount1 < amount2, 0 if equal, 1 if amount1 > amount2
  */
 export function compareAmounts(amount1: string, amount2: string): number {
@@ -342,9 +320,6 @@ export function compareAmounts(amount1: string, amount2: string): number {
 
 /**
  * Checks if an amount is zero
- * 
- * @param amount - Amount in base units
- * @returns True if amount is zero
  */
 export function isZeroAmount(amount: string): boolean {
   try {
@@ -354,39 +329,13 @@ export function isZeroAmount(amount: string): boolean {
   }
 }
 
-/**
- * Validates that an amount string represents a valid base unit amount
- * 
- * @param amount - Amount to validate
- * @returns True if valid
- * @throws AmountConversionError if invalid
- */
-export function validateBaseAmount(amount: string): boolean {
-  if (!amount || typeof amount !== 'string') {
-    throw new AmountConversionError('Amount must be a non-empty string');
-  }
-  
-  // Allow negative numbers
-  const regex = /^-?\d+$/;
-  if (!regex.test(amount)) {
-    throw new AmountConversionError(`Invalid base amount format: ${amount}`);
-  }
-  
-  try {
-    BigInt(amount); // This will throw if the string is not a valid integer
-    return true;
-  } catch (error) {
-    throw new AmountConversionError(`Invalid base amount: ${amount}`, error);
-  }
-}
+// =============================================================================
+// USER INPUT PARSING
+// =============================================================================
 
 /**
  * Safely parses a user input amount and converts to base units
  * Handles various input formats and provides clear error messages
- * 
- * @param input - User input string
- * @param decimals - Token decimals
- * @returns Base units as string
  */
 export function parseUserAmount(input: string, decimals: number): string {
   if (!input || typeof input !== 'string') {
@@ -409,38 +358,12 @@ export function parseUserAmount(input: string, decimals: number): string {
   return toBaseUnits(cleaned, decimals);
 }
 
-// Export common token decimals for convenience
-export const COMMON_DECIMALS = {
-  USDC: 6,
-  USDT: 6,
-  ETH: 18,
-  WETH: 18,
-  DAI: 18,
-  WBTC: 8,
-  BTC: 8,
-} as const;
-
 // =============================================================================
-// DATABASE INTEGRATION HELPERS
+// DATABASE INTEGRATION
 // =============================================================================
-
-/**
- * Database amount record structure
- */
-export interface DbAmountRecord {
-  amount_raw: string;
-  token_decimals: number;
-}
 
 /**
  * Converts a human-readable amount to database format
- * 
- * @param humanAmount - Human-readable amount string
- * @param decimals - Token decimals
- * @returns Database record with amount_raw and token_decimals
- * 
- * @example
- * toDbAmount("0.1", 6) // { amount_raw: "100000", token_decimals: 6 }
  */
 export function toDbAmount(humanAmount: string, decimals: number): DbAmountRecord {
   return {
@@ -451,13 +374,6 @@ export function toDbAmount(humanAmount: string, decimals: number): DbAmountRecor
 
 /**
  * Converts database amount record to human-readable amount
- * 
- * @param amountRaw - Base units from database (string or NUMERIC)
- * @param tokenDecimals - Token decimals from database
- * @returns Human-readable amount string
- * 
- * @example
- * fromDbAmount("100000", 6) // "0.1"
  */
 export function fromDbAmount(amountRaw: string | number, tokenDecimals: number): string {
   const baseUnits = typeof amountRaw === 'number' ? amountRaw.toString() : amountRaw;
@@ -466,14 +382,6 @@ export function fromDbAmount(amountRaw: string | number, tokenDecimals: number):
 
 /**
  * Formats a database amount record for display
- * 
- * @param amountRaw - Base units from database
- * @param tokenDecimals - Token decimals from database
- * @param options - Formatting options
- * @returns Formatted display string
- * 
- * @example
- * formatDbAmount("100000", 6, { symbol: "USDC" }) // "0.1 USDC"
  */
 export function formatDbAmount(
   amountRaw: string | number,
@@ -486,10 +394,6 @@ export function formatDbAmount(
 
 /**
  * Validates a database amount record
- * 
- * @param record - Database amount record to validate
- * @returns True if valid
- * @throws AmountConversionError if invalid
  */
 export function validateDbAmount(record: DbAmountRecord): boolean {
   validateBaseAmount(record.amount_raw);
@@ -499,15 +403,6 @@ export function validateDbAmount(record: DbAmountRecord): boolean {
 
 /**
  * Aggregates multiple database amounts (same currency only)
- * 
- * @param amounts - Array of database amount records (must have same decimals)
- * @returns Aggregated amount in same format
- * 
- * @example
- * aggregateDbAmounts([
- *   { amount_raw: "100000", token_decimals: 6 },
- *   { amount_raw: "200000", token_decimals: 6 }
- * ]) // { amount_raw: "300000", token_decimals: 6 }
  */
 export function aggregateDbAmounts(amounts: DbAmountRecord[]): DbAmountRecord {
   if (amounts.length === 0) {
@@ -538,35 +433,9 @@ export function aggregateDbAmounts(amounts: DbAmountRecord[]): DbAmountRecord {
   };
 }
 
-/**
- * Converts legacy decimal amount to new database format
- * Useful for migrations from old decimal(18,8) format
- * 
- * @param legacyAmount - Old decimal amount (could be number or string)
- * @param assumedDecimals - Token decimals to assume for conversion
- * @returns Database amount record
- * 
- * @example
- * migrateLegacyAmount("0.10000000", 6) // { amount_raw: "100000", token_decimals: 6 }
- */
-export function migrateLegacyAmount(
-  legacyAmount: string | number,
-  assumedDecimals: number
-): DbAmountRecord {
-  const humanAmount = typeof legacyAmount === 'number' 
-    ? legacyAmount.toString() 
-    : legacyAmount;
-  
-  return toDbAmount(humanAmount, assumedDecimals);
-} 
-
-/**
- * Multi-Currency Revenue Operations
- * Format: { "[CURRENCY]-[DECIMALS]": "amount_in_base_units" }
- * Example: { "USDC-6": "1000000", "ETH-18": "500000000000000000" }
- */
-
-export type RevenueByCurrency = Record<string, string>;
+// =============================================================================
+// MULTI-CURRENCY REVENUE OPERATIONS
+// =============================================================================
 
 /**
  * Create a currency key for revenue tracking
@@ -656,7 +525,7 @@ export function formatRevenueByCurrency(
       return { currency, amount, formattedAmount };
     })
     .filter(item => showZeroAmounts || parseFloat(item.amount) > 0)
-    .sort((a, b) => parseFloat(b.amount) - parseFloat(a.amount)) // Sort by amount descending
+    .sort((a, b) => parseFloat(b.amount) - parseFloat(a.amount))
     .slice(0, maxCurrencies);
   
   return formatted;
@@ -681,46 +550,4 @@ export function getRevenueByCurrency(
 export function hasRevenue(revenue: RevenueByCurrency | null | undefined): boolean {
   if (!revenue) return false;
   return Object.values(revenue).some(amount => parseFloat(amount) > 0);
-}
-
-/**
- * Convert old single-currency revenue to multi-currency format
- * Used for migration/backward compatibility
- */
-export function migrateSingleCurrencyRevenue(
-  totalRevenueRaw: string,
-  currency: string,
-  decimals: number
-): RevenueByCurrency {
-  if (parseFloat(totalRevenueRaw) === 0) return {};
-  
-  const key = createCurrencyKey(currency, decimals);
-  return { [key]: totalRevenueRaw };
-}
-
-/**
- * Calculate total value in a reference currency (for rough comparisons)
- * Note: This requires external price data and should be used carefully
- */
-export function calculateTotalValueInReferenceCurrency(
-  revenue: RevenueByCurrency | null | undefined,
-  priceData: Record<string, number>, // { "USDC": 1.0, "ETH": 2500.0 }
-  referenceCurrency = 'USD'
-): { totalValue: number; breakdown: Array<{ currency: string; value: number; amount: string }> } {
-  if (!revenue) return { totalValue: 0, breakdown: [] };
-  
-  let totalValue = 0;
-  const breakdown: Array<{ currency: string; value: number; amount: string }> = [];
-  
-  for (const [key, amountRaw] of Object.entries(revenue)) {
-    const { currency, decimals } = parseCurrencyKey(key);
-    const amount = fromBaseUnits(amountRaw, decimals);
-    const price = priceData[currency] || 0;
-    const value = parseFloat(amount) * price;
-    
-    totalValue += value;
-    breakdown.push({ currency, value, amount });
-  }
-  
-  return { totalValue, breakdown };
 } 

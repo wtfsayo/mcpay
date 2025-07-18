@@ -28,7 +28,7 @@ import type { Context } from "hono";
 import { PaymentPayloadSchema, safeBase64Decode, type SupportedNetwork, type PaymentPayload, type SupportedPaymentRequirements, type ExtendedPaymentRequirements } from "@/lib/gateway/types";
 import { createFacilitator } from "@/lib/gateway/types";
 import { getFacilitatorUrl } from "@/lib/gateway/env";
-import { toBaseUnits } from "@/lib/utils/amounts";
+import { toBaseUnits } from "@/lib/commons";
 
 /**
  * Parses the amount from the given price using precise arithmetic

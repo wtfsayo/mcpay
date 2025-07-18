@@ -9,6 +9,7 @@
  * It is also used to add a layer of error handling to the requests.
  */
 
+import { fromBaseUnits } from "@/lib/commons";
 import { type AuthType } from "@/lib/gateway/auth";
 import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
 import { users } from "@/lib/gateway/db/schema";
@@ -17,8 +18,6 @@ import { createExactPaymentRequirements, decodePayment, settle, verifyPayment, x
 import { settleResponseHeader, type SupportedNetwork } from "@/lib/gateway/types";
 import { type Context, Hono } from "hono";
 import { handle } from "hono/vercel";
-// Add import for amounts utility
-import { fromBaseUnits } from "@/lib/utils/amounts";
 
 export const runtime = 'nodejs'
 
