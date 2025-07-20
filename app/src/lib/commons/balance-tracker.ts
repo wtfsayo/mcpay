@@ -54,51 +54,7 @@ import {
   type SupportedChain
 } from './chains';
 
-// =============================================================================
-// BALANCE RESULT TYPES
-// =============================================================================
-
-export interface MultiChainStablecoinResult {
-  balances: StablecoinBalance[];
-  errors: StablecoinBalanceError[];
-  // Separate totals for mainnet and testnet
-  totalFiatValue: number; // Total fiat value from mainnet chains only
-  testnetTotalFiatValue: number; // Total fiat value from testnet chains (for display purposes)
-  mainnetBalances: StablecoinBalance[]; // Mainnet balances only
-  testnetBalances: StablecoinBalance[]; // Testnet balances only
-  balancesByChain: Partial<Record<SupportedChain, StablecoinBalance[]>>;
-  balancesByStablecoin: Partial<Record<StablecoinSymbol, StablecoinBalance[]>>;
-  // Separate groupings for mainnet and testnet
-  mainnetBalancesByChain: Partial<Record<SupportedChain, StablecoinBalance[]>>;
-  testnetBalancesByChain: Partial<Record<SupportedChain, StablecoinBalance[]>>;
-  mainnetBalancesByStablecoin: Partial<Record<StablecoinSymbol, StablecoinBalance[]>>;
-  testnetBalancesByStablecoin: Partial<Record<StablecoinSymbol, StablecoinBalance[]>>;
-  summary: {
-    totalAccounts: number;
-    totalChainsChecked: number;
-    totalStablecoinsChecked: number;
-    successfulChecks: number;
-    failedChecks: number;
-    // Additional testnet/mainnet breakdown
-    mainnetChainsChecked: number;
-    testnetChainsChecked: number;
-    mainnetSuccessfulChecks: number;
-    testnetSuccessfulChecks: number;
-  };
-}
-
-// =============================================================================
-// STABLECOIN CLIENT INTERFACES & IMPLEMENTATIONS
-// =============================================================================
-
-// Abstract interface for blockchain clients
-interface StablecoinClient {
-  getTokenBalance(
-    address: BlockchainAddress, 
-    tokenConfig: EVMTokenConfig | SolanaTokenConfig | NearTokenConfig, 
-    chainConfig: ChainConfig
-  ): Promise<bigint>;
-}
+import { MultiChainStablecoinResult, StablecoinClient } from '@/types/blockchain';
 
 // EVM client implementation using viem
 class EVMStablecoinClient implements StablecoinClient {
@@ -532,50 +488,6 @@ function aggregateResults(
       testnetSuccessfulChecks: testnetBalances.length,
     },
   };
-}
-
-// =============================================================================
-// EXAMPLE USAGE FUNCTION
-// =============================================================================
-
-/**
- * Example usage function - demonstrating how to use the stablecoin balance checker with testnet/mainnet separation
- */
-export async function exampleUsage() {
-  const addresses: BlockchainAddress[] = [
-    '0x742d35Cc6634C0532925a3b8D41E5b8F7c5c5C04', // EVM addresses
-    '0x742d35Cc6634C0532925a3b8D41E5b8F7c5c5C05',
-    'DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK', // Solana addresses
-    'alice.near', // Near addresses
-  ];
-
-  // Check all stablecoin balances across all supported chains (with testnet/mainnet separation)
-  console.log('Checking stablecoin balances across all chains with testnet/mainnet separation...');
-  const allChainsResult = await getStablecoinBalances(addresses);
-  
-  console.log(`Real money (mainnet) total: $${allChainsResult.totalFiatValue.toFixed(2)}`);
-  console.log(`Test money (testnet) total: $${allChainsResult.testnetTotalFiatValue.toFixed(2)}`);
-  console.log(`Mainnet successful checks: ${allChainsResult.summary.mainnetSuccessfulChecks}`);
-  console.log(`Testnet successful checks: ${allChainsResult.summary.testnetSuccessfulChecks}`);
-
-  // Check only mainnet balances (real money)
-  console.log('\nChecking mainnet balances only (real money)...');
-  const mainnetResult = await getMainnetStablecoinBalances(addresses);
-  console.log(`Total real money value: $${mainnetResult.totalFiatValue.toFixed(2)}`);
-
-  // Check only testnet balances
-  console.log('\nChecking testnet balances only...');
-  const testnetResult = await getTestnetStablecoinBalances(addresses);
-  console.log(`Total test money value: $${testnetResult.totalFiatValue.toFixed(2)}`);
-
-  // Check USDC only on EVM chains
-  console.log('\nChecking USDC balances on EVM chains only...');
-  const evmChains = getEVMChains();
-  const evmResult = await getStablecoinBalancesOnChains(addresses, evmChains, ['USDC']);
-  console.log(`Total USDC value on EVM chains: $${evmResult.totalFiatValue.toFixed(2)} (mainnet)`);
-  console.log(`Total USDC test value on EVM chains: $${evmResult.testnetTotalFiatValue.toFixed(2)} (testnet)`);
-
-  return allChainsResult;
 }
 
 // =============================================================================

@@ -1,13 +1,14 @@
 "use client"
 
-import React from "react"
+import { useTheme } from "@/components/providers/theme-context"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { useTheme } from "@/components/providers/theme-context"
+import { urlUtils } from "@/lib/client/utils"
+import { switchToNetwork } from "@/lib/client/wallet-utils"
 import {
   formatTokenAmount,
   getNetworkByChainId,
@@ -15,8 +16,7 @@ import {
   NETWORKS,
 } from "@/lib/commons"
 import { type Network } from "@/types/blockchain"
-import { urlUtils } from "@/lib/client/utils"
-import { switchToNetwork } from "@/lib/client/wallet-utils"
+import { InputProperty, MCPClient, MCPToolFromClient, MCPToolsCollection, ToolExecutionModalProps, ToolInputSchema, type ToolFromMcpServerWithStats } from "@/types/mcp"
 import { experimental_createMCPClient } from "ai"
 import {
   AlertCircle,
@@ -32,33 +32,12 @@ import { createPaymentTransport } from "mcpay/client"
 import Image from "next/image"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAccount, useChainId, useWalletClient } from "wagmi"
-import { type ToolFromMcpServerWithStats } from "@/types/mcp"
 
 // =============================================================================
 // TYPE DEFINITIONS
 // =============================================================================
 
-interface InputProperty {
-  type: string
-  description?: string
-  enum?: string[]
-  default?: unknown
-  minimum?: number
-  maximum?: number
-}
 
-interface ToolInputSchema {
-  type?: string
-  properties?: Record<string, InputProperty>
-  required?: string[]
-}
-
-interface ToolExecutionModalProps {
-  isOpen: boolean
-  onClose: () => void
-  tool: ToolFromMcpServerWithStats | null
-  serverId: string
-}
 
 type ExecutionStatus = 'idle' | 'initializing' | 'executing' | 'success' | 'error'
 
@@ -68,23 +47,6 @@ interface ToolExecution {
   error?: string
 }
 
-interface MCPToolInputSchema {
-  jsonSchema?: {
-    properties?: Record<string, InputProperty>
-    required?: string[]
-  }
-}
-
-interface MCPToolFromClient {
-  name?: string
-  description?: string
-  parameters?: MCPToolInputSchema
-  inputSchema?: MCPToolInputSchema
-  execute?: (params: Record<string, unknown>, options: { toolCallId: string; messages: unknown[] }) => Promise<unknown>
-}
-
-type MCPClient = Awaited<ReturnType<typeof experimental_createMCPClient>>
-type MCPToolsCollection = Record<string, unknown>
 
 // =============================================================================
 // STYLING UTILITIES
@@ -122,14 +84,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
   // Create stable tool reference to avoid infinite loops
   const stableTool = useMemo(() => {
     if (!tool) return null
-    return {
-      id: tool.id,
-      name: tool.name,
-      inputSchema: tool.inputSchema,
-      description: tool.description,
-      isMonetized: tool.isMonetized,
-      pricing: tool.pricing
-    }
+    return tool
   }, [tool?.id, tool?.name, JSON.stringify(tool?.inputSchema), tool?.description, tool?.isMonetized, JSON.stringify(tool?.pricing)])
 
   // State management
@@ -902,8 +857,8 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
   const renderContent = () => {
     if (!stableTool) return null
 
-    const properties = getToolProperties(stableTool as Tool)
-    const hasInputs = hasToolInputs(stableTool as Tool)
+    const properties = getToolProperties(stableTool)
+    const hasInputs = hasToolInputs(stableTool)
 
     return (
       <div className="space-y-6">
@@ -939,7 +894,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
                   <TokenDisplay
                     currency={stableTool.pricing[0].currency}
                     network={stableTool.pricing[0].network}
-                    amount={stableTool.pricing[0].price}
+                    amount={parseFloat(stableTool.pricing[0].priceRaw) / Math.pow(10, stableTool.pricing[0].tokenDecimals)}
                   />
                 </div>
                 <div>Network: {stableTool.pricing[0].network}</div>

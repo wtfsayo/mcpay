@@ -1,8 +1,12 @@
+import { userWallets } from "@/lib/gateway/db/schema";
+
+export type Wallet = typeof userWallets.$inferSelect
+
 // Interface for CDP wallet metadata
 export interface CDPWalletMetadata {
     isSmartAccount?: boolean;
     ownerAccountId?: string;
-    cdpNetwork?: string;
+    cdpNetwork?: CDPNetwork;
     cdpAccountId?: string;
     cdpAccountName?: string;
     provider?: string;
@@ -82,9 +86,9 @@ export interface WalletRegistrationInfo {
     walletType: 'external' | 'managed' | 'custodial';
     provider?: string;
     primaryWallet: boolean;
-  }
-  
-  export interface EnhancedServerRegistration {
+}
+
+export interface EnhancedServerRegistration {
     mcpOrigin: string;
     receiverAddress: string;
     name?: string;
@@ -92,15 +96,103 @@ export interface WalletRegistrationInfo {
     requireAuth?: boolean;
     authHeaders?: Record<string, unknown>;
     tools?: Array<{
-      name: string;
-      payment?: {
-        maxAmountRequired: string; // Base units as string for precision
-        asset: string;
-        network: string;
-        resource?: string;
-        description?: string;
-      };
+        name: string;
+        payment?: {
+            maxAmountRequired: string; // Base units as string for precision
+            asset: string;
+            network: string;
+            resource?: string;
+            description?: string;
+        };
     }>;
     walletInfo?: WalletRegistrationInfo;
     metadata?: Record<string, unknown>;
-  }
+}
+
+
+// Supported networks for CDP
+export type CDPNetwork =
+    | "base"
+    | "base-sepolia"
+    | "ethereum"
+    | "ethereum-sepolia"
+    | "polygon"
+    | "arbitrum"
+    | "sei-testnet";
+
+// Supported networks for CDP
+export type CDPNetworkSmartAccount =
+    | "base"
+    | "base-sepolia"
+    | "ethereum"
+    | "ethereum-sepolia"
+    | "polygon"
+    | "arbitrum"
+
+// CDP Account information
+export interface CDPAccountInfo {
+    accountId: string;
+    walletAddress: string;
+    network: CDPNetwork;
+    isSmartAccount: boolean;
+    smartAccountAddress?: string;
+    ownerAccountId?: string;
+    accountName?: string;
+}
+
+// CDP Wallet creation options
+export interface CreateCDPWalletOptions {
+    accountName?: string;
+    network?: CDPNetwork;
+    createSmartAccount?: boolean;
+    ownerAccountId?: string;
+}
+
+// Result of CDP wallet creation
+export interface CDPWalletResult {
+    account: CDPAccountInfo;
+    smartAccount?: CDPAccountInfo;
+}
+
+
+export interface OnrampAddress {
+    address: string;
+    blockchains: string[];
+}
+
+export interface OnrampSessionTokenRequest {
+    addresses: OnrampAddress[];
+    assets?: string[];
+}
+
+export interface OnrampSessionTokenResponse {
+    token: string;
+    channel_id: string;
+}
+
+export interface OnrampUrlOptions {
+    sessionToken: string;
+    defaultAsset?: string;
+    defaultNetwork?: string;
+    presetFiatAmount?: number;
+    presetCryptoAmount?: number;
+    fiatCurrency?: string;
+    defaultPaymentMethod?: string;
+    defaultExperience?: 'send' | 'buy';
+    partnerUserId?: string;
+    redirectUrl?: string;
+}
+
+
+// // Interface for CDP wallet metadata structure
+// interface CDPWalletMetadata {
+//     cdpAccountId?: string;
+//     cdpAccountName?: string;
+//     cdpNetwork?: string;
+//     isSmartAccount?: boolean;
+//     ownerAccountId?: string;
+//     provider?: string;
+//     type?: string;
+//     gasSponsored?: boolean;
+//     [key: string]: unknown; // Allow additional properties
+//   }

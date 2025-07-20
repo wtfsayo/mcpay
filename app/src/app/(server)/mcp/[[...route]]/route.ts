@@ -14,7 +14,7 @@ import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
 import { attemptAutoSign } from "@/lib/gateway/payment-strategies";
 import { createExactPaymentRequirements, decodePayment, settle, verifyPayment, x402Version } from "@/lib/gateway/payments";
 import { settleResponseHeader, SupportedNetwork } from "@/types/x402";
-import { type AuthType, type DbToolResult, type PaymentInfo, type ToolCall, type UserWithWallet } from "@/types";
+import { type AuthType, type MCPTool, type PaymentInfo, type ToolCall, type UserWithWallet } from "@/types";
 import { type Context, Hono } from "hono";
 import { handle } from "hono/vercel";
 
@@ -201,7 +201,7 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: ToolCall, body?:
                                     return await txOperations.listMcpToolsByServer(server.id)(tx);
                                 });
 
-                                const toolConfig = tools.find((t: DbToolResult) => t.name === toolName);
+                                const toolConfig = tools.find((t: MCPTool) => t.name === toolName);
 
                                 console.log(`[${new Date().toISOString()}] ---Tool Config: ${JSON.stringify(toolConfig, null, 2)}`)
 

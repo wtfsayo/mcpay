@@ -15,42 +15,11 @@ import { createWalletClient, http } from "viem";
 import { toAccount } from "viem/accounts";
 import { baseSepolia, seiTestnet } from "viem/chains";
 import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
-import { getCDPAccount, isSupportedCDPNetwork, type CDPNetwork } from "@/lib/gateway/3rd-parties/cdp";
+import { getCDPAccount, isSupportedCDPNetwork } from "@/lib/gateway/3rd-parties/cdp";
 import { x402Version } from "@/lib/gateway/payments";
 import { createPaymentHeader, type ExtendedPaymentRequirements } from "@/types/x402";
 import type { PaymentSigningContext, PaymentSigningResult, PaymentSigningStrategy } from "@/lib/gateway/payment-strategies/index";
-
-// Interface for CDP wallet metadata structure
-interface CDPWalletMetadata {
-  cdpAccountId?: string;
-  cdpAccountName?: string;
-  cdpNetwork?: string;
-  isSmartAccount?: boolean;
-  ownerAccountId?: string;
-  provider?: string;
-  type?: string;
-  gasSponsored?: boolean;
-  [key: string]: unknown; // Allow additional properties
-}
-
-// Type for CDP wallet from database (matches the actual return type from database)
-interface CDPWallet {
-  id: string;
-  userId: string;
-  walletAddress: string;
-  walletType: string;
-  provider: string | null;
-  blockchain: string | null;
-  architecture: string | null;
-  isPrimary: boolean;
-  isActive: boolean;
-  walletMetadata: unknown; // Database returns unknown type for JSONB
-  externalWalletId: string | null;
-  externalUserId: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-  lastUsedAt: Date | null;
-}
+import { CDPNetwork, Wallet, CDPWalletMetadata } from "@/types";
 
 export class CDPSigningStrategy implements PaymentSigningStrategy {
     name = "CDP";
@@ -76,8 +45,6 @@ export class CDPSigningStrategy implements PaymentSigningStrategy {
             const cdpWallets = await withTransaction(async (tx) => {
                 return await txOperations.getCDPWalletsByUser(context.user!.id)(tx);
             });
-
-            console.log(cdpWallets)
 
             console.log(`[CDP Strategy] Found ${cdpWallets.length} CDP wallets for user ${context.user!.id}`);
 
@@ -178,7 +145,7 @@ export class CDPSigningStrategy implements PaymentSigningStrategy {
     }
 
     private async signWithCDPWallet(
-        wallet: CDPWallet,
+        wallet: Wallet,
         paymentRequirement: ExtendedPaymentRequirements,
         network: CDPNetwork
     ): Promise<PaymentSigningResult> {

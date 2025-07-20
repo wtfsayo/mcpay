@@ -149,12 +149,6 @@ export {
   getStablecoinBalancesOnChains,
   getMainnetStablecoinBalances,
   getTestnetStablecoinBalances,
-  
-  // Result types
-  type MultiChainStablecoinResult,
-  
-  // Example usage
-  exampleUsage as balanceTrackerExample,
 } from './balance-tracker';
 
 // =============================================================================

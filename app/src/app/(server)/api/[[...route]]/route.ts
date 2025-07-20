@@ -6,10 +6,10 @@
  */
 
 import { COMMON_DECIMALS, getBlockchainArchitecture, getBlockchainsForArchitecture, getMainnetStablecoinBalances, getStablecoinBalances, getTestnetStablecoinBalances, isSupportedBlockchain } from "@/lib/commons";
-import { CDP, createCDPAccount, type CDPNetwork, type CreateCDPWalletOptions } from "@/lib/gateway/3rd-parties/cdp";
+import { CDP, createCDPAccount } from "@/lib/gateway/3rd-parties/cdp";
 import { createOneClickBuyUrl, getSupportedAssets, getSupportedNetworks } from "@/lib/gateway/3rd-parties/onramp";
 import { VLayer, type ExecutionContext } from "@/lib/gateway/3rd-parties/vlayer";
-import { auth, ensureUserHasCDPWallet } from "@/lib/gateway/auth";
+import { auth } from "@/lib/gateway/auth";
 import { generateApiKey } from "@/lib/gateway/auth-utils";
 import db from "@/lib/gateway/db";
 import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
@@ -20,6 +20,8 @@ import { type BlockchainArchitecture } from "@/types/blockchain";
 import { Hono, type Context, type Next } from "hono";
 import { handle } from "hono/vercel";
 import { randomUUID } from "node:crypto";
+import { ensureUserHasCDPWallet } from "@/lib/gateway/server-wallets/cdp";
+import { CDPNetwork, type CreateCDPWalletOptions } from "@/types";
 
 export const runtime = 'nodejs'
 

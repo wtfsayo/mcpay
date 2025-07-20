@@ -373,10 +373,10 @@ await client.connect(transport)
 
           <div className="flex items-center gap-4 text-sm">
             <span className={isDark ? "text-gray-400" : "text-gray-500"}>
-              Created: {formatDate(serverData.createdAt.toISOString())}
+              Created: {formatDate(serverData?.createdAt ? (typeof serverData.createdAt === 'string' ? serverData.createdAt : serverData.createdAt.toISOString()) : '')}
             </span>
             <span className={isDark ? "text-gray-400" : "text-gray-500"}>
-              Last Activity: {formatDate(serverData.stats.lastActivity?.toISOString() || '')}
+              Last Activity: {formatDate(serverData.stats.lastActivity ? (typeof serverData.stats.lastActivity === 'string' ? serverData.stats.lastActivity : serverData.stats.lastActivity.toISOString()) : '')}
             </span>
           </div>
         </div>
@@ -1102,7 +1102,7 @@ await client.connect(transport)`}
                                   {proof.user?.displayName || proof.user?.walletAddress || ''}
                                 </button>
                                 {" • "}
-                                {formatDate(proof.createdAt.toISOString())}
+                                {formatDate(typeof proof.createdAt === 'string' ? proof.createdAt : proof.createdAt.toISOString())}
                               </p>
                             </div>
                           </div>
@@ -1157,7 +1157,7 @@ await client.connect(transport)`}
                     <TableBody>
                       {(serverData.tools || [])
                         .flatMap(tool => (tool.payments || []))
-                        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                        .sort((a, b) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime())
                         .slice(0, 10).map((payment) => (
                         <TableRow key={payment.id}>
                           <TableCell>
@@ -1192,12 +1192,12 @@ await client.connect(transport)`}
                           </TableCell>
                           <TableCell>
                             <div>
-                              <div className="text-sm">{formatDate(payment.createdAt.toISOString())}</div>
-                              {payment.settledAt && (
-                                <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                                  Settled: {formatDate(payment.settledAt.toISOString())}
-                                </div>
-                              )}
+                                                          <div className="text-sm">{formatDate(payment.createdAt ? (typeof payment.createdAt === 'string' ? payment.createdAt : payment.createdAt.toISOString()) : '')}</div>
+                            {payment.settledAt && (
+                              <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                                Settled: {formatDate(typeof payment.settledAt === 'string' ? payment.settledAt : payment.settledAt.toISOString())}
+                              </div>
+                            )}
                             </div>
                           </TableCell>
                           <TableCell>

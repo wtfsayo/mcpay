@@ -1,3 +1,5 @@
+import { mcpTools } from "@/lib/gateway/db/schema";
+
 // Define payment information structure based on database schema
 export interface PaymentInfo {
     maxAmountRequired: string;
@@ -16,21 +18,6 @@ export interface PaymentInfo {
         priceRaw: string; // Original base units from pricing table
         pricingId: string; // Pricing ID for usage tracking
     };
-}
-
-// Define tool configuration type based on database query results
-export interface DbToolResult {
-    id: string;
-    name: string;
-    description: string;
-    inputSchema: unknown;
-    isMonetized: boolean;
-    payment: unknown;
-    status: string;
-    metadata: unknown;
-    createdAt: Date;
-    updatedAt: Date;
-    serverId: string;
 }
 
 // Define tool call type for better type safety
