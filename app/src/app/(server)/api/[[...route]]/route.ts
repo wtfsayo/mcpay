@@ -14,14 +14,13 @@ import { generateApiKey } from "@/lib/gateway/auth-utils";
 import db from "@/lib/gateway/db";
 import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
 import { getMcpTools } from "@/lib/gateway/inspect-mcp";
-import { AppContext, CDPWalletMetadata, ExecutionHeaders, McpServerWithActivity, McpServerWithRelations, ToolPaymentInfo } from "@/types";
+import { ensureUserHasCDPWallet } from "@/lib/gateway/server-wallets/cdp";
+import { AppContext, CDPNetwork, CDPWalletMetadata, ExecutionHeaders, McpServerWithActivity, McpServerWithRelations, ToolPaymentInfo, type CreateCDPWalletOptions } from "@/types";
 import { type AuthType } from "@/types/auth";
 import { type BlockchainArchitecture } from "@/types/blockchain";
 import { Hono, type Context, type Next } from "hono";
 import { handle } from "hono/vercel";
 import { randomUUID } from "node:crypto";
-import { ensureUserHasCDPWallet } from "@/lib/gateway/server-wallets/cdp";
-import { CDPNetwork, type CreateCDPWalletOptions } from "@/types";
 
 export const runtime = 'nodejs'
 
