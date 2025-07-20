@@ -72,11 +72,6 @@ export const auth = betterAuth({
   // We use middleware approach in api.ts for reliable CDP wallet auto-creation
 });
 
-export type AuthType = {
-  user: typeof auth.$Infer.Session.user | null
-  session: typeof auth.$Infer.Session.session | null
-}
-
 /**
  * Auto-create CDP wallet for user if they don't have one
  * 

@@ -13,8 +13,8 @@ import {
   getNetworkByChainId,
   getTokenInfo,
   NETWORKS,
-  type Network
 } from "@/lib/commons"
+import { type Network } from "@/types/blockchain"
 import { urlUtils } from "@/lib/client/utils"
 import { switchToNetwork } from "@/lib/client/wallet-utils"
 import { experimental_createMCPClient } from "ai"
@@ -32,6 +32,7 @@ import { createPaymentTransport } from "mcpay/client"
 import Image from "next/image"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAccount, useChainId, useWalletClient } from "wagmi"
+import { type ToolFromMcpServerWithStats } from "@/types/mcp"
 
 // =============================================================================
 // TYPE DEFINITIONS
@@ -52,26 +53,10 @@ interface ToolInputSchema {
   required?: string[]
 }
 
-interface Tool {
-  id: string
-  name: string
-  description: string
-  inputSchema: Record<string, unknown> | ToolInputSchema
-  isMonetized: boolean
-  pricing: Array<{
-    id: string
-    price: string
-    currency: string
-    network: string
-    assetAddress: string
-    active: boolean
-  }>
-}
-
 interface ToolExecutionModalProps {
   isOpen: boolean
   onClose: () => void
-  tool: Tool | null
+  tool: ToolFromMcpServerWithStats | null
   serverId: string
 }
 
@@ -316,7 +301,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
   // TOOL SCHEMA UTILITIES
   // =============================================================================
 
-  const getToolProperties = useCallback((toolArg: Tool): Record<string, InputProperty> => {
+  const getToolProperties = useCallback((toolArg: ToolFromMcpServerWithStats): Record<string, InputProperty> => {
     // First try to get from MCP client tools (if available and initialized)
     if (isInitialized && mcpToolsCollection[toolArg.name]) {
       const mcpTool = mcpToolsCollection[toolArg.name] as MCPToolFromClient
@@ -336,7 +321,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     return {}
   }, [isInitialized, mcpToolsCollection])
 
-  const getRequiredFields = useCallback((toolArg: Tool): string[] => {
+  const getRequiredFields = useCallback((toolArg: ToolFromMcpServerWithStats): string[] => {
     // First try to get from MCP client tools (if available and initialized)
     if (isInitialized && mcpToolsCollection[toolArg.name]) {
       const mcpTool = mcpToolsCollection[toolArg.name] as MCPToolFromClient
@@ -356,7 +341,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     return []
   }, [isInitialized, mcpToolsCollection])
 
-  const hasToolInputs = useCallback((toolArg: Tool): boolean => {
+  const hasToolInputs = useCallback((toolArg: ToolFromMcpServerWithStats): boolean => {
     const properties = getToolProperties(toolArg)
     return Object.keys(properties).length > 0
   }, [getToolProperties])
@@ -383,7 +368,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
 
     // Initialize tool inputs (this doesn't depend on MCP being ready)
     const inputs: Record<string, unknown> = {}
-    const properties = getToolProperties(stableTool as Tool)
+    const properties = getToolProperties(stableTool)
 
     Object.entries(properties).forEach(([key, prop]) => {
       if (prop.type === 'array') {
@@ -402,7 +387,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     if (!stableTool || !isInitialized || !mcpToolsCollection[stableTool.name]) return
 
     const inputs: Record<string, unknown> = {}
-    const properties = getToolProperties(stableTool as Tool)
+    const properties = getToolProperties(stableTool)
 
     Object.entries(properties).forEach(([key, prop]) => {
       if (prop.type === 'array') {
@@ -554,7 +539,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     if (!stableTool) return null
 
     const currentValue = toolInputs[inputName] || ''
-    const requiredFields = getRequiredFields(stableTool as Tool)
+    const requiredFields = getRequiredFields(stableTool)
     const isRequired = requiredFields.includes(inputName)
 
     // Handle array inputs

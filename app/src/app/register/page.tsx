@@ -14,7 +14,9 @@ import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { openBlockscout } from "@/lib/client/blockscout"
 import { api } from "@/lib/client/utils"
-import { type Network, NETWORKS, getTokenInfo, toBaseUnits } from "@/lib/commons"
+import { NETWORKS, getTokenInfo, toBaseUnits } from "@/lib/commons"
+import { type Network } from "@/types/blockchain"
+import { type RegisterMCPTool } from "@/types/mcp"
 import { AlertCircle, ArrowRight, BookOpen, CheckCircle, ExternalLink, Globe, Info, Loader2, Lock, RefreshCw, Server, Wallet, Zap } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useState } from "react"
@@ -22,20 +24,6 @@ import { useAccount, useConnect, useDisconnect } from "wagmi"
 
 import { getNetworkByChainId } from "@/lib/commons"
 import { useChainId } from "wagmi"
-
-interface MCPTool {
-  name: string
-  description: string
-  inputSchema: {
-    jsonSchema: {
-      type: string
-      properties: Record<string, unknown>
-      required?: string[]
-      additionalProperties?: boolean
-    }
-  }
-  price?: string
-}
 
 // Helper function to extract a display name from a URL
 const generateDisplayNameFromUrl = (urlStr: string): string => {
@@ -73,7 +61,7 @@ export default function RegisterPage() {
     headers: "",
   })
 
-  const [tools, setTools] = useState<MCPTool[]>([])
+  const [tools, setTools] = useState<RegisterMCPTool[]>([])
   const [isLoadingTools, setIsLoadingTools] = useState(false)
   const [toolsError, setToolsError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -238,7 +226,7 @@ export default function RegisterPage() {
     setToolsError("")
 
     try {
-      const fetchedTools = await api.getMcpTools(url) as MCPTool[]
+      const fetchedTools = await api.getMcpTools(url) as RegisterMCPTool[]
 
       if (!Array.isArray(fetchedTools)) {
         console.error("Fetched data is not an array:", fetchedTools)

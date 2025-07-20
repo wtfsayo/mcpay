@@ -1,19 +1,7 @@
 import { type Connector } from 'wagmi'
-import { type Network, NETWORKS, getNetworkByChainId, type NetworkInfo } from '@/lib/commons'
-
-// Type definitions for wallet providers
-interface EthereumProvider {
-  isMetaMask?: boolean
-  isCoinbaseWallet?: boolean
-  isPorto?: boolean
-  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>
-}
-
-interface WalletWindow {
-  ethereum?: EthereumProvider
-  coinbaseWalletExtension?: unknown
-  porto?: unknown
-}
+import { NETWORKS, getNetworkByChainId } from '@/lib/commons'
+import { type Network, type NetworkInfo } from '@/types/blockchain'
+import { type WalletWindow } from '@/types/wallet'
 
 // Helper function to get wallet window
 function getWalletWindow(): WalletWindow {

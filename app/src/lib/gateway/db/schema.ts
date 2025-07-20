@@ -26,7 +26,7 @@
 import { sql } from "drizzle-orm";
 import { boolean, check, decimal, index, integer, jsonb, pgTable, pgView, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
-import type { BlockchainArchitecture } from "@/lib/commons";
+import type { BlockchainArchitecture } from "@/types/blockchain";
 
 // Type definitions for database view results
 export type RevenueDetail = {

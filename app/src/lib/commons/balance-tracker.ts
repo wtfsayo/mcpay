@@ -26,36 +26,32 @@
  * 6. **Mainnet/Testnet Separation**: Proper handling of test vs real money
  */
 
-import { createPublicClient, http, formatUnits, type Address } from 'viem';
 import type {
+  BlockchainAddress,
   BlockchainArchitecture,
-  StablecoinSymbol,
-  StablecoinConfig,
+  ChainConfig,
+  EVMTokenConfig,
+  NearTokenConfig,
+  PriceProvider,
+  SolanaTokenConfig,
   StablecoinBalance,
   StablecoinBalanceError,
-  ChainConfig,
-  EVMChainConfig,
-  SolanaChainConfig,
-  NearChainConfig,
-  EVMTokenConfig,
-  SolanaTokenConfig,
-  NearTokenConfig,
-  BlockchainAddress,
-  PriceProvider
-} from './types';
+  StablecoinSymbol
+} from '@/types/blockchain';
+import { createPublicClient, formatUnits, http, type Address } from 'viem';
 import {
   STABLECOIN_CONFIGS,
   SUPPORTED_CHAINS,
-  isEVMChain,
-  isSolanaChain,
-  isNearChain,
-  type SupportedChain,
   SimplePriceProvider,
-  getMainnetChains,
-  getTestnetChains,
   getEVMChains,
+  getMainnetChains,
+  getNearChains,
   getSolanaChains,
-  getNearChains
+  getTestnetChains,
+  isEVMChain,
+  isNearChain,
+  isSolanaChain,
+  type SupportedChain
 } from './chains';
 
 // =============================================================================
@@ -587,12 +583,8 @@ export async function exampleUsage() {
 // =============================================================================
 
 export {
-  // Chain functions re-exported for convenience
-  getEVMChains,
-  getSolanaChains,
-  getNearChains,
-  getMainnetChains,
-  getTestnetChains,
   // Price provider
   SimplePriceProvider,
-}; 
+  // Chain functions re-exported for convenience
+  getEVMChains, getMainnetChains, getNearChains, getSolanaChains, getTestnetChains
+};

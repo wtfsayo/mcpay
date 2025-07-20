@@ -14,12 +14,12 @@ import {
   formatTokenAmount,
   fromBaseUnits,
   getTokenInfo,
-  type Network
 } from "@/lib/commons"
+import { type Network } from "@/types/blockchain"
+import { type McpServerWithStats, type MCPTool, type ToolFromMcpServerWithStats } from "@/types/mcp"
 import {
   Activity,
   AlertCircle,
-  BarChart3,
   CheckCircle,
   Clock,
   Coins,
@@ -41,180 +41,13 @@ import { useEffect, useState } from "react"
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
-// Types based on the database schema - matching the actual schema.ts structure
-interface ServerTool {
-  id: string
-  name: string
-  description: string
-  inputSchema: Record<string, unknown>
-  isMonetized: boolean
-  payment?: Record<string, unknown>
-  status: string
-  metadata?: Record<string, unknown>
-  createdAt: string
-  updatedAt: string
-  pricing: Array<{
-    id: string
-    priceRaw: string // Base units as string (from NUMERIC(38,0))
-    tokenDecimals: number // Decimals for the token
-    currency: string // Token symbol or contract address
-    network: string
-    assetAddress?: string
-    active: boolean
-    createdAt: string
-    updatedAt: string
-  }>
-  payments: Array<{
-    id: string
-    amountRaw: string // Base units as string (from NUMERIC(38,0))
-    tokenDecimals: number // Decimals for the token
-    currency: string // Token symbol or contract address
-    network: string
-    status: string
-    createdAt: string
-    settledAt?: string
-    transactionHash?: string
-    user: {
-      id: string
-      walletAddress?: string
-      displayName?: string
-      name?: string
-    }
-  }>
-  usage: Array<{
-    id: string
-    timestamp: string
-    responseStatus?: string
-    executionTimeMs?: number
-    user: {
-      id: string
-      walletAddress?: string
-      displayName?: string
-      name?: string
-    }
-  }>
-  proofs: Array<{
-    id: string
-    isConsistent: boolean
-    confidenceScore: string // Decimal as string
-    status: string
-    verificationType: string
-    createdAt: string
-    webProofPresentation?: string
-    user: {
-      id: string
-      walletAddress?: string
-      displayName?: string
-      name?: string
-    }
-  }>
-}
-
-// Type for the converted tool format used by ToolExecutionModal
-interface ConvertedTool extends Omit<ServerTool, 'pricing'> {
-  pricing: Array<{
-    id: string
-    price: string
-    currency: string
-    network: string
-    assetAddress: string
-    active: boolean
-  }>
-}
-
-interface ServerData {
-  id: string
-  serverId: string
-  name?: string
-  mcpOrigin: string
-  receiverAddress: string
-  description?: string
-  metadata?: Record<string, unknown>
-  status: string
-  createdAt: string
-  updatedAt: string
-  creator: {
-    id: string
-    walletAddress?: string
-    displayName?: string
-    name?: string
-    avatarUrl?: string
-    image?: string // From better-auth
-  }
-  tools: ServerTool[]
-  analytics: Array<{
-    id: string
-    date: string
-    totalRequests: number
-    totalRevenueRaw: string // Deprecated - base units as string
-    revenueByCurrency?: Record<string, string> // New multi-currency format: { "USDC-6": "1000000" }
-    uniqueUsers: number
-    avgResponseTime?: string // Decimal as string
-    toolUsage?: Record<string, number>
-    errorCount: number
-  }>
-  ownership: Array<{
-    id: string
-    role: string
-    createdAt: string
-    active: boolean
-    user: {
-      id: string
-      walletAddress?: string
-      displayName?: string
-      name?: string
-      avatarUrl?: string
-      image?: string
-    }
-    grantedByUser?: {
-      id: string
-      walletAddress?: string
-      displayName?: string
-      name?: string
-    }
-  }>
-  proofs: Array<{
-    id: string
-    isConsistent: boolean
-    confidenceScore: string // Decimal as string
-    status: string
-    verificationType: string
-    createdAt: string
-    webProofPresentation?: string
-    tool: {
-      id: string
-      name: string
-    }
-    user: {
-      id: string
-      walletAddress?: string
-      displayName?: string
-      name?: string
-    }
-  }>
-  stats: {
-    totalTools: number
-    monetizedTools: number
-    totalPayments: number
-    totalRevenue: number // Computed value in USD
-    totalUsage: number
-    totalProofs: number
-    consistentProofs: number
-    proofsWithWebProof: number
-    uniqueUsers: number
-    avgResponseTime: number
-    reputationScore: number
-    lastActivity: string
-  }
-}
-
 export default function ServerDashboard() {
   const params = useParams()
   const serverId = params.id as string
-  const [serverData, setServerData] = useState<ServerData | null>(null)
+  const [serverData, setServerData] = useState<McpServerWithStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedTool, setSelectedTool] = useState<ConvertedTool | null>(null)
+  const [selectedTool, setSelectedTool] = useState<ToolFromMcpServerWithStats | null>(null)
   const [showToolModal, setShowToolModal] = useState(false)
   const [activeTab, setActiveTab] = useState("overview")
   const [markdownCopied, setMarkdownCopied] = useState(false)
@@ -366,7 +199,7 @@ await client.connect(transport)
         setError(null)
 
         const data = await api.getServer(serverId)
-        setServerData(data as ServerData)
+        setServerData(data as McpServerWithStats)
       } catch (err) {
         console.error('Error fetching server data:', err)
         setError(err instanceof Error ? err.message : 'Failed to fetch server data')
@@ -384,20 +217,8 @@ await client.connect(transport)
     navigator.clipboard.writeText(text)
   }
 
-  const handleToolExecution = (tool: ServerTool) => {
-    // Convert ServerTool to the Tool format expected by ToolExecutionModal
-    const convertedTool: ConvertedTool = {
-      ...tool,
-      pricing: (tool.pricing || []).map(p => ({
-        id: p.id,
-        price: fromBaseUnits(p.priceRaw, p.tokenDecimals),
-        currency: p.currency,
-        network: p.network,
-        assetAddress: p.assetAddress || '',
-        active: p.active
-      }))
-    };
-    setSelectedTool(convertedTool)
+  const handleToolExecution = (tool: ToolFromMcpServerWithStats) => {
+    setSelectedTool(tool)
     setShowToolModal(true)
   }
 
@@ -552,10 +373,10 @@ await client.connect(transport)
 
           <div className="flex items-center gap-4 text-sm">
             <span className={isDark ? "text-gray-400" : "text-gray-500"}>
-              Created: {formatDate(serverData.createdAt)}
+              Created: {formatDate(serverData.createdAt.toISOString())}
             </span>
             <span className={isDark ? "text-gray-400" : "text-gray-500"}>
-              Last Activity: {formatDate(serverData.stats.lastActivity)}
+              Last Activity: {formatDate(serverData.stats.lastActivity?.toISOString() || '')}
             </span>
           </div>
         </div>
@@ -719,10 +540,10 @@ await client.connect(transport)
                 <div className="flex items-center gap-3">
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isDark ? "bg-gray-700" : "bg-gray-100"
                     }`}>
-                    {serverData.creator.avatarUrl ? (
+                    {serverData.ownership[0].user.avatarUrl ? (
                       <Image
-                        src={serverData.creator.avatarUrl}
-                        alt={serverData.creator.displayName || serverData.creator.name || ''}
+                        src={serverData.ownership[0].user.avatarUrl}
+                        alt={serverData.ownership[0].user.displayName || serverData.ownership[0].user.displayName || ''}
                         width={40}
                         height={40}
                         className="w-10 h-10 rounded-full"
@@ -732,13 +553,13 @@ await client.connect(transport)
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{serverData.creator.displayName || serverData.creator.name}</div>
+                    <div className="font-medium truncate">{serverData.ownership[0].user.displayName || serverData.ownership[0].user.displayName}</div>
                     <button
-                      onClick={() => openExplorer(serverData.creator.walletAddress || '', 'base-sepolia')}
+                      onClick={() => openExplorer(serverData.ownership[0].user.walletAddress || '', 'base-sepolia')}
                       className={`text-xs hover:underline font-mono ${isDark ? "text-gray-400 hover:text-gray-300" : "text-gray-600 hover:text-gray-700"}`}
-                      title={serverData.creator.walletAddress || ''}
+                      title={serverData.ownership[0].user.walletAddress || ''}
                     >
-                      {serverData.creator.walletAddress?.slice(0, 6)}...{serverData.creator.walletAddress?.slice(-4)}
+                      {serverData.ownership[0].user.walletAddress?.slice(0, 6)}...{serverData.ownership[0].user.walletAddress?.slice(-4)}
                     </button>
                   </div>
                 </div>
@@ -1217,18 +1038,17 @@ await client.connect(transport)`}
 
           {/* Analytics & Payments Tab */}
           <TabsContent value="analytics" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Analytics Chart */}
+            {/* <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card className={isDark ? "bg-gray-800 border-gray-700" : ""}>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <BarChart3 className="h-5 w-5" />
-                    Analytics (Last 30 Days)
+                    Analytics
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {(serverData.analytics || []).slice(0, 7).map((day) => (
+                    {(serverData.stats. || []).map((day) => (
                       <div key={day.id} className="flex items-center justify-between">
                         <span className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}>
                           {new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -1244,7 +1064,6 @@ await client.connect(transport)`}
                 </CardContent>
               </Card>
 
-              {/* Recent Proofs */}
               <Card className={isDark ? "bg-gray-800 border-gray-700" : ""}>
                 <CardHeader>
                   <CardTitle className="flex justify-between gap-2">
@@ -1276,14 +1095,14 @@ await client.connect(transport)`}
                               <p className="text-sm font-medium">{proof.tool.name}</p>
                               <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                                 <button
-                                  onClick={() => openExplorer(proof.user.walletAddress || '', 'base-sepolia')}
+                                  onClick={() => openExplorer(proof.user?.walletAddress || '', 'base-sepolia')}
                                   className={`hover:underline ${isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-700"}`}
                                   title={`View address on ${getExplorerName('base-sepolia')}`}
                                 >
-                                  {proof.user.displayName || proof.user.name}
+                                  {proof.user?.displayName || proof.user?.walletAddress || ''}
                                 </button>
                                 {" • "}
-                                {formatDate(proof.createdAt)}
+                                {formatDate(proof.createdAt.toISOString())}
                               </p>
                             </div>
                           </div>
@@ -1309,7 +1128,7 @@ await client.connect(transport)`}
                   </div>
                 </CardContent>
               </Card>
-            </div>
+            </div> */}
 
             {/* Recent Payments */}
             <Card className={isDark ? "bg-gray-800 border-gray-700" : ""}>
@@ -1364,19 +1183,19 @@ await client.connect(transport)`}
                           </TableCell>
                           <TableCell>
                             <AddressLink
-                              address={payment.user.walletAddress || ''}
+                              address={payment.user?.walletAddress || ''}
                               network={payment.network as Network}
                               className="text-sm"
                             >
-                              {payment.user.displayName || payment.user.name || "No name"}
+                              {payment.user?.displayName || payment.user?.walletAddress || "No name"}
                             </AddressLink>
                           </TableCell>
                           <TableCell>
                             <div>
-                              <div className="text-sm">{formatDate(payment.createdAt)}</div>
+                              <div className="text-sm">{formatDate(payment.createdAt.toISOString())}</div>
                               {payment.settledAt && (
                                 <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                                  Settled: {formatDate(payment.settledAt)}
+                                  Settled: {formatDate(payment.settledAt.toISOString())}
                                 </div>
                               )}
                             </div>

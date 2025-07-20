@@ -12,7 +12,7 @@
  */
 
 import { formatAmount, toBaseUnits } from './amounts';
-import type { Network, TokenInfo, NetworkInfo } from './types';
+import type { Network, TokenInfo, NetworkInfo } from '@/types/blockchain';
 
 // =============================================================================
 // NETWORK CONFIGURATIONS
@@ -267,7 +267,7 @@ export const getTokensBySymbol = (symbol: string): TokenInfo[] => {
   }
 
   return results.sort((a, b) => b.popularityScore - a.popularityScore);
-};
+}
 
 /**
  * Search tokens by name (fuzzy search)

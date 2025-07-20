@@ -21,7 +21,7 @@ import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
 import { extractApiKeyFromHeaders, hashApiKey, isValidApiKeyFormat } from "@/lib/gateway/auth-utils";
 import { auth } from "@/lib/gateway/auth";
 import { createExactPaymentRequirements } from "@/lib/gateway/payments";
-import type { ExtendedPaymentRequirements, SupportedNetwork } from "@/lib/gateway/types";
+import type { ExtendedPaymentRequirements, SupportedNetwork } from "@/types/x402";
 import { CDPSigningStrategy } from "@/lib/gateway/payment-strategies/cdp-strategy";
 import { getConfig, type PaymentStrategyConfig } from "@/lib/gateway/payment-strategies/config";
 

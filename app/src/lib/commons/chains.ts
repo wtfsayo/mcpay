@@ -14,19 +14,16 @@
  */
 
 import type {
+  BlockchainAddress,
   BlockchainArchitecture,
-  StablecoinSymbol,
-  StablecoinConfig,
   ChainConfig,
   EVMChainConfig,
-  SolanaChainConfig,
   NearChainConfig,
-  EVMTokenConfig,
-  SolanaTokenConfig,
-  NearTokenConfig,
-  BlockchainAddress,
-  PriceProvider
-} from './types';
+  PriceProvider,
+  SolanaChainConfig,
+  StablecoinConfig,
+  StablecoinSymbol
+} from '@/types/blockchain';
 
 // =============================================================================
 // STABLECOIN CONFIGURATIONS
@@ -474,4 +471,4 @@ export class SimplePriceProvider implements PriceProvider {
 // EXPORTS
 // =============================================================================
 
-export { SUPPORTED_CHAINS as default }; 
+export { SUPPORTED_CHAINS as default };

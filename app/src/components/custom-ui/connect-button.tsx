@@ -11,7 +11,8 @@ import {
   switchToNetwork,
   verifyWalletConnection
 } from "@/lib/client/wallet-utils"
-import { getNetworkByChainId, NETWORKS, type Network } from "@/lib/commons"
+import { getNetworkByChainId, NETWORKS } from "@/lib/commons"
+import { type Network } from "@/types/blockchain"
 import { AlertTriangle, CheckCircle, ChevronDown, DollarSign, Loader2, LogOut, Wallet } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useAccount, useBalance, useChainId, useConnect, useDisconnect, type Connector } from "wagmi"

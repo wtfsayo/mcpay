@@ -25,8 +25,8 @@ import type { Address } from "viem";
 import type { ERC20TokenAmount, Price, Resource } from "x402/types";
 import { moneySchema } from "x402/types";
 import type { Context } from "hono";
-import { PaymentPayloadSchema, safeBase64Decode, type SupportedNetwork, type PaymentPayload, type SupportedPaymentRequirements, type ExtendedPaymentRequirements } from "@/lib/gateway/types";
-import { createFacilitator } from "@/lib/gateway/types";
+import { PaymentPayloadSchema, safeBase64Decode, type SupportedNetwork, type PaymentPayload, type SupportedPaymentRequirements, type ExtendedPaymentRequirements } from "@/types/x402";
+import { createFacilitator } from "@/types/x402";
 import { getFacilitatorUrl } from "@/lib/gateway/env";
 import { toBaseUnits } from "@/lib/commons";
 

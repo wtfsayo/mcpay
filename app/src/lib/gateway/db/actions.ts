@@ -24,8 +24,10 @@
 
 import {
     addRevenueToCurrency, formatRevenueByCurrency,
-    fromBaseUnits, getBlockchainArchitecture, type BlockchainArchitecture, type RevenueByCurrency
+    fromBaseUnits, getBlockchainArchitecture
 } from '@/lib/commons';
+import { type BlockchainArchitecture, type RevenueByCurrency } from '@/types/blockchain';
+
 import { createCDPAccount } from '@/lib/gateway/3rd-parties/cdp';
 import db from "@/lib/gateway/db";
 import {
@@ -2507,6 +2509,15 @@ export const txOperations = {
                         walletAddress: true,
                         displayName: true,
                         avatarUrl: true
+                    },
+                    with: {
+                        wallets: {
+                            columns: {
+                                id: true,
+                                walletAddress: true,
+                                walletType: true
+                            }
+                        }
                     }
                 },
                 tools: {
@@ -2672,7 +2683,7 @@ export const txOperations = {
                     },
                     orderBy: [desc(proofs.createdAt)],
                     limit: 50
-                }
+                }, 
             }
         });
 

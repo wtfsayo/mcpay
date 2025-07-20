@@ -13,46 +13,6 @@
  */
 
 // =============================================================================
-// TYPE EXPORTS
-// =============================================================================
-
-export type {
-  // Blockchain & Network Types
-  Network,
-  BlockchainArchitecture,
-  TokenCategory,
-  StablecoinSymbol,
-  BlockchainAddress,
-  
-  // Token Types
-  TokenInfo,
-  NetworkInfo,
-  
-  // Amount Types
-  FormatAmountOptions,
-  DbAmountRecord,
-  RevenueByCurrency,
-  
-  // Balance Tracking Types
-  StablecoinConfig,
-  StablecoinBalance,
-  StablecoinBalanceError,
-  
-  // Chain Configuration Types
-  EVMTokenConfig,
-  SolanaTokenConfig,
-  NearTokenConfig,
-  BaseChainConfig,
-  EVMChainConfig,
-  SolanaChainConfig,
-  NearChainConfig,
-  ChainConfig,
-  
-  // Price Provider Types
-  PriceProvider,
-} from './types';
-
-// =============================================================================
 // AMOUNT UTILITIES EXPORTS
 // =============================================================================
 
@@ -201,7 +161,7 @@ export {
 // CONSTANTS & ENUMS
 // =============================================================================
 
-export { COMMON_DECIMALS } from './types';
+export { COMMON_DECIMALS } from '@/types/blockchain';
 
 // =============================================================================
 // CONVENIENCE RE-EXPORTS
@@ -244,8 +204,8 @@ export {
 // =============================================================================
 
 // Import the specific functions we need for utility functions
-import type { Network } from './types';
-import { COMMON_DECIMALS } from './types';
+import type { Network } from '@/types/blockchain';
+import { COMMON_DECIMALS } from '@/types/blockchain';
 import { 
   toBaseUnits,
   fromBaseUnits,
@@ -346,7 +306,7 @@ import * as Amounts from './amounts';
 import * as Tokens from './tokens';
 import * as Chains from './chains';
 import * as BalanceTracker from './balance-tracker';
-import * as Types from './types';
+import * as Types from '@/types/blockchain';
 
 export { Amounts, Tokens, Chains, BalanceTracker, Types };
 

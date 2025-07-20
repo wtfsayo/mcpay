@@ -3,7 +3,8 @@
  * Supports different explorers for each network
  */
 
-  import { NETWORKS, type Network } from '@/lib/commons'
+  import { NETWORKS } from '@/lib/commons'
+import { type Network } from '@/types/blockchain'
 
 /**
  * Get the appropriate explorer URL for a network

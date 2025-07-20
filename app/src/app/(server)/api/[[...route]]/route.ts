@@ -5,70 +5,23 @@
  * It provides endpoints for user management, server configuration, and other core functionality.
  */
 
+import { COMMON_DECIMALS, getBlockchainArchitecture, getBlockchainsForArchitecture, getMainnetStablecoinBalances, getStablecoinBalances, getTestnetStablecoinBalances, isSupportedBlockchain } from "@/lib/commons";
 import { CDP, createCDPAccount, type CDPNetwork, type CreateCDPWalletOptions } from "@/lib/gateway/3rd-parties/cdp";
 import { createOneClickBuyUrl, getSupportedAssets, getSupportedNetworks } from "@/lib/gateway/3rd-parties/onramp";
 import { VLayer, type ExecutionContext } from "@/lib/gateway/3rd-parties/vlayer";
-import { auth, ensureUserHasCDPWallet, type AuthType } from "@/lib/gateway/auth";
+import { auth, ensureUserHasCDPWallet } from "@/lib/gateway/auth";
 import { generateApiKey } from "@/lib/gateway/auth-utils";
-import { COMMON_DECIMALS, getBlockchainArchitecture, getBlockchainsForArchitecture, getMainnetStablecoinBalances, getStablecoinBalances, getTestnetStablecoinBalances, isSupportedBlockchain, type BlockchainArchitecture } from "@/lib/commons";
 import db from "@/lib/gateway/db";
 import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
 import { getMcpTools } from "@/lib/gateway/inspect-mcp";
+import { AppContext, CDPWalletMetadata, ExecutionHeaders, McpServerWithActivity, McpServerWithRelations, ToolPaymentInfo } from "@/types";
+import { type AuthType } from "@/types/auth";
+import { type BlockchainArchitecture } from "@/types/blockchain";
 import { Hono, type Context, type Next } from "hono";
 import { handle } from "hono/vercel";
 import { randomUUID } from "node:crypto";
 
-// Type definitions for MCP Server objects - using inferred types from database operations
-type McpServerList = Awaited<ReturnType<ReturnType<typeof txOperations.listMcpServers>>>;
-type McpServerWithRelations = McpServerList[number];
-type McpServerWithActivity = Awaited<ReturnType<ReturnType<typeof txOperations.listMcpServersByActivity>>>[number];
-
-// Interface for CDP wallet metadata
-interface CDPWalletMetadata {
-    isSmartAccount?: boolean;
-    ownerAccountId?: string;
-    cdpNetwork?: string;
-    cdpAccountId?: string;
-    cdpAccountName?: string;
-    provider?: string;
-    type?: string;
-    createdByService?: boolean;
-    managedBy?: string;
-    gasSponsored?: boolean;
-    balanceCache?: Record<string, unknown>;
-    lastUpdated?: string;
-    [key: string]: unknown;
-}
-
-// Interface for payment information from tools
-interface ToolPaymentInfo {
-    maxAmountRequired: string; // Base units as string for precision
-    asset: string;
-    network: string;
-    resource?: string;
-    description?: string;
-}
-
-// Interface for execution headers stored in database
-interface ExecutionHeaders {
-    headers: string[];
-}
-    
 export const runtime = 'nodejs'
-
-// Better-auth session type (inferred from auth instance)
-type AuthSession = typeof auth.$Infer.Session;
-
-// Extend Hono context with proper typing
-type AppContext = {
-    Variables: {
-        // Optional session and user - will be undefined if not authenticated
-        session?: AuthSession['session'];
-        user?: AuthSession['user'];
-        // Helper method to get authenticated user (throws if not authenticated)
-        requireUser(): AuthSession['user'];
-    };
-}
 
 const app = new Hono<{ Bindings: AuthType }>({
     strict: false,
