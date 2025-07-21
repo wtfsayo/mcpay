@@ -23,16 +23,6 @@ export interface CDPWalletMetadata {
     [key: string]: unknown;
 }
 
-// Interface for payment information from tools
-export interface ToolPaymentInfo {
-    maxAmountRequired: string; // Base units as string for precision
-    asset: string;
-    network: string;
-    resource?: string;
-    description?: string;
-    payTo?: string;
-}
-
 // Interface for execution headers stored in database
 export interface ExecutionHeaders {
     headers: string[];
