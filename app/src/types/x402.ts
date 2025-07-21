@@ -2,9 +2,16 @@ import type { PaymentRequirements as BasePaymentRequirements, FacilitatorConfig 
 import { z } from "zod";
 import { type Account, type Address, type Chain, type Client, getAddress, type Hex, type LocalAccount, type PublicActions, type RpcSchema, toHex, type Transport, type WalletActions } from "viem";
 import { ErrorReasons, x402Versions, type Network } from "x402/types";
+import { 
+  type UnifiedNetwork, 
+  getX402Networks, 
+  getNetworkByChainId, 
+  getNetworkConfig, 
+  getUSDCAddress,
+  NETWORK_TO_CHAIN_ID
+} from "@/lib/commons/networks";
 
 export const DEFAULT_FACILITATOR_URL = "https://x402.org/facilitator";
-
 
 export type SignerWallet<
     chain extends Chain = Chain,
@@ -31,42 +38,34 @@ export const authorizationTypes = {
 
 export const authorizationPrimaryType = "TransferWithAuthorization";
 
-export const NetworkSchema = z.enum([
-    "base-sepolia",
-    "base",
-    "avalanche-fuji",
-    "avalanche",
-    "iotex",
-    "sei-testnet",
-]);
+// Use the unified network system - dynamically generate schemas from x402-supported networks
+const x402SupportedNetworks = getX402Networks();
 
-export const SupportedEVMNetworks: SupportedNetwork[] = [
-    "base-sepolia",
-    "base",
-    "avalanche-fuji",
-    "avalanche",
-    "iotex",
-    "sei-testnet",
-];
+// Create NetworkSchema from x402-supported networks
+export const NetworkSchema = z.enum(x402SupportedNetworks as [UnifiedNetwork, ...UnifiedNetwork[]]);
 
-export const EvmNetworkToChainId = new Map<SupportedNetwork, number>([
-    ["base-sepolia", 84532],
-    ["base", 8453],
-    ["avalanche-fuji", 43113],
-    ["avalanche", 43114],
-    ["iotex", 4689],
-    ["sei-testnet", 1328],
-]);
+// Get all x402-supported EVM networks from unified registry
+export const SupportedEVMNetworks = x402SupportedNetworks.filter(network => {
+    const config = getNetworkConfig(network);
+    return config?.architecture === 'evm';
+});
+
+// Create chain ID mapping from unified network registry
+export const EvmNetworkToChainId = new Map(
+    SupportedEVMNetworks.map(network => {
+        const chainId = NETWORK_TO_CHAIN_ID[network];
+        return [network, chainId as number] as const;
+    })
+);
 
 export const ChainIdToNetwork = Object.fromEntries(
     SupportedEVMNetworks.map(network => [EvmNetworkToChainId.get(network), network]),
-) as Record<number, Network>;
+) as Record<number, SupportedNetwork>;
 
 export const schemes = ["exact"] as const;
 
 const isInteger = (value: string) => Number.isInteger(Number(value)) && Number(value) >= 0;
 const hasMaxLength = (maxLength: number) => (value: string) => value.length <= maxLength;
-
 
 const EvmECDSASignatureRegex = /^0x[0-9a-fA-F]{130}$/;
 const Evm6492SignatureRegex =
@@ -86,15 +85,11 @@ export const ExactEvmPayloadAuthorizationSchema = z.object({
 });
 export type ExactEvmPayloadAuthorization = z.infer<typeof ExactEvmPayloadAuthorizationSchema>;
 
-
 export const ExactEvmPayloadSchema = z.object({
     signature: z.string().regex(EvmECDSASignatureRegex).or(z.string().regex(Evm6492SignatureRegex)),
     authorization: ExactEvmPayloadAuthorizationSchema,
 });
 export type ExactEvmPayload = z.infer<typeof ExactEvmPayloadSchema>;
-
-
-
 
 export const PaymentPayloadSchema = z.object({
     x402Version: z.number().refine(val => x402Versions.includes(val as 1)),
@@ -321,7 +316,6 @@ export async function createPaymentHeader(
     throw new Error("Unsupported scheme");
 }
 
-
 /**
 * Gets the default asset (USDC) for the given network
 *
@@ -329,8 +323,13 @@ export async function createPaymentHeader(
 * @returns The default asset
 */
 export function getDefaultAsset(network: SupportedNetwork) {
+    const networkConfig = getNetworkConfig(network);
+    if (!networkConfig) {
+        throw new Error(`Unsupported network: ${network}`);
+    }
+
     return {
-        address: getUsdcAddressForChain(getNetworkId(network)),
+        address: getUSDCAddress(network),
         decimals: 6,
         eip712: {
             name: network === "base" ? "USD Coin" : network === "iotex" ? "Bridged USDC" : "USDC",
@@ -340,58 +339,51 @@ export function getDefaultAsset(network: SupportedNetwork) {
 }
 
 export function getUsdcAddressForChain(chainId: number): Address {
-    return config[chainId.toString()]?.usdcAddress as Address;
+    const network = getNetworkByChainId(chainId);
+    if (!network) {
+        throw new Error(`Unsupported chain ID: ${chainId}`);
+    }
+    
+    const usdcAddress = getUSDCAddress(network);
+    if (!usdcAddress) {
+        throw new Error(`USDC not available on network: ${network}`);
+    }
+    
+    return usdcAddress;
 }
 
 export function getNetworkId(network: SupportedNetwork): number {
-    if (EvmNetworkToChainId.has(network)) {
-        return EvmNetworkToChainId.get(network)!;
+    const chainId = NETWORK_TO_CHAIN_ID[network];
+    if (typeof chainId !== 'number') {
+        throw new Error(`Unsupported EVM network: ${network}`);
     }
-    // TODO: Solana
-    throw new Error(`Unsupported network: ${network}`);
+    return chainId;
 }
 
-export const config: Record<string, ChainConfig> = {
-    "84532": {
-        usdcAddress: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-        usdcName: "USDC",
-    },
-    "8453": {
-        usdcAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-        usdcName: "USDC",
-    },
-    "43113": {
-        usdcAddress: "0x5425890298aed601595a70AB815c96711a31Bc65",
-        usdcName: "USD Coin",
-    },
-    "43114": {
-        usdcAddress: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
-        usdcName: "USDC",
-    },
-    "4689": {
-        usdcAddress: "0xcdf79194c6c285077a58da47641d4dbe51f63542",
-        usdcName: "Bridged USDC",
-    },
-    "1328": {
-        usdcAddress: "0x4fCF1784B31630811181f670Aea7A7bEF803eaED",
-        usdcName: "USDC",
-    },
-};
+// Legacy config object for backwards compatibility
+export const config: Record<string, ChainConfig> = {};
+
+// Populate config from unified networks
+for (const network of SupportedEVMNetworks) {
+    const networkConfig = getNetworkConfig(network);
+    const chainId = NETWORK_TO_CHAIN_ID[network];
+    const usdcAddress = getUSDCAddress(network);
+    
+    if (networkConfig && typeof chainId === 'number' && usdcAddress) {
+        config[chainId.toString()] = {
+            usdcAddress,
+            usdcName: "USDC",
+        };
+    }
+}
 
 export type ChainConfig = {
     usdcAddress: Address;
     usdcName: string;
 };
 
-// Extended network schema that includes additional networks
-export const SupportedNetworkSchema = z.enum([
-    "base-sepolia",
-    "base",
-    "avalanche-fuji",
-    "avalanche",
-    "iotex",
-    "sei-testnet",
-]);
+// Extended network schema that includes additional networks from unified registry
+export const SupportedNetworkSchema = NetworkSchema; // Use the same schema as NetworkSchema
 
 export type SupportedNetwork = z.infer<typeof SupportedNetworkSchema>;
 
@@ -430,7 +422,6 @@ export const SettleResponseSchema = z.object({
 });
 export type SettleResponse = z.infer<typeof SettleResponseSchema>;
 
-
 // Type that can be used in place of the original PaymentRequirements but supports extended networks
 export type SupportedPaymentRequirements = Omit<BasePaymentRequirements, 'network'> & {
     network: SupportedNetwork;
@@ -465,9 +456,12 @@ export function selectPaymentRequirements(paymentRequirements: ExtendedPaymentRe
     // Filter down to USDC requirements
     const usdcRequirements = broadlyAcceptedPaymentRequirements.filter(requirement => {
         // If the address is a USDC address, we return it.
-        return requirement.asset === getUsdcAddressForChain(getNetworkId(requirement.network));
+        try {
+            return requirement.asset === getUsdcAddressForChain(getNetworkId(requirement.network));
+        } catch {
+            return false;
+        }
     });
-
 
     // Prioritize USDC requirements if available
     if (usdcRequirements.length > 0) {
@@ -491,8 +485,7 @@ export function selectPaymentRequirements(paymentRequirements: ExtendedPaymentRe
  * @param scheme - The scheme to check against. If not provided, the scheme will not be checked.
  * @returns The payment requirement that is the most appropriate for the user.
  */
-export type PaymentRequirementsSelector = (paymentRequirements: ExtendedPaymentRequirements[], network?: Network, scheme?: "exact") => ExtendedPaymentRequirements;
-
+export type PaymentRequirementsSelector = (paymentRequirements: ExtendedPaymentRequirements[], network?: SupportedNetwork, scheme?: "exact") => ExtendedPaymentRequirements;
 
 export type CreateHeaders = () => Promise<{
   verify: Record<string, string>;

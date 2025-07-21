@@ -1,4 +1,5 @@
 import { userWallets } from "@/lib/gateway/db/schema";
+import type { UnifiedNetwork, EVMNetwork } from "@/lib/commons/networks";
 
 export type Wallet = typeof userWallets.$inferSelect
 
@@ -109,25 +110,24 @@ export interface EnhancedServerRegistration {
     metadata?: Record<string, unknown>;
 }
 
+// Use unified network system for CDP networks
+export type CDPNetwork = Extract<UnifiedNetwork, 
+    | "base"
+    | "base-sepolia" 
+    | "ethereum"
+    | "ethereum-sepolia"
+    | "polygon"
+    | "arbitrum"
+    | "sei-testnet">;
 
-// Supported networks for CDP
-export type CDPNetwork =
+// CDP smart account networks (subset of EVM networks that support smart accounts)
+export type CDPNetworkSmartAccount = Extract<EVMNetwork,
     | "base"
     | "base-sepolia"
     | "ethereum"
     | "ethereum-sepolia"
     | "polygon"
-    | "arbitrum"
-    | "sei-testnet";
-
-// Supported networks for CDP
-export type CDPNetworkSmartAccount =
-    | "base"
-    | "base-sepolia"
-    | "ethereum"
-    | "ethereum-sepolia"
-    | "polygon"
-    | "arbitrum"
+    | "arbitrum">;
 
 // CDP Account information
 export interface CDPAccountInfo {
@@ -153,7 +153,6 @@ export interface CDPWalletResult {
     account: CDPAccountInfo;
     smartAccount?: CDPAccountInfo;
 }
-
 
 export interface OnrampAddress {
     address: string;

@@ -1,8 +1,8 @@
 /**
- * Consolidated Token Registry for MCPay Commons
+ * Token Registry Module for MCPay Commons
  * 
- * A comprehensive token registry supporting multiple networks with efficient
- * address + network searching, extensive token metadata, and utility functions.
+ * This module provides token lookup functions using the unified network registry.
+ * All token and network configurations now come from the centralized networks.ts module.
  * 
  * Data verified from official sources:
  * - Circle (USDC): https://developers.circle.com/stablecoins/usdc-contract-addresses
@@ -11,174 +11,105 @@
  * - CoinGecko API: https://docs.coingecko.com/
  */
 
+import type { Network, NetworkInfo, TokenInfo } from '@/types/blockchain';
 import { formatAmount, toBaseUnits } from './amounts';
-import type { Network, TokenInfo, NetworkInfo } from '@/types/blockchain';
+import {
+  type TokenConfig,
+  UNIFIED_NETWORKS,
+  getNetworkConfig,
+  getNetworkTokens,
+  getSupportedNetworks,
+  getNetworkByChainId as getUnifiedNetworkByChainId
+} from './networks';
 
 // =============================================================================
-// NETWORK CONFIGURATIONS
-// =============================================================================
-
-export const NETWORKS: Record<Network, NetworkInfo> = {
-  'base-sepolia': {
-    name: 'Base Sepolia',
-    chainId: 84532,
-    nativeCurrency: { name: 'Ethereum', symbol: 'ETH', decimals: 18 },
-    rpcUrls: ['https://sepolia.base.org'],
-    blockExplorerUrls: ['https://sepolia.basescan.org'],
-    iconUrl: '/networks/base.svg',
-    isTestnet: true,
-  },
-  'sei-testnet': {
-    name: 'Sei Testnet',
-    chainId: 1328,
-    nativeCurrency: { name: 'Sei', symbol: 'SEI', decimals: 18 },
-    rpcUrls: ['https://evm-rpc-testnet.sei-apis.com'],
-    blockExplorerUrls: ['https://seitrace.com'],
-    iconUrl: '/networks/sei.svg',
-    isTestnet: true,
-  },
-};
-
-// =============================================================================
-// TOKEN REGISTRY
+// LEGACY COMPATIBILITY EXPORTS
 // =============================================================================
 
 /**
- * Comprehensive token registry organized by network and address
- * Format: network -> address -> TokenInfo
+ * Get network info from unified registry for backwards compatibility
  */
-export const TOKEN_REGISTRY: Record<Network, Record<string, TokenInfo>> = {
-  // BASE SEPOLIA (TESTNET)
-  'base-sepolia': {
-    // Native ETH
-    '0x0000000000000000000000000000000000000000': {
-      symbol: 'ETH',
-      name: 'Ethereum',
-      network: 'base-sepolia',
-      decimals: 18,
-      category: 'utility',
-      logoUri: '/tokens/eth.svg',
-      coingeckoId: 'ethereum',
-      isStablecoin: false,
-      isNative: true,
-      chainId: 84532,
-      tags: ['native', 'gas', 'testnet'],
-      description: 'Native Ethereum on Base Sepolia testnet',
-      popularityScore: 100,
-      liquidityTier: 'high',
-      recommendedForPayments: true,
-      verified: true,
-      verificationSource: 'Base Network Official',
-    },
-    // USDC (Testnet)
-    '0x036cbd53842c5426634e7929541ec2318f3dcf7e': {
-      symbol: 'USDC',
-      name: 'USD Coin',
-      network: 'base-sepolia',
-      decimals: 6,
-      category: 'stablecoin',
-      logoUri: '/tokens/usdc.svg',
-      coingeckoId: 'usd-coin',
-      isStablecoin: true,
-      isNative: false,
-      chainId: 84532,
-      tags: ['stablecoin', 'testnet', 'payments', 'usd', 'circle'],
-      description: 'USD Coin on Base Sepolia testnet - NO FINANCIAL VALUE',
-      popularityScore: 95,
-      liquidityTier: 'high',
-      recommendedForPayments: true,
-      verified: true,
-      verificationSource: 'Circle Official Documentation',
-    },
-    // USDT (Testnet)
-    '0x036cec1a199234fc02f72d29e596a58034100694': {
-      symbol: 'USDT',
-      name: 'Tether USD',
-      network: 'base-sepolia',
-      decimals: 6,
-      category: 'stablecoin',
-      logoUri: '/tokens/usdt.svg',
-      coingeckoId: 'tether',
-      isStablecoin: true,
-      isNative: false,
-      chainId: 84532,
-      tags: ['stablecoin', 'testnet', 'tether', 'usd'],
-      description: 'Tether USD on Base Sepolia testnet - NO FINANCIAL VALUE',
-      popularityScore: 90,
-      liquidityTier: 'high',
-      recommendedForPayments: true,
-      verified: true,
-      verificationSource: 'Community Verified',
-    },
-    // DAI (Testnet)
-    '0xf59d77573c53e81809c7d9eb7d83be9f4f412c4c': {
-      symbol: 'DAI',
-      name: 'Dai Stablecoin',
-      network: 'base-sepolia',
-      decimals: 18,
-      category: 'stablecoin',
-      logoUri: '/tokens/dai.svg',
-      coingeckoId: 'dai',
-      isStablecoin: true,
-      isNative: false,
-      chainId: 84532,
-      tags: ['stablecoin', 'testnet', 'defi', 'usd'],
-      description: 'Dai Stablecoin on Base Sepolia testnet - NO FINANCIAL VALUE',
-      popularityScore: 85,
-      liquidityTier: 'high',
-      recommendedForPayments: true,
-      verified: true,
-      verificationSource: 'Community Verified',
-    },
-  },
+export const NETWORKS: Record<Network, NetworkInfo> = Object.fromEntries(
+  getSupportedNetworks().map(network => {
+    const config = getNetworkConfig(network);
+    if (!config) return [network, undefined];
+    
+    return [network, {
+      name: config.name,
+      chainId: config.chainId as number,
+      nativeCurrency: config.nativeCurrency,
+      rpcUrls: config.rpcUrls,
+      blockExplorerUrls: config.blockExplorerUrls,
+      iconUrl: config.iconUrl,
+      isTestnet: config.isTestnet,
+    }];
+  }).filter(([, info]) => info !== undefined)
+) as Record<Network, NetworkInfo>;
 
-  // SEI TESTNET
-  'sei-testnet': {
-    // Native SEI
-    '0x0000000000000000000000000000000000000000': {
-      symbol: 'SEI',
-      name: 'Sei',
-      network: 'sei-testnet',
-      decimals: 18,
-      category: 'utility',
-      logoUri: '/tokens/sei.svg',
-      coingeckoId: 'sei-network',
-      isStablecoin: false,
-      isNative: true,
-      chainId: 1328,
-      tags: ['native', 'gas', 'testnet'],
-      description: 'Native Sei on Sei Testnet - NO FINANCIAL VALUE',
-      popularityScore: 100,
-      liquidityTier: 'high',
-      recommendedForPayments: true,
-      verified: true,
-      verificationSource: 'Sei Protocol Official',
-    },
-    // USDC (Testnet)
-    '0x4fcf1784b31630811181f670aea7a7bef803eaed': {
-      symbol: 'USDC',
-      name: 'USD Coin',
-      network: 'sei-testnet',
-      decimals: 6,
-      category: 'stablecoin',
-      logoUri: '/tokens/usdc.svg',
-      coingeckoId: 'usd-coin',
-      isStablecoin: true,
-      isNative: false,
-      chainId: 1328,
-      tags: ['stablecoin', 'testnet', 'payments', 'usd'],
-      description: 'USD Coin on Sei Testnet - NO FINANCIAL VALUE',
-      popularityScore: 95,
-      liquidityTier: 'high',
-      recommendedForPayments: true,
-      verified: true,
-      verificationSource: 'User Verified',
-    },
-  },
-};
+/**
+ * Convert unified TokenConfig to legacy TokenInfo format
+ */
+function convertToTokenInfo(tokenConfig: TokenConfig, network: Network, tokenId: string): TokenInfo {
+  const networkConfig = getNetworkConfig(network);
+  if (!networkConfig) {
+    throw new Error(`Network configuration not found for ${network}`);
+  }
+
+  const isNative = Boolean(tokenConfig.isNative);
+  const isStablecoin = Boolean(tokenConfig.isStablecoin);
+
+  return {
+    // Core token data
+    symbol: tokenConfig.symbol,
+    name: tokenConfig.name,
+    decimals: tokenConfig.decimals,
+    isNative,
+    isStablecoin,
+    verified: tokenConfig.verified,
+    verificationSource: tokenConfig.verificationSource,
+    
+    // Legacy specific fields
+    network,
+    chainId: networkConfig.chainId as number,
+    category: isStablecoin ? 'stablecoin' : (isNative ? 'utility' : 'utility'),
+    logoUri: tokenConfig.logoUri,
+    coingeckoId: tokenConfig.coingeckoId,
+    
+    // Default metadata for legacy compatibility
+    tags: [
+      ...(isNative ? ['native', 'gas'] : []),
+      ...(isStablecoin ? ['stablecoin', 'payments'] : []),
+      ...(networkConfig.isTestnet ? ['testnet'] : ['mainnet']),
+    ],
+    description: `${tokenConfig.name} on ${networkConfig.name}${networkConfig.isTestnet ? ' (testnet)' : ''}`,
+    popularityScore: isStablecoin ? 95 : (isNative ? 100 : 50),
+    liquidityTier: 'high' as const,
+    recommendedForPayments: isStablecoin || isNative,
+  };
+}
+
+/**
+ * Create token registry from unified network configurations
+ */
+export const TOKEN_REGISTRY: Record<Network, Record<string, TokenInfo>> = Object.fromEntries(
+  getSupportedNetworks().map(network => {
+    const tokens = getNetworkTokens(network);
+    const tokenEntries = Object.entries(UNIFIED_NETWORKS[network].tokens).map(([tokenId, tokenConfig]) => {
+      try {
+        const tokenInfo = convertToTokenInfo(tokenConfig, network, tokenId);
+        return [tokenId.toLowerCase(), tokenInfo];
+      } catch (error) {
+        console.warn(`Failed to convert token ${tokenId} on ${network}:`, error);
+        return null;
+      }
+    }).filter(Boolean) as [string, TokenInfo][];
+    
+    return [network, Object.fromEntries(tokenEntries)];
+  })
+) as Record<Network, Record<string, TokenInfo>>;
 
 // =============================================================================
-// UTILITY FUNCTIONS
+// TOKEN LOOKUP FUNCTIONS
 // =============================================================================
 
 /**
@@ -229,9 +160,7 @@ export const getVerifiedTokens = (): TokenInfo[] => {
 /**
  * Get all supported networks
  */
-export const getSupportedNetworks = (): Network[] => {
-  return Object.keys(TOKEN_REGISTRY) as Network[];
-};
+export { getSupportedNetworks };
 
 /**
  * Get recommended tokens for payments on a network
@@ -301,15 +230,11 @@ export const getNetworkInfo = (network: Network): NetworkInfo | undefined => {
 };
 
 /**
- * Get network by chain ID
+ * Get network by chain ID (legacy compatibility)
  */
 export const getNetworkByChainId = (chainId: number): Network | undefined => {
-  for (const [network, info] of Object.entries(NETWORKS)) {
-    if (info.chainId === chainId) {
-      return network as Network;
-    }
-  }
-  return undefined;
+  const network = getUnifiedNetworkByChainId(chainId);
+  return network as Network | undefined;
 };
 
 /**
@@ -421,7 +346,15 @@ export const getTokenVerification = (address: string, network: Network): {
 };
 
 // =============================================================================
+// CONVENIENCE RE-EXPORTS FROM NETWORKS
+// =============================================================================
+
+export {
+  getMainnetNetworks, getNetworkConfig, getNetworkStablecoins, getNetworkTokens, getTestnetNetworks, getTokenConfig, isNetworkSupported
+} from './networks';
+
+// =============================================================================
 // EXPORTS
 // =============================================================================
 
-export { TOKEN_REGISTRY as default }; 
+export { TOKEN_REGISTRY as default };

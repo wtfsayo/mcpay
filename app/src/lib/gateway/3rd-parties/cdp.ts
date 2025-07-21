@@ -57,7 +57,19 @@
 import { CdpClient } from "@coinbase/cdp-sdk";
 import { randomUUID } from "node:crypto";
 import env from "@/lib/gateway/env";
-import { CreateCDPWalletOptions, CDPWalletResult, CDPAccountInfo, CDPNetwork, CDPNetworkSmartAccount } from "@/types";
+import { 
+  type CreateCDPWalletOptions, 
+  type CDPWalletResult, 
+  type CDPAccountInfo, 
+  type CDPNetwork, 
+  type CDPNetworkSmartAccount 
+} from "@/types";
+import { 
+  getCDPNetworks, 
+  getCDPNetworkName, 
+  getNetworkConfig,
+  isTestnetNetwork 
+} from "@/lib/commons/networks";
 
 // CDP Client singleton
 let cdpClient: CdpClient | null = null;
@@ -93,7 +105,6 @@ export function getCDPClient(): CdpClient {
     return cdpClient;
 }
 
-
 /**
  * Create a new CDP managed account
  */
@@ -105,6 +116,12 @@ export async function createCDPAccount(options: CreateCDPWalletOptions = {}): Pr
     
     const accountName = options.accountName || `mcpay-account-${randomUUID()}`;
     const network = options.network || "base-sepolia";
+    
+    // Validate network is supported by CDP
+    const cdpNetworks = getCDPNetworks();
+    if (!cdpNetworks.includes(network)) {
+        throw new Error(`Network ${network} is not supported by CDP. Supported networks: ${cdpNetworks.join(', ')}`);
+    }
     
     console.log("[CDP] Account details:", { accountName, network });
     
@@ -132,8 +149,8 @@ export async function createCDPAccount(options: CreateCDPWalletOptions = {}): Pr
             account: accountInfo,
         };
         
-        // Create smart account if requested
-        if (options.createSmartAccount) {
+        // Create smart account if requested and network supports it
+        if (options.createSmartAccount && supportsSmartAccounts(network)) {
             console.log("[CDP] Creating smart account...");
             try {
                 const smartAccount = await cdp.evm.getOrCreateSmartAccount({
@@ -157,6 +174,8 @@ export async function createCDPAccount(options: CreateCDPWalletOptions = {}): Pr
                 console.warn('[CDP] Failed to create smart account:', smartAccountError);
                 // Continue without smart account
             }
+        } else if (options.createSmartAccount && !supportsSmartAccounts(network)) {
+            console.warn(`[CDP] Smart accounts not supported on network: ${network}`);
         }
         
         console.log("[CDP] Account creation completed successfully");
@@ -181,6 +200,11 @@ export async function createCDPSmartAccount(
     smartAccountName?: string
 ): Promise<CDPAccountInfo> {
     const cdp = getCDPClient();
+    
+    // Check if network supports smart accounts
+    if (!supportsSmartAccounts(network)) {
+        throw new Error(`Smart accounts are not supported on network: ${network}`);
+    }
     
     try {
         // Get the existing owner account
@@ -258,7 +282,12 @@ export async function getCDPSmartAccount(smartAccountName: string, ownerAccountN
  */
 export async function getNetworkScopedAccount(accountName: string, network: CDPNetwork) {
     const account = await getCDPAccount(accountName, network);
-    return await account.useNetwork(network);
+    const cdpNetworkName = getCDPNetworkName(network);
+    if (!cdpNetworkName) {
+        throw new Error(`CDP network name not found for ${network}`);
+    }
+    // CDP SDK expects specific network names - use them directly
+    return await account.useNetwork(cdpNetworkName as CDPNetwork);
 }
 
 /**
@@ -266,7 +295,11 @@ export async function getNetworkScopedAccount(accountName: string, network: CDPN
  */
 export async function getNetworkScopedSmartAccount(smartAccountName: string, ownerAccountName: string, network: CDPNetworkSmartAccount) {
     const smartAccount = await getCDPSmartAccount(smartAccountName, ownerAccountName, network);
-    return await smartAccount.useNetwork(network);
+    const cdpNetworkName = getCDPNetworkName(network);
+    if (!cdpNetworkName) {
+        throw new Error(`CDP network name not found for ${network}`);
+    }
+    return await smartAccount.useNetwork(cdpNetworkName as CDPNetworkSmartAccount);
 }
 
 /**
@@ -279,7 +312,7 @@ export async function requestFaucetFunds(
     token: "eth" | "usdc" = "eth"
 ): Promise<void> {
     // Only allow faucet requests on testnets
-    if (!network.includes("sepolia")) {
+    if (!isTestnetNetwork(network)) {
         throw new Error(`Faucet requests are only available on testnets. Network: ${network}`);
     }
     
@@ -360,45 +393,41 @@ export async function sendUserOperation(
 }
 
 /**
- * Validate if a network is supported by CDP
+ * Check if a network supports smart accounts
  */
-export function isSupportedCDPNetwork(network: string): network is CDPNetwork {
-    const supportedNetworks: CDPNetwork[] = [
+export function supportsSmartAccounts(network: CDPNetwork): network is CDPNetworkSmartAccount {
+    const smartAccountNetworks: CDPNetworkSmartAccount[] = [
         "base",
         "base-sepolia", 
         "ethereum",
         "ethereum-sepolia",
         "polygon",
-        "arbitrum",
-        "sei-testnet",
+        "arbitrum"
     ];
-    return supportedNetworks.includes(network as CDPNetwork);
+    return smartAccountNetworks.includes(network as CDPNetworkSmartAccount);
+}
+
+/**
+ * Validate if a network is supported by CDP
+ */
+export function isSupportedCDPNetwork(network: string): network is CDPNetwork {
+    const cdpNetworks = getCDPNetworks();
+    return cdpNetworks.includes(network as CDPNetwork);
 }
 
 /**
  * Check if a network is a testnet (supports faucet)
  */
 export function isTestnet(network: CDPNetwork): boolean {
-    return network.includes("sepolia");
+    return isTestnetNetwork(network);
 }
 
 /**
  * Get the native token symbol for a network
  */
 export function getNativeTokenSymbol(network: CDPNetwork): string {
-    switch (network) {
-        case "base":
-        case "base-sepolia":
-        case "ethereum":
-        case "ethereum-sepolia":
-            return "ETH";
-        case "polygon":
-            return "MATIC";
-        case "arbitrum":
-            return "ETH";
-        default:
-            return "ETH";
-    }
+    const networkConfig = getNetworkConfig(network);
+    return networkConfig?.nativeCurrency.symbol || 'ETH';
 }
 
 /**
@@ -425,6 +454,7 @@ export const CDP = {
     
     // Utilities
     isSupportedNetwork: isSupportedCDPNetwork,
+    supportsSmartAccounts,
     isTestnet,
     getNativeTokenSymbol,
 };

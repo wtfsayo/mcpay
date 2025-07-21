@@ -5,34 +5,31 @@
  * amount utilities, and blockchain configurations.
  */
 
-import { SupportedChain } from "@/lib/commons/chains";
+import type { UnifiedNetwork, BlockchainArchitecture, TokenConfig } from '@/lib/commons/networks';
 
 // =============================================================================
-// BLOCKCHAIN & NETWORK TYPES
+// RE-EXPORT UNIFIED TYPES
 // =============================================================================
 
-export type Network = 'base-sepolia' | 'sei-testnet';
-export type BlockchainArchitecture = 'evm' | 'solana' | 'near' | 'cosmos' | 'bitcoin';
+export type { UnifiedNetwork, BlockchainArchitecture, TokenConfig } from '@/lib/commons/networks';
+
+// For backwards compatibility, alias the unified types
+export type Network = UnifiedNetwork;
+
+// =============================================================================
+// TOKEN TYPES
+// =============================================================================
+
 export type TokenCategory = 'stablecoin' | 'utility' | 'defi' | 'meme' | 'governance' | 'wrapped';
 export type StablecoinSymbol = 'USDC' | 'USDT' | 'DAI' | 'BUSD' | 'FRAX' | 'TUSD' | 'USDP';
 
 // Generic address type that can handle different address formats
 export type BlockchainAddress = string;
 
-// =============================================================================
-// TOKEN TYPES
-// =============================================================================
-
-export interface TokenInfo {
-  symbol: string;
-  name: string;
+// Extended TokenInfo for backwards compatibility with existing code
+export interface TokenInfo extends TokenConfig {
   network: Network;
-  decimals: number;
   category: TokenCategory;
-  logoUri?: string;
-  coingeckoId?: string;
-  isStablecoin: boolean;
-  isNative: boolean;
   chainId: number;
   tags: string[];
   description?: string;
@@ -43,9 +40,6 @@ export interface TokenInfo {
   popularityScore: number; // 1-100, higher = more popular for payments
   liquidityTier: 'high' | 'medium' | 'low';
   recommendedForPayments: boolean;
-  // Data source verification
-  verified: boolean;
-  verificationSource?: string;
 }
 
 export interface NetworkInfo {
@@ -129,7 +123,7 @@ export interface StablecoinBalanceError {
 }
 
 // =============================================================================
-// CHAIN CONFIGURATION TYPES
+// CHAIN CONFIGURATION TYPES (Legacy - use unified networks instead)
 // =============================================================================
 
 export interface EVMTokenConfig {
@@ -202,6 +196,9 @@ export const COMMON_DECIMALS = {
   BTC: 8,
 } as const; 
 
+// =============================================================================
+// BALANCE TRACKING RESULTS
+// =============================================================================
 
 export interface MultiChainStablecoinResult {
   balances: StablecoinBalance[];
@@ -211,11 +208,11 @@ export interface MultiChainStablecoinResult {
   testnetTotalFiatValue: number; // Total fiat value from testnet chains (for display purposes)
   mainnetBalances: StablecoinBalance[]; // Mainnet balances only
   testnetBalances: StablecoinBalance[]; // Testnet balances only
-  balancesByChain: Partial<Record<SupportedChain, StablecoinBalance[]>>;
+  balancesByChain: Partial<Record<Network, StablecoinBalance[]>>;
   balancesByStablecoin: Partial<Record<StablecoinSymbol, StablecoinBalance[]>>;
   // Separate groupings for mainnet and testnet
-  mainnetBalancesByChain: Partial<Record<SupportedChain, StablecoinBalance[]>>;
-  testnetBalancesByChain: Partial<Record<SupportedChain, StablecoinBalance[]>>;
+  mainnetBalancesByChain: Partial<Record<Network, StablecoinBalance[]>>;
+  testnetBalancesByChain: Partial<Record<Network, StablecoinBalance[]>>;
   mainnetBalancesByStablecoin: Partial<Record<StablecoinSymbol, StablecoinBalance[]>>;
   testnetBalancesByStablecoin: Partial<Record<StablecoinSymbol, StablecoinBalance[]>>;
   summary: {

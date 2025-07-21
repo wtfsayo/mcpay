@@ -13,7 +13,6 @@ import {
   formatTokenAmount,
   getNetworkByChainId,
   getTokenInfo,
-  NETWORKS,
 } from "@/lib/commons"
 import { type Network } from "@/types/blockchain"
 import { InputProperty, MCPClient, MCPToolFromClient, MCPToolsCollection, ToolExecutionModalProps, ToolInputSchema, type ToolFromMcpServerWithStats } from "@/types/mcp"
@@ -32,7 +31,7 @@ import { createPaymentTransport } from "mcpay/client"
 import Image from "next/image"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAccount, useChainId, useWalletClient } from "wagmi"
-
+import { getNetworkConfig, getNetworkInfo } from "@/lib/commons/tokens"
 // =============================================================================
 // TYPE DEFINITIONS
 // =============================================================================
@@ -134,7 +133,11 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
 
     try {
       console.log(`[Network Switch] Starting switch to ${requiredNetwork}`)
-      console.log(`[Network Switch] Network info:`, NETWORKS[requiredNetwork as Network])
+      
+      // Get network info from unified system
+
+      const networkInfo = getNetworkInfo(requiredNetwork as Network)
+      console.log(`[Network Switch] Network info:`, networkInfo)
 
       await switchToNetwork(requiredNetwork as Network)
       console.log(`[Network Switch] Successfully switched to ${requiredNetwork}`)
@@ -147,9 +150,8 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
       console.error('[Network Switch] Failed to switch network:', error)
       console.error('[Network Switch] Error details:', {
         message: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
         requiredNetwork,
-        availableNetworks: Object.keys(NETWORKS)
+        error
       })
 
       setExecution({
@@ -719,18 +721,18 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
               {/* Manual add network info */}
               {getRequiredNetwork() === 'sei-testnet' && (
                 <Button
-                  onClick={() => {
-                    const networkInfo = NETWORKS['sei-testnet']
+                  onClick={async () => {
+                    const networkConfig = getNetworkConfig('sei-testnet')
+                    if (!networkConfig) return
+                    
                     const config = {
-                      chainId: `0x${networkInfo.chainId.toString(16)}`,
-                      chainName: networkInfo.name,
-                      nativeCurrency: networkInfo.nativeCurrency,
-                      rpcUrls: networkInfo.rpcUrls,
-                      blockExplorerUrls: networkInfo.blockExplorerUrls,
+                      chainId: `0x${networkConfig.chainId.toString(16)}`,
+                      chainName: networkConfig.name,
+                      nativeCurrency: networkConfig.nativeCurrency,
+                      rpcUrls: networkConfig.rpcUrls,
+                      blockExplorerUrls: networkConfig.blockExplorerUrls,
                     }
-                    navigator.clipboard.writeText(JSON.stringify(config, null, 2))
-                    console.log('[Manual Network] Sei Testnet config:', config)
-                    alert('Sei Testnet network config copied to clipboard!\n\nTo manually add:\n1. Open your wallet settings\n2. Go to Networks\n3. Add Custom Network\n4. Paste the config\n\nOr check browser console for details.')
+                    await navigator.clipboard.writeText(JSON.stringify(config, null, 2))
                   }}
                   variant="outline"
                   size="sm"

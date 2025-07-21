@@ -14,7 +14,8 @@ import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { openBlockscout } from "@/lib/client/blockscout"
 import { api } from "@/lib/client/utils"
-import { NETWORKS, getTokenInfo, toBaseUnits } from "@/lib/commons"
+import { getTokenInfo, toBaseUnits } from "@/lib/commons"
+import { getNetworkConfig, type UnifiedNetwork } from "@/lib/commons/networks"
 import { type Network } from "@/types/blockchain"
 import { type RegisterMCPTool } from "@/types/mcp"
 import { AlertCircle, ArrowRight, BookOpen, CheckCircle, ExternalLink, Globe, Info, Loader2, Lock, RefreshCw, Server, Wallet, Zap } from "lucide-react"
@@ -109,14 +110,10 @@ export default function RegisterPage() {
         }
       }
 
-      // Get the selected payment token address - use predefined mapping for simplicity
-      const defaultPaymentTokens: Record<Network, string> = {
+      // Get the selected payment token address - use predefined mapping for simplicity  
+      const defaultPaymentTokens: Partial<Record<Network, string>> = {
         'base-sepolia': '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC on Base Sepolia
-        // 'base': '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', // USDC on Base
         'sei-testnet': '0x4fCF1784B31630811181f670Aea7A7bEF803eaED', // USDC on Sei Testnet
-        // 'ethereum': '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC on Ethereum
-        // 'arbitrum': '0xaf88d065e77c8cc2239327c5edb3a432268e5831', // USDC on Arbitrum
-        // 'optimism': '0x0b2c639c533813f4aa9d7837caf62653d097ff85', // USDC on Optimism
         // 'polygon': '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359', // USDC on Polygon
       }
       
@@ -520,54 +517,62 @@ export default function RegisterPage() {
                 </div>
 
                 {/* Current Network */}
-                <div className={`flex items-center gap-3 p-3 rounded-lg border ${isDark ? "border-gray-700 bg-gray-800/50" : "border-gray-200 bg-gray-50"}`}>
-                  <div className={`w-3 h-3 rounded-full ${
-                    NETWORKS[selectedNetwork].isTestnet 
-                      ? "bg-orange-500" 
-                      : "bg-green-500"
-                  }`} />
-                  <div className="flex-1">
-                    <div className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
-                      {NETWORKS[selectedNetwork].name}
-                    </div>
-                    <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                      {NETWORKS[selectedNetwork].isTestnet ? "Testnet" : "Mainnet"}
-                    </div>
-                  </div>
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <span>Network:</span>
+                  <Badge variant={(() => {
+                    const networkConfig = getNetworkConfig(selectedNetwork as UnifiedNetwork)
+                    return networkConfig?.isTestnet ? "secondary" : "default"
+                  })()}>
+                    {(() => {
+                      const networkConfig = getNetworkConfig(selectedNetwork as UnifiedNetwork)
+                      return networkConfig?.name || selectedNetwork
+                    })()}
+                  </Badge>
+                  <span className="text-xs">
+                    ({(() => {
+                      const networkConfig = getNetworkConfig(selectedNetwork as UnifiedNetwork)
+                      return networkConfig?.isTestnet ? "Testnet" : "Mainnet"
+                    })()})
+                  </span>
                 </div>
 
                 {/* Network Options */}
                 {showNetworkSelection && (
                   <div className="mt-4 space-y-2">
-                    {Object.entries(NETWORKS).map(([networkKey, networkInfo]) => (
-                      <Button
-                        key={networkKey}
-                        type="button"
-                        variant={selectedNetwork === networkKey ? "default" : "ghost"}
-                        onClick={() => {
-                          handleNetworkChange(networkKey as Network)
-                          setShowNetworkSelection(false)
-                        }}
-                        className={`w-full h-auto p-3 justify-start ${selectedNetwork === networkKey 
-                          ? isDark ? "bg-gray-700 text-white" : "bg-gray-900 text-white"
-                          : isDark ? "text-gray-300 hover:bg-gray-800" : "text-gray-700 hover:bg-gray-50"
-                        }`}
-                      >
-                        <div className="flex items-center gap-3 w-full">
-                          <div className={`w-2 h-2 rounded-full ${
-                            networkInfo.isTestnet 
-                              ? "bg-orange-500" 
-                              : "bg-green-500"
-                          }`} />
-                          <div className="text-left">
-                            <div className="font-medium text-sm">{networkInfo.name}</div>
-                            <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                              {networkInfo.isTestnet ? "Testnet" : "Mainnet"}
+                    {(['base-sepolia', 'sei-testnet'] as Network[]).map((networkKey) => {
+                      const networkConfig = getNetworkConfig(networkKey as UnifiedNetwork)
+                      if (!networkConfig) return null
+                      
+                      return (
+                        <Button
+                          key={networkKey}
+                          type="button"
+                          variant={selectedNetwork === networkKey ? "default" : "ghost"}
+                          onClick={() => {
+                            handleNetworkChange(networkKey)
+                            setShowNetworkSelection(false)
+                          }}
+                          className={`w-full h-auto p-3 justify-start ${selectedNetwork === networkKey 
+                            ? isDark ? "bg-gray-700 text-white" : "bg-gray-900 text-white"
+                            : isDark ? "text-gray-300 hover:bg-gray-800" : "text-gray-700 hover:bg-gray-50"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 w-full">
+                            <div className={`w-2 h-2 rounded-full ${
+                              networkConfig.isTestnet 
+                                ? "bg-orange-500" 
+                                : "bg-green-500"
+                            }`} />
+                            <div className="text-left">
+                              <div className="font-medium text-sm">{networkConfig.name}</div>
+                              <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                                {networkConfig.isTestnet ? "Testnet" : "Mainnet"}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </Button>
-                    ))}
+                        </Button>
+                      )
+                    })}
                   </div>
                 )}
               </div>

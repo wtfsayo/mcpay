@@ -24,6 +24,7 @@
 
 import {
     addRevenueToCurrency, formatRevenueByCurrency,
+    formatAmount,
     fromBaseUnits, getBlockchainArchitecture
 } from '@/lib/commons';
 import { type BlockchainArchitecture, type RevenueByCurrency } from '@/types/blockchain';

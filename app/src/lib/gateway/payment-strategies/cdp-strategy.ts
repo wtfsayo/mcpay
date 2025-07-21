@@ -15,11 +15,12 @@ import { createWalletClient, http } from "viem";
 import { toAccount } from "viem/accounts";
 import { baseSepolia, seiTestnet } from "viem/chains";
 import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
-import { getCDPAccount, isSupportedCDPNetwork } from "@/lib/gateway/3rd-parties/cdp";
+import { getCDPAccount } from "@/lib/gateway/3rd-parties/cdp";
 import { x402Version } from "@/lib/gateway/payments";
 import { createPaymentHeader, type ExtendedPaymentRequirements } from "@/types/x402";
 import type { PaymentSigningContext, PaymentSigningResult, PaymentSigningStrategy } from "@/lib/gateway/payment-strategies/index";
-import { CDPNetwork, Wallet, CDPWalletMetadata } from "@/types";
+import { type CDPNetwork, type Wallet, type CDPWalletMetadata } from "@/types";
+import { getCDPNetworks, getNetworkConfig, type UnifiedNetwork } from "@/lib/commons/networks";
 
 export class CDPSigningStrategy implements PaymentSigningStrategy {
     name = "CDP";
@@ -32,14 +33,15 @@ export class CDPSigningStrategy implements PaymentSigningStrategy {
             }
 
             // Check if network is supported by CDP
-            const network = context.toolCall.payment.network;
-            if (!isSupportedCDPNetwork(network)) {
+            const network = context.toolCall.payment.network as UnifiedNetwork;
+            const cdpNetworks = getCDPNetworks();
+            
+            if (!cdpNetworks.includes(network)) {
                 console.log(`[CDP Strategy] Network ${network} not supported by CDP`);
                 return false;
             }
 
             console.log(`[CDP Strategy] Network ${network} supported by CDP`);
-
 
             // Check if user has CDP wallets for this network
             const cdpWallets = await withTransaction(async (tx) => {
@@ -50,7 +52,8 @@ export class CDPSigningStrategy implements PaymentSigningStrategy {
 
             const compatibleWallets = cdpWallets.filter(wallet => {
                 const walletNetwork = (wallet.walletMetadata as CDPWalletMetadata)?.cdpNetwork;
-                return walletNetwork === network || walletNetwork === 'base-sepolia' || walletNetwork === 'sei-testnet';
+                // Check if wallet network is compatible with target network
+                return walletNetwork === network || this.isNetworkCompatible(walletNetwork, network);
             });
 
             console.log(`[CDP Strategy] Found ${compatibleWallets.length} compatible wallets for user ${context.user!.id}`);
@@ -92,7 +95,7 @@ export class CDPSigningStrategy implements PaymentSigningStrategy {
 
             const compatibleWallets = cdpWallets.filter(wallet => {
                 const walletNetwork = (wallet.walletMetadata as CDPWalletMetadata)?.cdpNetwork;
-                return (walletNetwork === network || walletNetwork === 'base-sepolia' || walletNetwork === 'sei-testnet') && wallet.isActive;
+                return this.isNetworkCompatible(walletNetwork, network) && wallet.isActive;
             });
 
             if (compatibleWallets.length === 0) {
@@ -144,6 +147,17 @@ export class CDPSigningStrategy implements PaymentSigningStrategy {
         }
     }
 
+    private isNetworkCompatible(walletNetwork: string | undefined, targetNetwork: UnifiedNetwork): boolean {
+        if (!walletNetwork) return false;
+        
+        // Direct match
+        if (walletNetwork === targetNetwork) return true;
+        
+        // CDP networks that might be stored in different formats
+        const cdpNetworks = getCDPNetworks();
+        return cdpNetworks.includes(walletNetwork as CDPNetwork) && cdpNetworks.includes(targetNetwork);
+    }
+
     private async signWithCDPWallet(
         wallet: Wallet,
         paymentRequirement: ExtendedPaymentRequirements,
@@ -166,20 +180,20 @@ export class CDPSigningStrategy implements PaymentSigningStrategy {
             // Get the CDP account instance
             const cdpAccount = await getCDPAccount(accountId, network);
 
+            // Get the appropriate viem chain for wallet client
+            const viemChain = this.getViemChain(network);
+            
             const walletClient = createWalletClient({
                 account: toAccount(cdpAccount),
                 transport: http(),
-                chain: network === 'base-sepolia' ? baseSepolia : seiTestnet
+                chain: viemChain
             });
 
-
-            const signedPayment = await createPaymentHeader(walletClient.account, x402Version, paymentRequirement)
+            const signedPayment = await createPaymentHeader(walletClient.account, x402Version, paymentRequirement);
 
             console.log(`[CDP Strategy] Signed payment:`, JSON.stringify(signedPayment, null, 2));
-
             console.log(`[CDP Strategy] Encoded payment:`, signedPayment);
 
-            // Uncomment this when CDP signing is implemented:
             return {
                 success: true,
                 signedPaymentHeader: signedPayment
@@ -191,6 +205,22 @@ export class CDPSigningStrategy implements PaymentSigningStrategy {
                 success: false,
                 error: `CDP wallet signing failed: ${error instanceof Error ? error.message : 'Unknown error'}`
             };
+        }
+    }
+
+    private getViemChain(network: CDPNetwork) {
+        const networkConfig = getNetworkConfig(network);
+        
+        // Return appropriate viem chain based on network
+        switch (network) {
+            case 'base-sepolia':
+                return baseSepolia;
+            case 'sei-testnet':
+                return seiTestnet;
+            default:
+                // Fallback to base sepolia for unknown networks
+                console.warn(`[CDP Strategy] Unknown network ${network}, using base-sepolia chain`);
+                return baseSepolia;
         }
     }
 } 

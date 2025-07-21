@@ -7,7 +7,7 @@
  * This library consolidates:
  * - Token registry and metadata
  * - Amount conversion and arithmetic utilities  
- * - Blockchain and network configurations
+ * - Unified network and blockchain configurations
  * - Multi-chain stablecoin tracking
  * - Type definitions and utility functions
  */
@@ -55,30 +55,104 @@ export {
 } from './amounts';
 
 // =============================================================================
-// TOKEN REGISTRY EXPORTS
+// NETWORK AND TOKEN REGISTRY EXPORTS (UNIFIED SYSTEM)
 // =============================================================================
 
 export {
-  // Network configurations
-  NETWORKS,
+  // Core unified network types and data
+  type UnifiedNetwork,
+  type NetworkConfig,
+  type TokenConfig,
+  UNIFIED_NETWORKS,
   
-  // Token registry
+  // Network configuration functions
+  getNetworkConfig,
+  getTokenConfig,
+  getNetworkTokens,
+  getNetworkStablecoins,
+  getSupportedNetworks,
+  
+  // Network filtering functions
+  getEVMNetworks,
+  getSolanaNetworks,
+  getNearNetworks,
+  getMainnetNetworks,
+  getTestnetNetworks,
+  
+  // Network validation and utilities
+  isNetworkSupported,
+  isTestnetNetwork,
+  getNetworkByChainId,
+  
+  // CDP and payment network utilities
+  getX402Networks,
+  getCDPNetworks,
+  getFacilitatorUrl,
+  getCDPNetworkName,
+  getUSDCAddress,
+  
+  // Legacy compatibility
+  LEGACY_NETWORK_MAPPING,
+  normalizeLegacyNetwork,
+  toX402Network,
+  fromX402Network,
+  
+  // Chain ID mappings
+  CHAIN_ID_TO_NETWORK,
+  NETWORK_TO_CHAIN_ID,
+  
+  // Architecture utilities (from unified networks system)
+  BLOCKCHAIN_TO_ARCHITECTURE,
+  getBlockchainArchitecture,
+  getBlockchainsForArchitecture,
+  isSupportedBlockchain,
+  getNativeTokenSymbol,
+} from './networks';
+
+// =============================================================================
+// BALANCE TRACKER EXPORTS
+// =============================================================================
+
+export {
+  // Balance checking functions
+  type StablecoinClient,
+  getStablecoinBalanceOnChain,
+  getStablecoinBalances,
+  getStablecoinBalancesOnChains,
+  getMainnetStablecoinBalances,
+  getTestnetStablecoinBalances,
+} from './balance-tracker';
+
+// =============================================================================
+// STABLECOIN CONFIGURATIONS (from unified networks)
+// =============================================================================
+
+export {
+  STABLECOIN_CONFIGS
+} from './networks';
+
+// =============================================================================
+// TOKEN REGISTRY EXPORTS (LEGACY COMPATIBILITY)
+// =============================================================================
+
+export {
+  // Legacy token registry
   TOKEN_REGISTRY,
+  NETWORKS,
   
   // Search and lookup functions
   getTokenInfo,
   getTokenInfoByAddress,
   getTokensByNetwork,
   getVerifiedTokens,
-  getSupportedNetworks,
   getRecommendedPaymentTokens,
   getStablecoins,
   getTokensBySymbol,
   searchTokensByName,
   
-  // Network utilities
+  // Network utilities (legacy)
   getNetworkInfo,
-  getNetworkByChainId,
+  getNetworkByChainId as getNetworkByChainIdLegacy,
   isValidToken,
   
   // Token formatting
@@ -91,65 +165,6 @@ export {
   isValidTokenAddress,
   getTokenVerification,
 } from './tokens';
-
-// =============================================================================
-// CHAIN CONFIGURATION EXPORTS
-// =============================================================================
-
-export {
-  // Stablecoin configurations
-  STABLECOIN_CONFIGS,
-  
-  // Chain configurations
-  SUPPORTED_CHAINS,
-  
-  // Type guards
-  isEVMChain,
-  isSolanaChain,
-  isNearChain,
-  
-  // Chain utility functions
-  getSupportedChains,
-  getChainInfo,
-  getChainsByArchitecture,
-  getEVMChains,
-  getSolanaChains,
-  getNearChains,
-  getMainnetChains,
-  getTestnetChains,
-  filterChainsByTestnetStatus,
-  isTestnetChain,
-  getChainByChainId,
-  
-  // Blockchain architecture mapping
-  BLOCKCHAIN_TO_ARCHITECTURE,
-  getBlockchainArchitecture,
-  getBlockchainsForArchitecture,
-  isSupportedBlockchain,
-  
-  // Address validation
-  validateAddressFormat,
-  getSupportedArchitectures,
-  
-  // Price provider
-  SimplePriceProvider,
-  
-  // Chain types export
-  type SupportedChain,
-} from './chains';
-
-// =============================================================================
-// BALANCE TRACKER EXPORTS
-// =============================================================================
-
-export {
-  // Balance checking functions
-  getStablecoinBalanceOnChain,
-  getStablecoinBalances,
-  getStablecoinBalancesOnChains,
-  getMainnetStablecoinBalances,
-  getTestnetStablecoinBalances,
-} from './balance-tracker';
 
 // =============================================================================
 // CONSTANTS & ENUMS
@@ -172,19 +187,13 @@ export {
   formatAmount as formatTokenValue,
 } from './amounts';
 
-// Token lookups (most common)
+// Network operations (most common) - use unified system
 export {
-  getTokenInfo as findToken,
-  getTokensByNetwork as getNetworkTokens,
-  getStablecoins as findStablecoins,
-} from './tokens';
-
-// Chain operations (most common)
-export {
-  getChainInfo as findChain,
-  isTestnetChain as isTestnet,
-  getEVMChains as getEvmChains,
-} from './chains';
+  getNetworkConfig as findNetwork,
+  getNetworkStablecoins as findStablecoins,
+  isTestnetNetwork as isTestnet,
+  getEVMNetworks as getEvmNetworks,
+} from './networks';
 
 // Balance tracking (most common)
 export {
@@ -218,14 +227,15 @@ import {
   isValidToken
 } from './tokens';
 import {
-  STABLECOIN_CONFIGS,
-  SUPPORTED_CHAINS,
-  getChainInfo,
-  validateAddressFormat
-} from './chains';
+  getNetworkConfig,
+  type UnifiedNetwork,
+  isNetworkSupported as isUnifiedNetworkSupported,
+  UNIFIED_NETWORKS
+} from './networks';
+
 
 /**
- * Get complete token information including chain config
+ * Get complete token information including network config
  */
 export function getCompleteTokenInfo(address: string, network: Network) {
   const token = getTokenInfo(address, network);
@@ -292,17 +302,18 @@ export function smartFormatAmount(
 // VERSION & METADATA
 // =============================================================================
 
-export const COMMONS_VERSION = '1.0.0';
+export const COMMONS_VERSION = '2.0.0';
 export const COMMONS_NAME = 'MCPay Commons';
 
 // Re-export main modules for direct access if needed
 import * as Amounts from './amounts';
+import * as Networks from './networks';
 import * as Tokens from './tokens';
-import * as Chains from './chains';
+
 import * as BalanceTracker from './balance-tracker';
 import * as Types from '@/types/blockchain';
 
-export { Amounts, Tokens, Chains, BalanceTracker, Types };
+export { Amounts, Networks, Tokens, BalanceTracker, Types };
 
 // =============================================================================
 // DEFAULT EXPORT
@@ -315,12 +326,14 @@ export default {
   version: COMMONS_VERSION,
   name: COMMONS_NAME,
   
-  // Modules
+  // Primary modules (unified system)
   amounts: Amounts,
-  tokens: Tokens,
-  chains: Chains,
+  networks: Networks,
   balanceTracker: BalanceTracker,
   types: Types,
+  
+  // Legacy modules (deprecated)
+  tokens: Tokens,
   
   // Quick access to most common functions
   convert: {
@@ -330,15 +343,15 @@ export default {
   },
   
   find: {
+    network: getNetworkConfig,
     token: getTokenInfo,
-    chain: getChainInfo,
     stablecoins: getStablecoins,
   },
   
   validate: {
-    address: validateAddressFormat,
     amount: validateBaseAmount,
     token: isValidToken,
+    network: isUnifiedNetworkSupported,
   },
   
   // Balance tracking shortcuts
@@ -352,8 +365,8 @@ export default {
   // Constants
   constants: {
     COMMON_DECIMALS,
-    STABLECOIN_CONFIGS,
-    SUPPORTED_CHAINS,
+    UNIFIED_NETWORKS,
+
     TOKEN_REGISTRY,
     NETWORKS,
   },

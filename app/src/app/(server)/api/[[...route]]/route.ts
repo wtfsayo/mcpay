@@ -1434,15 +1434,10 @@ app.get('/onramp/config', async (c) => {
 app.get('/wallets/architectures', async (c) => {
     try {
         return c.json({
-            supportedArchitectures: ['evm', 'solana', 'near', 'cosmos', 'bitcoin'],
+            supportedArchitectures: ['evm'],
             blockchainsByArchitecture: {
-                evm: getBlockchainsForArchitecture('evm'),
-                solana: getBlockchainsForArchitecture('solana'),
-                near: getBlockchainsForArchitecture('near'),
-                cosmos: getBlockchainsForArchitecture('cosmos'),
-                bitcoin: getBlockchainsForArchitecture('bitcoin'),
+                evm: getBlockchainsForArchitecture('evm')
             },
-            // Helper function endpoint
             validateBlockchain: (blockchain: string) => isSupportedBlockchain(blockchain)
         });
     } catch (error) {

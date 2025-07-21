@@ -29,32 +29,40 @@
 import type {
   BlockchainAddress,
   BlockchainArchitecture,
-  ChainConfig,
-  EVMTokenConfig,
-  NearTokenConfig,
+  MultiChainStablecoinResult,
   PriceProvider,
-  SolanaTokenConfig,
   StablecoinBalance,
   StablecoinBalanceError,
   StablecoinSymbol
 } from '@/types/blockchain';
 import { createPublicClient, formatUnits, http, type Address } from 'viem';
+import { STABLECOIN_CONFIGS } from './networks';
 import {
-  STABLECOIN_CONFIGS,
-  SUPPORTED_CHAINS,
-  SimplePriceProvider,
-  getEVMChains,
-  getMainnetChains,
-  getNearChains,
-  getSolanaChains,
-  getTestnetChains,
-  isEVMChain,
-  isNearChain,
-  isSolanaChain,
-  type SupportedChain
-} from './chains';
+  getEVMNetworks,
+  getMainnetNetworks,
+  getNearNetworks,
+  getNetworkConfig,
+  getSolanaNetworks,
+  getSupportedNetworks,
+  getTestnetNetworks,
+  isTestnetNetwork,
+  type NetworkConfig,
+  type TokenConfig,
+  type UnifiedNetwork
+} from './networks';
 
-import { MultiChainStablecoinResult, StablecoinClient } from '@/types/blockchain';
+// =============================================================================
+// STABLECOIN CLIENT INTERFACES & IMPLEMENTATIONS
+// =============================================================================
+
+// Abstract interface for blockchain clients
+export interface StablecoinClient {
+  getTokenBalance(
+    address: BlockchainAddress, 
+    tokenConfig: TokenConfig, 
+    chainConfig: NetworkConfig
+  ): Promise<bigint>;
+}
 
 // EVM client implementation using viem
 class EVMStablecoinClient implements StablecoinClient {
@@ -70,15 +78,15 @@ class EVMStablecoinClient implements StablecoinClient {
 
   async getTokenBalance(
     address: BlockchainAddress, 
-    tokenConfig: EVMTokenConfig | SolanaTokenConfig | NearTokenConfig, 
-    chainConfig: ChainConfig
+    tokenConfig: TokenConfig, 
+    chainConfig: NetworkConfig
   ): Promise<bigint> {
-    if (!isEVMChain(chainConfig) || !('address' in tokenConfig)) {
+    if (chainConfig.architecture !== 'evm' || !tokenConfig.address) {
       throw new Error('Invalid EVM configuration');
     }
 
     const client = createPublicClient({
-      transport: http(chainConfig.rpcUrl),
+      transport: http(chainConfig.rpcUrls[0]),
     });
 
     const balance = await client.readContract({
@@ -96,10 +104,10 @@ class EVMStablecoinClient implements StablecoinClient {
 class SolanaStablecoinClient implements StablecoinClient {
   async getTokenBalance(
     address: BlockchainAddress, 
-    tokenConfig: EVMTokenConfig | SolanaTokenConfig | NearTokenConfig, 
-    chainConfig: ChainConfig
+    tokenConfig: TokenConfig, 
+    chainConfig: NetworkConfig
   ): Promise<bigint> {
-    if (!isSolanaChain(chainConfig) || !('mint' in tokenConfig)) {
+    if (chainConfig.architecture !== 'solana' || !tokenConfig.mint) {
       throw new Error('Invalid Solana configuration');
     }
 
@@ -113,10 +121,10 @@ class SolanaStablecoinClient implements StablecoinClient {
 class NearStablecoinClient implements StablecoinClient {
   async getTokenBalance(
     address: BlockchainAddress, 
-    tokenConfig: EVMTokenConfig | SolanaTokenConfig | NearTokenConfig, 
-    chainConfig: ChainConfig
+    tokenConfig: TokenConfig, 
+    chainConfig: NetworkConfig
   ): Promise<bigint> {
-    if (!isNearChain(chainConfig) || !('contract' in tokenConfig)) {
+    if (chainConfig.architecture !== 'near' || !tokenConfig.contract) {
       throw new Error('Invalid Near configuration');
     }
 
@@ -149,46 +157,49 @@ function createStablecoinClient(architecture: BlockchainArchitecture): Stablecoi
  */
 export async function getStablecoinBalanceOnChain(
   address: BlockchainAddress,
-  chain: SupportedChain,
+  network: UnifiedNetwork,
   stablecoinSymbol: StablecoinSymbol,
-  priceProvider: PriceProvider = new SimplePriceProvider()
+  priceProvider: PriceProvider = createSimplePriceProvider()
 ): Promise<StablecoinBalance | StablecoinBalanceError> {
-  const chainConfig = SUPPORTED_CHAINS[chain];
-  if (!chainConfig) {
+  const networkConfig = getNetworkConfig(network);
+  if (!networkConfig) {
     return {
       address,
-      chain,
+      chain: network,
       chainId: 'unknown',
       chainName: 'Unknown',
       architecture: 'evm', // default fallback
       isTestnet: false, // default fallback
       stablecoin: stablecoinSymbol,
       tokenIdentifier: 'unknown',
-      error: `Unsupported chain: ${chain}`,
+      error: `Unsupported network: ${network}`,
     };
   }
 
-  // Find the stablecoin configuration for this chain
-  const tokenConfig = chainConfig.stablecoins.find(token => token.symbol === stablecoinSymbol);
-  if (!tokenConfig) {
+  // Find the stablecoin token in this network's token registry
+  const stablecoinToken = Object.values(networkConfig.tokens).find(
+    token => token.symbol === stablecoinSymbol && token.isStablecoin
+  );
+
+  if (!stablecoinToken) {
     return {
       address,
-      chain,
-      chainId: chainConfig.chainId,
-      chainName: chainConfig.name,
-      architecture: chainConfig.architecture,
-      isTestnet: chainConfig.isTestnet,
+      chain: network,
+      chainId: networkConfig.chainId,
+      chainName: networkConfig.name,
+      architecture: networkConfig.architecture,
+      isTestnet: networkConfig.isTestnet,
       stablecoin: stablecoinSymbol,
       tokenIdentifier: 'not_found',
-      error: `${stablecoinSymbol} not supported on ${chainConfig.name}`,
+      error: `${stablecoinSymbol} not supported on ${networkConfig.name}`,
     };
   }
 
   const stablecoinConfig = STABLECOIN_CONFIGS[stablecoinSymbol];
   
   try {
-    const client = createStablecoinClient(chainConfig.architecture);
-    const balance = await client.getTokenBalance(address, tokenConfig, chainConfig);
+    const client = createStablecoinClient(networkConfig.architecture);
+    const balance = await client.getTokenBalance(address, stablecoinToken, networkConfig);
     const priceUsd = await priceProvider.getPrice(stablecoinSymbol);
 
     // Format balance using the stablecoin's decimals
@@ -197,23 +208,23 @@ export async function getStablecoinBalanceOnChain(
 
     // Get the appropriate token identifier based on chain architecture
     let tokenIdentifier: string;
-    if ('address' in tokenConfig) {
-      tokenIdentifier = tokenConfig.address;
-    } else if ('mint' in tokenConfig) {
-      tokenIdentifier = tokenConfig.mint;
-    } else if ('contract' in tokenConfig) {
-      tokenIdentifier = tokenConfig.contract;
+    if (stablecoinToken.address) {
+      tokenIdentifier = stablecoinToken.address;
+    } else if (stablecoinToken.mint) {
+      tokenIdentifier = stablecoinToken.mint;
+    } else if (stablecoinToken.contract) {
+      tokenIdentifier = stablecoinToken.contract;
     } else {
       tokenIdentifier = 'unknown';
     }
 
     return {
       address,
-      chain,
-      chainId: chainConfig.chainId,
-      chainName: chainConfig.name,
-      architecture: chainConfig.architecture,
-      isTestnet: chainConfig.isTestnet,
+      chain: network,
+      chainId: networkConfig.chainId,
+      chainName: networkConfig.name,
+      architecture: networkConfig.architecture,
+      isTestnet: networkConfig.isTestnet,
       stablecoin: stablecoinSymbol,
       stablecoinName: stablecoinConfig.name,
       tokenIdentifier,
@@ -224,17 +235,15 @@ export async function getStablecoinBalanceOnChain(
       fiatValue,
     };
   } catch (error) {
-    const tokenIdentifier = 'address' in tokenConfig ? tokenConfig.address :
-                           'mint' in tokenConfig ? tokenConfig.mint :
-                           'contract' in tokenConfig ? tokenConfig.contract : 'unknown';
+    const tokenIdentifier = stablecoinToken.address || stablecoinToken.mint || stablecoinToken.contract || 'unknown';
 
     return {
       address,
-      chain,
-      chainId: chainConfig.chainId,
-      chainName: chainConfig.name,
-      architecture: chainConfig.architecture,
-      isTestnet: chainConfig.isTestnet,
+      chain: network,
+      chainId: networkConfig.chainId,
+      chainName: networkConfig.name,
+      architecture: networkConfig.architecture,
+      isTestnet: networkConfig.isTestnet,
       stablecoin: stablecoinSymbol,
       tokenIdentifier,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -248,7 +257,7 @@ export async function getStablecoinBalanceOnChain(
 export async function getStablecoinBalances(
   addresses: BlockchainAddress[],
   stablecoins: StablecoinSymbol[] = ['USDC', 'USDT', 'DAI'],
-  priceProvider: PriceProvider = new SimplePriceProvider()
+  priceProvider: PriceProvider = createSimplePriceProvider()
 ): Promise<MultiChainStablecoinResult> {
   if (!addresses || addresses.length === 0) {
     return createEmptyResult();
@@ -257,13 +266,13 @@ export async function getStablecoinBalances(
   const balances: StablecoinBalance[] = [];
   const errors: StablecoinBalanceError[] = [];
 
-  // Create promises for all address-chain-stablecoin combinations
+  // Create promises for all address-network-stablecoin combinations
   const promises: Promise<StablecoinBalance | StablecoinBalanceError>[] = [];
   
   for (const address of addresses) {
-    for (const chain of Object.keys(SUPPORTED_CHAINS) as SupportedChain[]) {
+    for (const network of getSupportedNetworks()) {
       for (const stablecoin of stablecoins) {
-        promises.push(getStablecoinBalanceOnChain(address, chain, stablecoin, priceProvider));
+        promises.push(getStablecoinBalanceOnChain(address, network, stablecoin, priceProvider));
       }
     }
   }
@@ -292,25 +301,25 @@ export async function getStablecoinBalances(
  */
 export async function getStablecoinBalancesOnChains(
   addresses: BlockchainAddress[],
-  chains: SupportedChain[],
+  networks: UnifiedNetwork[],
   stablecoins: StablecoinSymbol[] = ['USDC', 'USDT', 'DAI'],
-  priceProvider: PriceProvider = new SimplePriceProvider()
+  priceProvider: PriceProvider = createSimplePriceProvider()
 ): Promise<MultiChainStablecoinResult> {
-  if (!addresses || addresses.length === 0 || !chains || chains.length === 0) {
+  if (!addresses || addresses.length === 0 || !networks || networks.length === 0) {
     return createEmptyResult();
   }
 
   const balances: StablecoinBalance[] = [];
   const errors: StablecoinBalanceError[] = [];
 
-  // Create promises for specified address-chain-stablecoin combinations only
+  // Create promises for specified address-network-stablecoin combinations only
   const promises: Promise<StablecoinBalance | StablecoinBalanceError>[] = [];
   
   for (const address of addresses) {
-    for (const chain of chains) {
-      if (chain in SUPPORTED_CHAINS) {
+    for (const network of networks) {
+      if (getNetworkConfig(network)) {
         for (const stablecoin of stablecoins) {
-          promises.push(getStablecoinBalanceOnChain(address, chain, stablecoin, priceProvider));
+          promises.push(getStablecoinBalanceOnChain(address, network, stablecoin, priceProvider));
         }
       }
     }
@@ -330,7 +339,7 @@ export async function getStablecoinBalancesOnChains(
     }
   }
 
-  return aggregateResults(balances, errors, addresses, stablecoins, chains);
+  return aggregateResults(balances, errors, addresses, stablecoins, networks);
 }
 
 /**
@@ -339,10 +348,10 @@ export async function getStablecoinBalancesOnChains(
 export async function getMainnetStablecoinBalances(
   addresses: BlockchainAddress[],
   stablecoins: StablecoinSymbol[] = ['USDC', 'USDT', 'DAI'],
-  priceProvider: PriceProvider = new SimplePriceProvider()
+  priceProvider: PriceProvider = createSimplePriceProvider()
 ): Promise<MultiChainStablecoinResult> {
-  const mainnetChains = getMainnetChains();
-  return getStablecoinBalancesOnChains(addresses, mainnetChains, stablecoins, priceProvider);
+  const mainnetNetworks = getMainnetNetworks();
+  return getStablecoinBalancesOnChains(addresses, mainnetNetworks, stablecoins, priceProvider);
 }
 
 /**
@@ -351,10 +360,10 @@ export async function getMainnetStablecoinBalances(
 export async function getTestnetStablecoinBalances(
   addresses: BlockchainAddress[],
   stablecoins: StablecoinSymbol[] = ['USDC', 'USDT', 'DAI'],
-  priceProvider: PriceProvider = new SimplePriceProvider()
+  priceProvider: PriceProvider = createSimplePriceProvider()
 ): Promise<MultiChainStablecoinResult> {
-  const testnetChains = getTestnetChains();
-  return getStablecoinBalancesOnChains(addresses, testnetChains, stablecoins, priceProvider);
+  const testnetNetworks = getTestnetNetworks();
+  return getStablecoinBalancesOnChains(addresses, testnetNetworks, stablecoins, priceProvider);
 }
 
 // =============================================================================
@@ -394,7 +403,7 @@ function aggregateResults(
   errors: StablecoinBalanceError[],
   addresses: BlockchainAddress[],
   stablecoins: StablecoinSymbol[],
-  specificChains?: SupportedChain[]
+  specificNetworks?: UnifiedNetwork[]
 ): MultiChainStablecoinResult {
   // Separate mainnet and testnet balances
   const mainnetBalances = balances.filter(balance => !balance.isTestnet);
@@ -405,26 +414,27 @@ function aggregateResults(
   const testnetTotalFiatValue = testnetBalances.reduce((sum, balance) => sum + balance.fiatValue, 0);
 
   // Group all balances by chain
-  const balancesByChain: Partial<Record<SupportedChain, StablecoinBalance[]>> = {};
-  const mainnetBalancesByChain: Partial<Record<SupportedChain, StablecoinBalance[]>> = {};
-  const testnetBalancesByChain: Partial<Record<SupportedChain, StablecoinBalance[]>> = {};
+  const balancesByChain: Partial<Record<UnifiedNetwork, StablecoinBalance[]>> = {};
+  const mainnetBalancesByChain: Partial<Record<UnifiedNetwork, StablecoinBalance[]>> = {};
+  const testnetBalancesByChain: Partial<Record<UnifiedNetwork, StablecoinBalance[]>> = {};
 
   for (const balance of balances) {
-    if (!balancesByChain[balance.chain]) {
-      balancesByChain[balance.chain] = [];
+    const network = balance.chain as UnifiedNetwork;
+    if (!balancesByChain[network]) {
+      balancesByChain[network] = [];
     }
-    balancesByChain[balance.chain]!.push(balance);
+    balancesByChain[network]!.push(balance);
 
     if (balance.isTestnet) {
-      if (!testnetBalancesByChain[balance.chain]) {
-        testnetBalancesByChain[balance.chain] = [];
+      if (!testnetBalancesByChain[network]) {
+        testnetBalancesByChain[network] = [];
       }
-      testnetBalancesByChain[balance.chain]!.push(balance);
+      testnetBalancesByChain[network]!.push(balance);
     } else {
-      if (!mainnetBalancesByChain[balance.chain]) {
-        mainnetBalancesByChain[balance.chain] = [];
+      if (!mainnetBalancesByChain[network]) {
+        mainnetBalancesByChain[network] = [];
       }
-      mainnetBalancesByChain[balance.chain]!.push(balance);
+      mainnetBalancesByChain[network]!.push(balance);
     }
   }
 
@@ -452,16 +462,10 @@ function aggregateResults(
     }
   }
 
-  // Count chains by type
-  const allChains = specificChains || Object.values(SUPPORTED_CHAINS);
-  const mainnetChains = allChains.filter(chain => {
-    const config = typeof chain === 'string' ? SUPPORTED_CHAINS[chain] : chain;
-    return config && !config.isTestnet;
-  });
-  const testnetChains = allChains.filter(chain => {
-    const config = typeof chain === 'string' ? SUPPORTED_CHAINS[chain] : chain;
-    return config && config.isTestnet;
-  });
+  // Count networks by type
+  const allNetworks = specificNetworks || getSupportedNetworks();
+  const mainnetNetworks = allNetworks.filter(network => !isTestnetNetwork(network));
+  const testnetNetworks = allNetworks.filter(network => isTestnetNetwork(network));
 
   return {
     balances,
@@ -478,15 +482,36 @@ function aggregateResults(
     testnetBalancesByStablecoin,
     summary: {
       totalAccounts: addresses.length,
-      totalChainsChecked: allChains.length,
+      totalChainsChecked: allNetworks.length,
       totalStablecoinsChecked: stablecoins.length,
       successfulChecks: balances.length,
       failedChecks: errors.length,
-      mainnetChainsChecked: mainnetChains.length,
-      testnetChainsChecked: testnetChains.length,
+      mainnetChainsChecked: mainnetNetworks.length,
+      testnetChainsChecked: testnetNetworks.length,
       mainnetSuccessfulChecks: mainnetBalances.length,
       testnetSuccessfulChecks: testnetBalances.length,
     },
+  };
+}
+
+// =============================================================================
+// PRICE PROVIDER
+// =============================================================================
+
+function createSimplePriceProvider(): PriceProvider {
+  return {
+    async getPrice(symbol: StablecoinSymbol): Promise<number> {
+      const config = STABLECOIN_CONFIGS[symbol];
+      return config.isPegged ? (config.pegTarget || 1.0) : 1.0;
+    },
+
+    async getPrices(symbols: StablecoinSymbol[]): Promise<Record<StablecoinSymbol, number>> {
+      const prices = {} as Record<StablecoinSymbol, number>;
+      for (const symbol of symbols) {
+        prices[symbol] = await this.getPrice(symbol);
+      }
+      return prices;
+    }
   };
 }
 
@@ -496,7 +521,7 @@ function aggregateResults(
 
 export {
   // Price provider
-  SimplePriceProvider,
-  // Chain functions re-exported for convenience
-  getEVMChains, getMainnetChains, getNearChains, getSolanaChains, getTestnetChains
+  createSimplePriceProvider as SimplePriceProvider,
+  // Network functions re-exported for convenience
+  getEVMNetworks, getMainnetNetworks, getNearNetworks, getSolanaNetworks, getTestnetNetworks
 };

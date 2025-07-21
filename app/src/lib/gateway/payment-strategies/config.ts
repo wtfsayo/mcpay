@@ -6,6 +6,7 @@
  */
 
 import env from "@/lib/gateway/env";
+import { getCDPNetworks, type UnifiedNetwork } from "@/lib/commons/networks";
 
 export interface PaymentStrategyConfig {
     enabled: boolean;
@@ -17,18 +18,18 @@ export interface PaymentStrategyConfig {
             enabled: boolean;
             priority: number;
             preferSmartAccounts: boolean;
-            networks: string[];
+            networks: UnifiedNetwork[];
             maxWalletsToTry: number;
         };
         privy: {
             enabled: boolean;
             priority: number;
-            networks: string[];
+            networks: UnifiedNetwork[];
         };
         magic: {
             enabled: boolean;
             priority: number;
-            networks: string[];
+            networks: UnifiedNetwork[];
         };
     };
     logging: {
@@ -50,18 +51,18 @@ export const DEFAULT_CONFIG: PaymentStrategyConfig = {
             enabled: true,
             priority: 100,
             preferSmartAccounts: true,
-            networks: ['base', 'base-sepolia', 'ethereum', 'ethereum-sepolia'],
+            networks: getCDPNetworks(), // Use unified network system
             maxWalletsToTry: 5
         },
         privy: {
             enabled: false, // Not implemented yet
             priority: 80,
-            networks: ['ethereum', 'polygon', 'arbitrum']
+            networks: ['ethereum', 'polygon', 'arbitrum'] as UnifiedNetwork[]
         },
         magic: {
             enabled: false, // Not implemented yet
             priority: 70,
-            networks: ['ethereum', 'polygon']
+            networks: ['ethereum', 'polygon'] as UnifiedNetwork[]
         }
     },
     logging: {

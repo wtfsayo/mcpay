@@ -1,393 +1,219 @@
 "use client"
 
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import {
-  isCoinbaseWalletConnector,
-  isMetaMaskConnector,
-  isPortoConnector,
-  switchToNetwork,
-  verifyWalletConnection
-} from "@/lib/client/wallet-utils"
-import { getNetworkByChainId, NETWORKS } from "@/lib/commons"
-import { type Network } from "@/types/blockchain"
-import { AlertTriangle, CheckCircle, ChevronDown, DollarSign, Loader2, LogOut, Wallet } from "lucide-react"
-import { useEffect, useState } from "react"
-import { useAccount, useBalance, useChainId, useConnect, useDisconnect, type Connector } from "wagmi"
-import { AddressLink } from "./explorer-link"
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useAccount, useConnect, useDisconnect, useChainId, useSwitchChain, type Connector } from 'wagmi'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { getNetworkConfig, type UnifiedNetwork } from '@/lib/commons/networks'
+import type { Network } from '@/types/blockchain'
+import { Loader2, Zap, AlertTriangle } from 'lucide-react'
+
+const supportedChains: Network[] = ['base-sepolia', 'sei-testnet']
 
 export function ConnectButton() {
-  const [isLoading, setIsLoading] = useState(false)
-  const [connectionError, setConnectionError] = useState<string>("")
-  const [isNetworkSwitching, setIsNetworkSwitching] = useState(false)
-
-  const { connect, connectors, error: connectError } = useConnect()
   const { address, isConnected, connector } = useAccount()
+  const { connectors, connect } = useConnect()
   const { disconnect } = useDisconnect()
   const chainId = useChainId()
-
-  // Supported networks
-  const supportedChains: Network[] = ['base-sepolia', 'sei-testnet']
-  const currentNetwork = getNetworkByChainId(chainId) as Network
-  const defaultNetwork: Network = 'base-sepolia'
+  const { switchChain } = useSwitchChain()
   
-  const verification = verifyWalletConnection(isConnected, address)
+  const [isConnecting, setIsConnecting] = useState(false)
+  const [connectionError, setConnectionError] = useState<string | null>(null)
 
-  // USDC addresses for supported networks
-  const usdcAddresses: Record<Network, string> = {
-    'base-sepolia': '0x036cbd53842c5426634e7929541ec2318f3dcf7e',
-    'sei-testnet': '0x4fCF1784B31630811181f670Aea7A7bEF803eaED',
-  }
-
-  // Multi-chain balance fetching
-  const baseSepoliaBalance = useBalance({
-    address: address,
-    token: usdcAddresses['base-sepolia'] as `0x${string}`,
-    chainId: NETWORKS['base-sepolia'].chainId,
-    query: {
-      enabled: !!(address && usdcAddresses['base-sepolia'] && isConnected),
-      refetchInterval: 30000,
-    }
-  })
-
-  const seiTestnetBalance = useBalance({
-    address: address,
-    token: usdcAddresses['sei-testnet'] as `0x${string}`,
-    chainId: NETWORKS['sei-testnet'].chainId,
-    query: {
-      enabled: !!(address && usdcAddresses['sei-testnet'] && isConnected),
-      refetchInterval: 30000,
-    }
-  })
-
-  const balanceQueries = [
-    { network: 'base-sepolia' as Network, ...baseSepoliaBalance },
-    { network: 'sei-testnet' as Network, ...seiTestnetBalance }
-  ]
-
-  // Handle connection errors
-  useEffect(() => {
-    if (connectError) {
-      setConnectionError(connectError.message)
-    } else {
-      setConnectionError("")
-    }
-  }, [connectError])
-
-  const handleConnect = async (connector: Connector) => {
-    try {
-      setIsLoading(true)
-      setConnectionError("")
-
-      // Try to switch to default network before connecting
-      try {
-        await switchToNetwork(defaultNetwork)
-      } catch (error) {
-        console.warn("Could not switch network before connecting:", error)
+  // Determine current network based on chain ID
+  const currentNetwork = useMemo(() => {
+    if (!chainId) return null
+    
+    // Check supported networks for matching chain ID
+    for (const network of supportedChains) {
+      const networkConfig = getNetworkConfig(network as UnifiedNetwork)
+      if (networkConfig && networkConfig.chainId === chainId) {
+        return network
       }
+    }
+    return null
+  }, [chainId])
 
+  // Check if we're on the right network
+  const isOnSupportedNetwork = currentNetwork !== null
+
+  const availableConnectors = useMemo(() => {
+    return connectors.filter(connector => connector.name !== 'Coinbase Wallet SDK')
+  }, [connectors])
+
+  const switchToNetwork = useCallback(async (targetNetwork: Network) => {
+    if (!switchChain) return
+    
+    const networkConfig = getNetworkConfig(targetNetwork as UnifiedNetwork)
+    if (!networkConfig || typeof networkConfig.chainId !== 'number') return
+
+    try {
+      setConnectionError(null)
+      switchChain({ 
+        chainId: networkConfig.chainId,
+        addEthereumChainParameter: {
+          chainName: networkConfig.name,
+          rpcUrls: networkConfig.rpcUrls,
+          blockExplorerUrls: networkConfig.blockExplorerUrls,
+          nativeCurrency: {
+            name: networkConfig.nativeCurrency.name,
+            symbol: networkConfig.nativeCurrency.symbol,
+            decimals: networkConfig.nativeCurrency.decimals,
+          },
+        }
+      })
+    } catch (error) {
+      console.error('Failed to switch network:', error)
+      const networkName = networkConfig?.name || targetNetwork
+      setConnectionError(`Failed to switch to ${networkName} network`)
+    }
+  }, [switchChain])
+
+  const handleConnect = useCallback(async (connector: Connector) => {
+    try {
+      setIsConnecting(true)
+      setConnectionError(null)
       connect({ connector })
     } catch (error) {
-      setConnectionError(error instanceof Error ? error.message : "Failed to connect")
+      console.error('Connection failed:', error)
+      setConnectionError('Connection failed. Please try again.')
     } finally {
-      setIsLoading(false)
+      setIsConnecting(false)
     }
-  }
+  }, [connect])
 
-  const handleDisconnect = async () => {
-    try {
-      setIsLoading(true)
-      disconnect()
-    } catch (error) {
-      setConnectionError(error instanceof Error ? error.message : "Failed to disconnect")
-    } finally {
-      setIsLoading(false)
+  const handleDisconnect = useCallback(() => {
+    disconnect()
+    setConnectionError(null)
+  }, [disconnect])
+
+  // Clear error after some time
+  useEffect(() => {
+    if (connectionError) {
+      const timer = setTimeout(() => setConnectionError(null), 5000)
+      return () => clearTimeout(timer)
     }
-  }
+  }, [connectionError])
 
-  const handleNetworkSwitch = async (targetNetwork: Network) => {
-    try {
-      setIsNetworkSwitching(true)
-      setConnectionError("")
-      const success = await switchToNetwork(targetNetwork)
-      if (!success) {
-        setConnectionError(`Failed to switch to ${NETWORKS[targetNetwork].name} network`)
-      }
-    } catch (error) {
-      setConnectionError(error instanceof Error ? error.message : "Failed to switch network")
-    } finally {
-      setIsNetworkSwitching(false)
-    }
-  }
-
-  const formatAddress = (address?: string) => {
-    if (!address) return ""
-    return `${address.slice(0, 6)}...${address.slice(-4)}`
-  }
-
-  const formatBalance = (balance: bigint | undefined, decimals: number) => {
-    if (!balance) return "0.00"
-    const formatted = Number(balance) / Math.pow(10, decimals)
-    return formatted.toFixed(2)
-  }
-
-  // Get preferred connectors
-  const metaMaskConnector = connectors.find(c => isMetaMaskConnector(c))
-  const coinbaseConnector = connectors.find(c => isCoinbaseWalletConnector(c))
-  const portoConnector = connectors.find(c => isPortoConnector(c))
-
-  if (isConnected && address) {
-    const isMetaMask = connector ? isMetaMaskConnector(connector) : false
-    const isCoinbaseWallet = connector ? isCoinbaseWalletConnector(connector) : false
-    const isPorto = connector ? isPortoConnector(connector) : false
-    const isOnSupportedNetwork = supportedChains.includes(currentNetwork)
-
+  if (!isConnected) {
     return (
-      <div className="space-y-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="flex items-center gap-2">
-              <Wallet className="h-4 w-4" />
-              {formatAddress(address)}
-              {isMetaMask && <Badge variant="outline" className="text-xs">MetaMask</Badge>}
-              {isCoinbaseWallet && <Badge variant="outline" className="text-xs">Coinbase</Badge>}
-              {isPorto && <Badge variant="outline" className="text-xs">Porto</Badge>}
-              <ChevronDown className="h-4 w-4" />
+      <div className="space-y-3">
+        {connectionError && (
+          <div className="text-sm text-red-500 bg-red-50 border border-red-200 rounded-lg p-3">
+            {connectionError}
+          </div>
+        )}
+        
+        <div className="space-y-2">
+          {availableConnectors.map((connector) => (
+            <Button
+              key={connector.id}
+              onClick={() => handleConnect(connector)}
+              disabled={isConnecting}
+              variant="outline"
+              className="w-full h-11 text-[15px] font-medium"
+            >
+              {isConnecting ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : null}
+              Connect {connector.name}
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-96">
-            {/* Connection Status - Cleaned up */}
-            <div className="px-3 py-2 border-b">
-              <div className="flex items-center gap-2">
-                {verification.isValid ? (
-                  <CheckCircle className="h-4 w-4 text-green-600" />
-                ) : (
-                  <AlertTriangle className="h-4 w-4 text-amber-600" />
-                )}
-                <span className="text-sm font-medium">
-                  {verification.isValid ? "Connected" : "Connection Issues"}
-                </span>
-                {!isOnSupportedNetwork && (
-                  <Badge variant="outline" className="text-xs text-orange-600">
-                    Unsupported Network
-                  </Badge>
-                )}
-              </div>
-              <p className="text-xs text-gray-600 mt-1">
-                {connector?.name} • {currentNetwork ? NETWORKS[currentNetwork].name : 'Unknown Network'}
-                {currentNetwork && (
-                  <span className="ml-1">
-                    ({currentNetwork.startsWith('sei') ? 'Sei' : 'Ethereum'} ecosystem)
-                  </span>
-                )}
-              </p>
-            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
 
-            {/* Multi-Chain Balances - Cleaned up layout */}
-            <div className="px-3 py-3 border-b">
-              <div className="flex items-center gap-2 mb-3">
-                <DollarSign className="h-4 w-4 text-gray-600" />
-                <span className="text-sm font-medium">USDC Balances</span>
-              </div>
-
-              <div className="space-y-2">
-                {balanceQueries.map(({ network, data: balance, isLoading: isLoadingBalance, error }) => {
-                  const networkInfo = NETWORKS[network]
-                  const isCurrent = network === currentNetwork
-
-                  return (
-                    <div key={network} className={`flex justify-between items-center p-2 rounded-md ${isCurrent ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-gray-50 dark:bg-gray-800/50'}`}>
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${isCurrent ? 'bg-blue-500' : 'bg-gray-400'}`} />
-                        <span className="text-xs font-medium">{networkInfo.name}</span>
-                        {isCurrent && <Badge variant="outline" className="text-xs">Current</Badge>}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono">
-                          {isLoadingBalance ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : error ? (
-                            <span className="text-red-500">Error</span>
-                          ) : balance ? (
-                            `${formatBalance(balance.value, balance.decimals)} USDC`
-                          ) : (
-                            "0.00 USDC"
-                          )}
-                        </span>
-                        {!isCurrent && (
-                          <Button
-                            onClick={() => handleNetworkSwitch(network)}
-                            disabled={isNetworkSwitching}
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 px-2 text-xs"
-                          >
-                            {isNetworkSwitching ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              "Switch"
-                            )}
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Network Switch Section - Only show if needed */}
-            {!isOnSupportedNetwork && (
-              <>
-                <div className="px-3 py-2">
-                  <p className="text-xs text-amber-600 mb-2">Switch to supported network:</p>
-                  <div className="grid grid-cols-2 gap-1">
-                    {supportedChains.map((network) => (
-                      <Button
-                        key={network}
-                        onClick={() => handleNetworkSwitch(network)}
-                        disabled={isNetworkSwitching}
-                        variant="outline"
-                        size="sm"
-                        className="text-xs h-8"
-                      >
-                        {NETWORKS[network].name}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-                <DropdownMenuSeparator />
-              </>
-            )}
-
-            {/* Actions */}
-            <DropdownMenuItem className="p-0">
-              <AddressLink
-                address={address}
-                network={currentNetwork}
-                variant="button"
-                showExplorerName={true}
-                className="w-full justify-start"
-              />
-            </DropdownMenuItem>
-
-            <DropdownMenuItem onClick={handleDisconnect} className="cursor-pointer">
-              <LogOut className="mr-2 h-4 w-4" />
-              Disconnect
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        {/* Alerts - Cleaned up and simplified */}
-        {verification.warnings.length > 0 && (
-          <Alert className="w-full">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription className="text-xs">
-              {verification.warnings[0]}
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {!isOnSupportedNetwork && (
-          <Alert className="w-full">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription className="text-xs">
-              Switch to: {supportedChains.map(n => NETWORKS[n].name).join(', ')}
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {isNetworkSwitching && (
-          <Alert className="w-full">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <AlertDescription className="text-xs">
-              Switching networks...
-            </AlertDescription>
-          </Alert>
-        )}
+  // Show network selection if connected but not on supported network
+  if (!isOnSupportedNetwork) {
+    return (
+      <div className="space-y-3">
+        <div className="text-center space-y-3">
+          <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+            <span>
+              {connector?.name} • {currentNetwork ? (() => {
+                const networkConfig = getNetworkConfig(currentNetwork as UnifiedNetwork)
+                return networkConfig?.name || 'Unknown Network'
+              })() : 'Unknown Network'}
+            </span>
+          </div>
+          
+          <div className="text-sm text-gray-600">
+            Please switch to a supported network:
+          </div>
+          
+          <div className="space-y-2">
+            {supportedChains.map((network) => {
+              const networkConfig = getNetworkConfig(network as UnifiedNetwork)
+              if (!networkConfig) return null
+              
+              return (
+                <Button
+                  key={network}
+                  onClick={() => switchToNetwork(network)}
+                  variant="outline"
+                  className="w-full h-10 text-sm"
+                >
+                  <Zap className="h-4 w-4 mr-2" />
+                  {networkConfig.name}
+                </Button>
+              )
+            })}
+          </div>
+        </div>
+        
+        <Button
+          onClick={handleDisconnect}
+          variant="ghost"
+          className="w-full text-sm text-gray-500"
+        >
+          Disconnect
+        </Button>
       </div>
     )
   }
 
   return (
-    <div className="space-y-2">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button disabled={isLoading}>
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Connecting
-              </>
-            ) : (
-              "Connect Wallet"
-            )}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {/* Preferred Wallets First */}
-          {metaMaskConnector && (
-            <DropdownMenuItem
-              onClick={() => handleConnect(metaMaskConnector)}
-              className="cursor-pointer"
-            >
-              <div className="flex items-center justify-between w-full">
-                <span>{metaMaskConnector.name}</span>
-                <Badge variant="outline" className="text-xs">Recommended</Badge>
-              </div>
-            </DropdownMenuItem>
-          )}
-
-          {coinbaseConnector && (
-            <DropdownMenuItem
-              onClick={() => handleConnect(coinbaseConnector)}
-              className="cursor-pointer"
-            >
-              <div className="flex items-center justify-between w-full">
-                <span>{coinbaseConnector.name}</span>
-                <Badge variant="outline" className="text-xs">Popular</Badge>
-              </div>
-            </DropdownMenuItem>
-          )}
-
-          {portoConnector && (
-            <DropdownMenuItem
-              onClick={() => handleConnect(portoConnector)}
-              className="cursor-pointer"
-            >
-              {portoConnector.name}
-            </DropdownMenuItem>
-          )}
-
-          {/* Other Connectors */}
-          {connectors
-            .filter(connector =>
-              !isMetaMaskConnector(connector) &&
-              !isCoinbaseWalletConnector(connector) &&
-              !isPortoConnector(connector)
-            )
-            .map((connector) => (
-              <DropdownMenuItem
-                key={connector.id}
-                onClick={() => handleConnect(connector)}
-                className="cursor-pointer"
-              >
-                {connector.name}
-              </DropdownMenuItem>
-            ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-
+    <div className="space-y-3">
       {connectionError && (
-        <Alert className="w-full">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription className="text-xs">
-            {connectionError}
-          </AlertDescription>
-        </Alert>
+        <div className="text-sm text-red-500 bg-red-50 border border-red-200 rounded-lg p-3">
+          {connectionError}
+        </div>
       )}
+      
+      <div className="text-center space-y-3">
+        <div className="flex items-center justify-center gap-2">
+          <Badge variant="secondary" className="text-xs">
+            {connector?.name}
+          </Badge>
+          <Badge variant="outline" className="text-xs">
+            {(() => {
+              const networkConfig = getNetworkConfig(currentNetwork as UnifiedNetwork)
+              return networkConfig?.name || 'Unknown'
+            })()}
+          </Badge>
+        </div>
+        
+        <div className="text-sm font-mono text-gray-600">
+          {address?.slice(0, 6)}...{address?.slice(-4)}
+        </div>
+        
+        <div className="text-xs text-gray-500">
+          Switch to: {supportedChains.map(n => {
+            const networkConfig = getNetworkConfig(n as UnifiedNetwork)
+            return networkConfig?.name || n
+          }).join(', ')}
+        </div>
+      </div>
+      
+      <Button
+        onClick={handleDisconnect}
+        variant="outline"
+        className="w-full h-10"
+      >
+        Disconnect
+      </Button>
     </div>
   )
 }
