@@ -325,7 +325,7 @@ export const UNIFIED_NETWORKS: Record<UnifiedNetwork, NetworkConfig> = {
     rpcUrls: ['https://evm-rpc-testnet.sei-apis.com'],
     blockExplorerUrls: ['https://seitrace.com'],
     iconUrl: '/networks/sei.svg',
-    cdpSupported: false,
+    cdpSupported: true,
     x402Supported: true,
     tokens: {
       '0x0000000000000000000000000000000000000000': {

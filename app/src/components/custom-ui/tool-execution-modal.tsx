@@ -165,8 +165,12 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     const currentNetwork = getCurrentNetwork()
 
     if (!requiredNetwork) return true // Free tools don't require specific network
+    
+    // Managed wallets don't need network switching - handled server-side
+    if (activeWallet?.walletType === 'managed') return true
+    
     return requiredNetwork === currentNetwork
-  }, [getRequiredNetwork, getCurrentNetwork])
+  }, [getRequiredNetwork, getCurrentNetwork, activeWallet?.walletType])
 
   const shouldShowNetworkStatus = useCallback((): boolean => {
     if (!tool?.isMonetized || !tool.pricing?.length || !isConnected) {
@@ -1058,7 +1062,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
       return { icon: AlertCircle, text: "Error", variant: "error" as const }
     }
     
-    if (stableTool?.isMonetized && !isOnCorrectNetwork()) {
+    if (stableTool?.isMonetized && !isOnCorrectNetwork() && activeWallet?.walletType !== 'managed') {
       return { icon: RefreshCw, text: "Network Switch Required", variant: "warning" as const }
     }
     
@@ -1136,7 +1140,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
             size="sm"
             onClick={() => {
               setExecution({ status: 'idle' })
-              if (stableTool?.isMonetized && !isOnCorrectNetwork()) {
+              if (stableTool?.isMonetized && !isOnCorrectNetwork() && activeWallet?.walletType !== 'managed') {
                 handleNetworkSwitch()
               } else {
                 executeTool()
@@ -1154,6 +1158,11 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
 
   const renderNetworkSwitchPrompt = () => {
     if (!stableTool?.isMonetized || !stableTool.pricing.length || !isConnected || isOnCorrectNetwork()) {
+      return null
+    }
+
+    // Managed wallets don't need network switching - handled server-side
+    if (activeWallet?.walletType === 'managed') {
       return null
     }
 
@@ -1326,7 +1335,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
               !mcpToolsCollection[stableTool.name] ||
               execution.status === 'executing' ||
               execution.status === 'initializing' ||
-              (stableTool.isMonetized && !isOnCorrectNetwork()) ||
+              (stableTool.isMonetized && !isOnCorrectNetwork() && activeWallet?.walletType !== 'managed') ||
               isSwitchingNetwork ||
               needsBrowserConnection
             }

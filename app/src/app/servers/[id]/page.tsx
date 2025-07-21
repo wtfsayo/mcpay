@@ -997,6 +997,7 @@ await client.connect(transport)`}
                         <TableHead className="w-[300px]">Tool</TableHead>
                         <TableHead>Type</TableHead>
                         <TableHead>Price</TableHead>
+                        <TableHead>Network</TableHead>
                         <TableHead>Usage</TableHead>
                         <TableHead className="text-right">Verification</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
@@ -1036,6 +1037,13 @@ await client.connect(transport)`}
                             ) : (
                               <span className={isDark ? "text-gray-400" : "text-gray-500"}>Free</span>
                             )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              <Badge variant="outline" className={`text-xs ${isDark ? "border-gray-500 text-gray-300" : ""}`}>
+                                {tool.pricing[0].network}
+                              </Badge>
+                            </div>
                           </TableCell>
                           <TableCell>
                             <div className="text-sm">
