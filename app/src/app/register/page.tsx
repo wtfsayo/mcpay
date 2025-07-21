@@ -22,7 +22,7 @@ import { type Network } from "@/types/blockchain"
 import { type RegisterMCPTool } from "@/types/mcp"
 import { type UserWallet } from "@/types/wallet"
 import { AlertCircle, ArrowRight, BookOpen, CheckCircle, ChevronDown, Copy, Globe, Info, Loader2, Lock, RefreshCw, Server, User, Wallet, Zap } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { useConnect } from "wagmi"
@@ -66,10 +66,8 @@ const generateDisplayNameFromUrl = (urlStr: string): string => {
 export default function RegisterPage() {
   const { isDark } = useTheme()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { data: session, isPending: isSessionPending } = useSession()
-
-  console.log("Session:", session)
-  console.log("Session Pending:", isSessionPending)
 
   const [formData, setFormData] = useState({
     name: "",
@@ -109,6 +107,14 @@ export default function RegisterPage() {
       setSelectedWallet(primaryWallet)
     }
   }, [primaryWallet, selectedWallet])
+
+  // Autopopulate URL from search parameters
+  useEffect(() => {
+    const urlParam = searchParams.get('url')
+    if (urlParam && !formData.url) {
+      setFormData((prev) => ({ ...prev, url: urlParam }))
+    }
+  }, [searchParams, formData.url])
 
   // Require account setup - use selected wallet or fallback to primary
   const activeWallet = selectedWallet || primaryWallet
