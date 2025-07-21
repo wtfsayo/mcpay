@@ -46,6 +46,7 @@ import { useParams } from "next/navigation"
 import { useEffect, useState } from "react"
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { RevenueDetail } from "@/lib/gateway/db/schema"
 
 export default function ServerDashboard() {
   const params = useParams()
@@ -229,13 +230,13 @@ await client.connect(transport)
   }
 
   // Helper function to safely convert to number
-  const safeNumber = (value: any): number => {
+  const safeNumber = (value: unknown): number => {
     const num = Number(value)
     return isNaN(num) ? 0 : num
   }
 
   // Helper function to calculate total revenue from revenueDetails array
-  const calculateTotalRevenue = (revenueDetails: any[] | null): number => {
+  const calculateTotalRevenue = (revenueDetails: RevenueDetail[] | null): number => {
     if (!revenueDetails || !Array.isArray(revenueDetails)) {
       return 0
     }
@@ -256,7 +257,7 @@ await client.connect(transport)
   }
 
   // Helper function to format the primary revenue amount for display
-  const formatPrimaryRevenue = (revenueDetails: any[] | null): string => {
+  const formatPrimaryRevenue = (revenueDetails: RevenueDetail[] | null): string => {
     if (!revenueDetails || !Array.isArray(revenueDetails) || revenueDetails.length === 0) {
       return "0.00"
     }
@@ -278,7 +279,7 @@ await client.connect(transport)
   }
 
   // Helper function to format daily analytics revenue
-  const formatDailyRevenue = (revenueDetails: any[] | null): string => {
+  const formatDailyRevenue = (revenueDetails: RevenueDetail[] | null): string => {
     const total = calculateTotalRevenue(revenueDetails)
     return total.toFixed(2)
   }

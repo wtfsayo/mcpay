@@ -58,6 +58,7 @@ export interface MCPToolFromClient {
 export type MCPTool = typeof mcpTools.$inferSelect;
 
 
+
 export interface RegisterMCPTool {
   name: string
   description: string
