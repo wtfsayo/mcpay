@@ -275,7 +275,7 @@ export default function RegisterPage() {
       // Set default price for all tools
       const toolsWithDefaultPrice = fetchedTools.map(tool => ({
         ...tool,
-        price: tool.price || "0.10"
+        price: tool.price || "0.01"
       }))
       setTools(toolsWithDefaultPrice)
 
