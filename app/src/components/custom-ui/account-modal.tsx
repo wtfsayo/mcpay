@@ -599,18 +599,7 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'funds' }: AccountM
                   </div>
                 )}
 
-                {/* No Balances State */}
-                {!balanceSummary.hasMainnetBalances && !balanceSummary.hasTestnetBalances && (
-                  <div className="text-center py-6">
-                    <Wallet className={`h-8 w-8 mx-auto mb-3 ${isDark ? "text-gray-500" : "text-gray-400"}`} />
-                    <div className={`text-3xl font-bold mb-2 ${isDark ? "text-gray-500" : "text-gray-400"}`}>
-                      $0.00
-                    </div>
-                    <p className={`text-sm ${isDark ? "text-gray-500" : "text-gray-500"}`}>
-                      No funds in connected wallets
-                    </p>
-                  </div>
-                )}
+
 
                 {/* Wallet Count Footer */}
                 <div className={`pt-3 border-t ${isDark ? "border-gray-700/50" : "border-gray-200/50"}`}>
