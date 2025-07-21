@@ -1,7 +1,9 @@
+export type AccountModalTab = 'funds' | 'wallets' | 'settings' | 'developer'
+
 export interface AccountModalProps {
     isOpen: boolean
     onClose: () => void
-    defaultTab?: 'profile' | 'wallets' | 'settings'
+    defaultTab?: AccountModalTab
 }
 
 export interface ChainBalance {

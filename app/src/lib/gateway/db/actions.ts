@@ -1897,6 +1897,71 @@ export const txOperations = {
         return result[0];
     },
 
+    // Get user's tool usage history
+    getUserToolUsageHistory: (userId: string, limit = 50, offset = 0) => async (tx: TransactionType) => {
+        return await tx.query.toolUsage.findMany({
+            where: eq(toolUsage.userId, userId),
+            limit,
+            offset,
+            orderBy: [desc(toolUsage.timestamp)],
+            with: {
+                tool: {
+                    columns: {
+                        id: true,
+                        name: true,
+                        description: true
+                    },
+                    with: {
+                        server: {
+                            columns: {
+                                id: true,
+                                serverId: true,
+                                name: true
+                            }
+                        }
+                    }
+                },
+                pricing: {
+                    columns: {
+                        id: true,
+                        priceRaw: true,
+                        tokenDecimals: true,
+                        currency: true,
+                        network: true
+                    }
+                }
+            }
+        });
+    },
+
+    // Get user's payment history
+    getUserPaymentHistory: (userId: string, limit = 50, offset = 0) => async (tx: TransactionType) => {
+        return await tx.query.payments.findMany({
+            where: eq(payments.userId, userId),
+            limit,
+            offset,
+            orderBy: [desc(payments.createdAt)],
+            with: {
+                tool: {
+                    columns: {
+                        id: true,
+                        name: true,
+                        description: true
+                    },
+                    with: {
+                        server: {
+                            columns: {
+                                id: true,
+                                serverId: true,
+                                name: true
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    },
+
     // Analytics (Now computed from views - these are helper functions for compatibility)
     getDailyServerAnalytics: (serverId: string) => async (tx: TransactionType) => {
         const result = await tx.select()

@@ -17,16 +17,22 @@ import {
   DrawerHeader
 } from "@/components/ui/drawer"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
 import { signIn, signOut, useSession } from "@/lib/client/auth"
 import { openExplorer } from "@/lib/client/blockscout"
 import { api } from "@/lib/client/utils"
+import { AccountModalProps, BalancesByChain, ChainBalance } from "@/types/ui"
 import {
   AlertCircle,
   CheckCircle,
   ChevronDown,
   ChevronUp,
+  Code,
   Copy,
   CreditCard,
+  DollarSign,
   ExternalLink,
   Github,
   LogOut,
@@ -36,29 +42,29 @@ import {
   Trash2,
   TrendingUp,
   User,
-  Wallet
+  Wallet,
+  Loader2
 } from "lucide-react"
 import Image from "next/image"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { toast } from "sonner"
 import { useAccount, useDisconnect } from "wagmi"
-import { AccountModalProps, BalancesByChain, ChainBalance } from "@/types/ui"
 
-export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: AccountModalProps) {
+export function AccountModal({ isOpen, onClose, defaultTab = 'funds' }: AccountModalProps) {
   const { isDark } = useTheme()
   const { data: session, isPending: sessionLoading } = useSession()
   const { address: connectedWallet, isConnected } = useAccount()
   const { disconnect } = useDisconnect()
 
   // Use the UserProvider for wallet data and actions
-  const { 
-    addWallet, 
-    setPrimaryWallet, 
-    removeWallet 
+  const {
+    addWallet,
+    setPrimaryWallet,
+    removeWallet
   } = useUser()
   const userWallets = useUserWallets()
-  const { 
-    mainnet: mainnetBalancesByChain, 
+  const {
+    mainnet: mainnetBalancesByChain,
     testnet: testnetBalancesByChain,
     totalMainnet: totalFiatValue,
     totalTestnet: testnetTotalFiatValue,
@@ -71,13 +77,20 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
   const [error, setError] = useState<string>("")
   const [isMobile, setIsMobile] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
-  
+
+  // State for Developer tab
+  const [apiKeys, setApiKeys] = useState<any[]>([])
+  const [isLoadingApiKeys, setIsLoadingApiKeys] = useState(false)
+  const [newApiKeyPermissions, setNewApiKeyPermissions] = useState<string[]>(['read', 'write', 'execute'])
+  const [showNewApiKeyForm, setShowNewApiKeyForm] = useState(false)
+  const [createdApiKey, setCreatedApiKey] = useState<string | null>(null)
+
   // Check for mobile screen size
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 768)
     }
-    
+
     checkMobile()
     window.addEventListener('resize', checkMobile)
     return () => window.removeEventListener('resize', checkMobile)
@@ -89,11 +102,11 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
     setIsAuthenticating(true)
     setIsLoading(true)
     setError("")
-    
+
     try {
-      await signIn.social({ 
-        provider: "github", 
-        callbackURL: window.location.href 
+      await signIn.social({
+        provider: "github",
+        callbackURL: window.location.href
       })
       // Keep loading state active - it will be cleared when session loads
       // Don't set isLoading to false here as we want to show loading during redirect
@@ -168,10 +181,10 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
     if (!session?.user?.id) return
 
     // Confirm removal, especially for primary wallets
-    const confirmMessage = isPrimary 
+    const confirmMessage = isPrimary
       ? "Are you sure you want to remove your primary wallet? This will affect your account access."
       : "Are you sure you want to remove this wallet?"
-    
+
     if (!confirm(confirmMessage)) return
 
     setIsLoading(true)
@@ -210,10 +223,87 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
     }
   }
 
+  // API Key Management Functions
+  const loadApiKeys = async () => {
+    if (!session?.user?.id) return
+
+    setIsLoadingApiKeys(true)
+    try {
+      const keys = await api.getUserApiKeys(session.user.id)
+      setApiKeys(keys as any[])
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Failed to load API keys")
+    } finally {
+      setIsLoadingApiKeys(false)
+    }
+  }
+
+  // Generate random API key name
+  const generateApiKeyName = () => {
+    const adjectives = ['Swift', 'Clever', 'Bright', 'Quick', 'Smart', 'Fast', 'Smooth', 'Sharp', 'Bold', 'Cool']
+    const nouns = ['Key', 'Access', 'Token', 'Gate', 'Bridge', 'Link', 'Port', 'Pass', 'Code', 'Lock']
+    const adjective = adjectives[Math.floor(Math.random() * adjectives.length)]
+    const noun = nouns[Math.floor(Math.random() * nouns.length)]
+    const number = Math.floor(Math.random() * 999) + 1
+    return `${adjective}${noun}${number}`
+  }
+
+  const handleCreateApiKey = async () => {
+    if (!session?.user?.id) return
+
+    setIsLoading(true)
+    try {
+      const response = await api.createApiKey(session.user.id, {
+        name: generateApiKeyName(),
+        permissions: newApiKeyPermissions
+      })
+
+      if (response && typeof response === 'object' && 'apiKey' in response) {
+        setCreatedApiKey(response.apiKey as string)
+        setNewApiKeyPermissions(['read', 'write', 'execute'])
+        setShowNewApiKeyForm(false)
+        await loadApiKeys()
+        toast.success("API key created successfully!")
+      }
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Failed to create API key")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleRevokeApiKey = async (keyId: string, keyName: string) => {
+    if (!session?.user?.id) return
+
+    if (!confirm(`Are you sure you want to revoke the API key "${keyName}"? This action cannot be undone.`)) {
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      await api.revokeApiKey(session.user.id, keyId)
+      await loadApiKeys()
+      toast.success("API key revoked successfully")
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Failed to revoke API key")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Load data when tab changes
+  useEffect(() => {
+    if (activeTab === 'developer') {
+      loadApiKeys()
+    }
+  }, [activeTab, session?.user?.id])
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
     toast.success("Copied to clipboard")
   }
+
+
 
   // Helper function to get friendly chain display names
   const getChainDisplayName = (chainKey: string, chainName: string): string => {
@@ -227,7 +317,7 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
       'ethereum': 'Ethereum',
       'polygon': 'Polygon',
     }
-    
+
     return chainMap[chainKey] || chainName || chainKey
   }
 
@@ -244,16 +334,16 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
   // Helper function to transform chain balance data into ChainBalance format
   const transformChainData = (balancesByChain: BalancesByChain): ChainBalance[] => {
     const result: ChainBalance[] = []
-    
+
     Object.entries(balancesByChain).forEach(([chainKey, balances]) => {
       if (!balances || balances.length === 0) return
-      
+
       // Get friendly chain name
       const chainName = getChainDisplayName(chainKey, balances[0]?.chainName)
-      
+
       // Group tokens by stablecoin type and sum balances across all addresses
       const tokenGroups: { [symbol: string]: { balance: number; value: number; addresses: Set<string> } } = {}
-      
+
       balances.forEach(balance => {
         if (!tokenGroups[balance.stablecoin]) {
           tokenGroups[balance.stablecoin] = { balance: 0, value: 0, addresses: new Set() }
@@ -262,10 +352,10 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
         tokenGroups[balance.stablecoin].value += balance.fiatValue
         tokenGroups[balance.stablecoin].addresses.add(balance.tokenIdentifier)
       })
-      
+
       // Calculate total balance for this chain
       const totalBalanceUsd = Object.values(tokenGroups).reduce((sum, group) => sum + group.value, 0)
-      
+
       // Only include chains with actual balances > $0.001
       if (totalBalanceUsd > 0.001) {
         const tokens = Object.entries(tokenGroups)
@@ -277,7 +367,7 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
           }))
           .filter(token => token.balanceUsd > 0.001) // Only include tokens with meaningful value
           .sort((a, b) => b.balanceUsd - a.balanceUsd) // Sort by value, highest first
-        
+
         if (tokens.length > 0) {
           result.push({
             chain: chainName,
@@ -289,7 +379,7 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
         }
       }
     })
-    
+
     // Sort chains by balance value, highest first
     return result.sort((a, b) => b.balanceUsd - a.balanceUsd)
   }
@@ -298,10 +388,10 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
   const getFilteredChains = () => {
     const mainnetChains = transformChainData(mainnetBalancesByChain)
     const testnetChains = transformChainData(testnetBalancesByChain)
-    
-    return { 
-      chains: [...mainnetChains, ...testnetChains], 
-      total: totalFiatValue + testnetTotalFiatValue 
+
+    return {
+      chains: [...mainnetChains, ...testnetChains],
+      total: totalFiatValue + testnetTotalFiatValue
     }
   }
 
@@ -309,9 +399,8 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
   const GitHubSignIn = () => (
     <div className="flex flex-col justify-center min-h-[400px] space-y-5 p-1">
       <div className="text-center">
-        <div className={`w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center ${
-          isDark ? "bg-gray-800/50" : "bg-gray-50"
-        }`}>
+        <div className={`w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center ${isDark ? "bg-gray-800/50" : "bg-gray-50"
+          }`}>
           <Github className={`h-6 w-6 ${isDark ? "text-gray-300" : "text-gray-600"}`} />
         </div>
         <h2 className={`text-xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
@@ -323,9 +412,8 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
       </div>
 
       {error && (
-        <div className={`p-3 rounded-lg border ${
-          isDark ? "bg-red-950/50 border-red-800/50 text-red-400" : "bg-red-50 border-red-200 text-red-700"
-        }`}>
+        <div className={`p-3 rounded-lg border ${isDark ? "bg-red-950/50 border-red-800/50 text-red-400" : "bg-red-50 border-red-200 text-red-700"
+          }`}>
           <div className="flex items-center gap-2">
             <AlertCircle className="h-4 w-4" />
             <span className="text-sm">{error}</span>
@@ -341,7 +429,7 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
         size="lg"
       >
         {isLoading || isAuthenticating ? (
-          <div className="w-4 h-4 mr-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+          <Loader2 className="w-4 h-4 mr-3 animate-spin" />
         ) : (
           <Github className="h-4 w-4 mr-3" />
         )}
@@ -360,13 +448,12 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
       {/* User Header */}
       <div className="flex items-center justify-between px-1 mb-4">
         <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-            isDark ? "bg-gray-800/50" : "bg-gray-50"
-          }`}>
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isDark ? "bg-gray-800/50" : "bg-gray-50"
+            }`}>
             {session?.user?.image ? (
-              <Image 
-                src={session.user.image} 
-                alt="Profile" 
+              <Image
+                src={session.user.image}
+                alt="Profile"
                 width={40}
                 height={40}
                 className="w-10 h-10 rounded-full object-cover"
@@ -399,11 +486,11 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
 
       {/* Main Content Tabs */}
       <div className="flex-1 flex flex-col">
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'profile' | 'wallets' | 'settings')} className="w-full flex flex-col h-full">
-          <TabsList className={`grid w-full grid-cols-3 h-9 mb-4 ${isDark ? "bg-gray-800/50" : "bg-gray-100"}`}>
-            <TabsTrigger value="profile" className="text-sm">
-              <User className="h-3.5 w-3.5 mr-1.5" />
-              Profile
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'funds' | 'wallets' | 'settings' | 'developer')} className="w-full flex flex-col h-full">
+          <TabsList className={`grid w-full grid-cols-4 h-9 mb-4 ${isDark ? "bg-gray-800/50" : "bg-gray-100"}`}>
+            <TabsTrigger value="funds" className="text-sm">
+              <DollarSign className="h-3.5 w-3.5 mr-1.5" />
+              Funds
             </TabsTrigger>
             <TabsTrigger value="wallets" className="text-sm">
               <Wallet className="h-3.5 w-3.5 mr-1.5" />
@@ -413,45 +500,15 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
               <Settings className="h-3.5 w-3.5 mr-1.5" />
               Settings
             </TabsTrigger>
+            <TabsTrigger value="developer" className="text-sm">
+              <Code className="h-3.5 w-3.5 mr-1.5" />
+              Developer
+            </TabsTrigger>
           </TabsList>
 
           {/* Profile Tab */}
-          <TabsContent value="profile" className="flex-1 flex flex-col">
+          <TabsContent value="funds" className="flex-1 flex flex-col">
             <div className="space-y-4">
-              <div className={`rounded-lg border p-4 ${isDark ? "bg-gray-900/50 border-gray-800" : "bg-gray-50/50 border-gray-200"}`}>
-                <div className="flex items-center gap-2 mb-3">
-                  <User className="h-4 w-4" />
-                  <h4 className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
-                    Profile Information
-                  </h4>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className={`text-xs font-medium block mb-1 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                      Name
-                    </label>
-                    <p className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                      {session?.user?.name || "Not set"}
-                    </p>
-                  </div>
-                  <div>
-                    <label className={`text-xs font-medium block mb-1 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                      Email
-                    </label>
-                    <div className="flex items-center gap-1.5">
-                      <p className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                        {session?.user?.email?.slice(0, 20)}...
-                      </p>
-                      {session?.user?.emailVerified ? (
-                        <CheckCircle className="h-3 w-3 text-green-500" />
-                      ) : (
-                        <AlertCircle className="h-3 w-3 text-orange-500" />
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               {/* Your Funds Section */}
               <div className={`rounded-lg border p-4 ${isDark ? "bg-gray-900/50 border-gray-800" : "bg-gray-50/50 border-gray-200"}`}>
                 <div className="flex items-center justify-between mb-4">
@@ -461,7 +518,7 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
                       Your Funds
                     </h4>
                   </div>
-                  
+
                   <div className="flex items-center gap-2">
                     <Button
                       size="sm"
@@ -516,9 +573,8 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
 
                 {/* Test Balance */}
                 {balanceSummary.hasTestnetBalances && (
-                  <div className={`rounded-lg border p-3 mb-4 ${
-                    isDark ? "bg-orange-900/20 border-orange-800/30" : "bg-orange-50 border-orange-200"
-                  }`}>
+                  <div className={`rounded-lg border p-3 mb-4 ${isDark ? "bg-orange-900/20 border-orange-800/30" : "bg-orange-50 border-orange-200"
+                    }`}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-orange-500" />
@@ -582,7 +638,7 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
                     </div>
                   </div>
                 </div>
-                
+
 
 
 
@@ -594,24 +650,23 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
                         <h5 className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"} mb-3`}>
                           Balance by Network
                         </h5>
-                        
+
                         <div className="space-y-2">
                           {getFilteredChains().chains.map((chain, index) => {
                             // More comprehensive testnet detection
-                            const isTestnet = chain.network.toLowerCase().includes('sepolia') || 
-                                             chain.network.toLowerCase().includes('fuji') || 
-                                             chain.network.toLowerCase().includes('testnet') ||
-                                             chain.network.toLowerCase().includes('test') ||
-                                             chain.network.toLowerCase().includes('goerli') ||
-                                             chain.network.toLowerCase().includes('mumbai')
+                            const isTestnet = chain.network.toLowerCase().includes('sepolia') ||
+                              chain.network.toLowerCase().includes('fuji') ||
+                              chain.network.toLowerCase().includes('testnet') ||
+                              chain.network.toLowerCase().includes('test') ||
+                              chain.network.toLowerCase().includes('goerli') ||
+                              chain.network.toLowerCase().includes('mumbai')
                             const isMainnet = !isTestnet
-                            
+
                             return (
-                              <div 
+                              <div
                                 key={`${chain.chain}-${chain.network}-${index}`}
-                                className={`rounded-lg border p-3 ${
-                                  isDark ? "bg-gray-800/30 border-gray-700/50" : "bg-white border-gray-200"
-                                }`}
+                                className={`rounded-lg border p-3 ${isDark ? "bg-gray-800/30 border-gray-700/50" : "bg-white border-gray-200"
+                                  }`}
                               >
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -638,7 +693,7 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
                                     </div>
                                   </div>
                                 </div>
-                                
+
                                 {/* Token breakdown */}
                                 {chain.tokens && chain.tokens.length > 0 && (
                                   <div className={`mt-3 pt-3 border-t ${isDark ? "border-gray-700/30" : "border-gray-200/50"}`}>
@@ -685,275 +740,495 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
 
           {/* Wallets Tab */}
           <TabsContent value="wallets" className="flex-1 overflow-y-auto space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
-                    Connected Wallets
-                  </h4>
-                  <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                    Manage your blockchain wallets
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Connected Wallets
+                </h4>
+                <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                  Manage your blockchain wallets
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {isConnected && !userWallets.find(w => w.walletAddress.toLowerCase() === connectedWallet?.toLowerCase()) && (
                   <Button
                     size="sm"
-                    onClick={handleBuyCrypto}
-                    disabled={isLoading || isAuthenticating || userWallets.length === 0}
-                    className="bg-blue-600 hover:bg-blue-700 text-white h-8 text-xs px-3"
-                    title="Buy cryptocurrency for your wallets"
+                    onClick={handleConnectWallet}
+                    disabled={isLoading || isAuthenticating}
+                    className="h-8 text-xs px-3"
                   >
-                    <CreditCard className="h-3 w-3 mr-1.5" />
-                    Fund Account
+                    <Plus className="h-3 w-3 mr-1.5" />
+                    Link Wallet
                   </Button>
-                  {isConnected && !userWallets.find(w => w.walletAddress.toLowerCase() === connectedWallet?.toLowerCase()) && (
-                    <Button
-                      size="sm"
-                      onClick={handleConnectWallet}
-                      disabled={isLoading || isAuthenticating}
-                      className="h-8 text-xs px-3"
-                    >
-                      <Plus className="h-3 w-3 mr-1.5" />
-                      Link Wallet
-                    </Button>
-                  )}
-                </div>
+                )}
               </div>
+            </div>
 
-              {/* Helper text for testnet */}
-              {balanceSummary.hasTestnetBalances && (
-                <div className={`text-xs px-1 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                  💡 For test tokens, use faucets like{" "}
-                  <a 
-                    href="https://faucet.circle.com/" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-blue-500 hover:text-blue-400 underline"
-                  >
-                    Circle faucet
-                  </a>
-                </div>
-              )}
+            {/* Helper text for testnet */}
+            {balanceSummary.hasTestnetBalances && (
+              <div className={`text-xs px-1 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                💡 For test tokens, use faucets like{" "}
+                <a
+                  href="https://faucet.circle.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-500 hover:text-blue-400 underline"
+                >
+                  Circle faucet
+                </a>
+              </div>
+            )}
 
-              {/* User's Linked Wallets - Show First */}
-              {userWallets.length > 0 && (
-                <div className="space-y-3">
-                  {userWallets.map((wallet) => (
-                    <div key={wallet.id} className={`rounded-lg border p-4 ${isDark ? "bg-gray-900/50 border-gray-800" : "bg-white border-gray-200"}`}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="relative">
-                            <Wallet className="h-4 w-4" />
+            {/* User's Linked Wallets - Show First */}
+            {userWallets.length > 0 && (
+              <div className="space-y-3">
+                {userWallets.map((wallet) => (
+                  <div key={wallet.id} className={`rounded-lg border p-4 ${isDark ? "bg-gray-900/50 border-gray-800" : "bg-white border-gray-200"}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="relative">
+                          <Wallet className="h-4 w-4" />
+                          {wallet.isPrimary && (
+                            <Star className="h-2.5 w-2.5 text-yellow-500 absolute -top-0.5 -right-0.5" />
+                          )}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                              {wallet.walletAddress.slice(0, 6)}...{wallet.walletAddress.slice(-4)}
+                            </p>
                             {wallet.isPrimary && (
-                              <Star className="h-2.5 w-2.5 text-yellow-500 absolute -top-0.5 -right-0.5" />
+                              <Badge variant="secondary" className="text-xs px-1.5 py-0">Primary</Badge>
                             )}
                           </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <p className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
-                                {wallet.walletAddress.slice(0, 6)}...{wallet.walletAddress.slice(-4)}
-                              </p>
-                              {wallet.isPrimary && (
-                                <Badge variant="secondary" className="text-xs px-1.5 py-0">Primary</Badge>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1.5 mt-1">
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <Badge variant="outline" className="text-xs px-1.5 py-0">
+                              {wallet.blockchain}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs px-1.5 py-0">
+                              {wallet.walletType}
+                            </Badge>
+                            {wallet.provider && (
                               <Badge variant="outline" className="text-xs px-1.5 py-0">
-                                {wallet.blockchain}
+                                {wallet.provider}
                               </Badge>
-                              <Badge variant="outline" className="text-xs px-1.5 py-0">
-                                {wallet.walletType}
-                              </Badge>
-                              {wallet.provider && (
-                                <Badge variant="outline" className="text-xs px-1.5 py-0">
-                                  {wallet.provider}
-                                </Badge>
-                              )}
-                            </div>
+                            )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-1">
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => copyToClipboard(wallet.walletAddress)}
+                          className="h-7 w-7 p-0"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openExplorer(wallet.walletAddress, 'base-sepolia')}
+                          className="h-7 w-7 p-0"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                        </Button>
+                        {!wallet.isPrimary && (
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => copyToClipboard(wallet.walletAddress)}
-                            className="h-7 w-7 p-0"
+                            onClick={() => handleSetPrimaryWallet(wallet.id)}
+                            disabled={isLoading || isAuthenticating}
+                            className="h-7 px-2 text-xs"
                           >
-                            <Copy className="h-3 w-3" />
+                            <Star className="h-3 w-3 mr-1" />
+                            Primary
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openExplorer(wallet.walletAddress, 'base-sepolia')}
-                            className="h-7 w-7 p-0"
-                          >
-                            <ExternalLink className="h-3 w-3" />
-                          </Button>
-                          {!wallet.isPrimary && (
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveWallet(wallet.id, wallet.isPrimary)}
+                          disabled={isLoading || isAuthenticating}
+                          className="h-7 w-7 p-0 text-red-500 hover:text-red-400"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Current Connected Wallet (if not linked to account) */}
+            {isConnected && !userWallets.find(w => w.walletAddress.toLowerCase() === connectedWallet?.toLowerCase()) && (
+              <div className={`border border-dashed rounded-lg p-4 ${isDark ? "border-gray-700 bg-gray-800/30" : "border-gray-300 bg-gray-50"}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Wallet className="h-4 w-4 text-blue-500" />
+                    <div>
+                      <p className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                        Connected Wallet
+                      </p>
+                      <p className={`text-xs font-mono ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                        {connectedWallet?.slice(0, 6)}...{connectedWallet?.slice(-4)}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="text-xs">Not Linked</Badge>
+                </div>
+              </div>
+            )}
+
+            {/* Native Wallet Connection Component - Collapsible */}
+            <Collapsible>
+              <div className={`rounded-lg border ${isDark ? "bg-gray-900/50 border-gray-800" : "bg-gray-50/50 border-gray-200"}`}>
+                <CollapsibleTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="w-full flex items-center justify-between p-4 h-auto"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isDark ? "bg-gray-800" : "bg-gray-100"
+                        }`}>
+                        <Wallet className="h-4 w-4" />
+                      </div>
+                      <div className="text-left">
+                        <h4 className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
+                          Native Wallet
+                        </h4>
+                        <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                          Connect MetaMask, Coinbase Wallet, etc.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isConnected && (
+                        <div className="w-2 h-2 rounded-full bg-green-500" />
+                      )}
+                      <ChevronDown className="h-4 w-4" />
+                    </div>
+                  </Button>
+                </CollapsibleTrigger>
+
+                <CollapsibleContent>
+                  <div className="px-4 pb-4">
+                    <div className={`h-px mb-4 ${isDark ? "bg-gray-800" : "bg-gray-200"}`} />
+
+                    {!isConnected ? (
+                      <div className="text-center py-4">
+                        <Wallet className={`h-6 w-6 mx-auto mb-3 ${isDark ? "text-gray-500" : "text-gray-400"}`} />
+                        <p className={`text-xs mb-4 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                          No native wallet connected
+                        </p>
+                        <ConnectButton />
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between p-4 rounded-lg border border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/20">
+                        <div className="flex items-center gap-3">
+                          <div className="w-2 h-2 rounded-full bg-green-500" />
+                          <div>
+                            <p className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                              Connected
+                            </p>
+                            <p className={`text-xs font-mono ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                              {connectedWallet?.slice(0, 6)}...{connectedWallet?.slice(-4)}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {!userWallets.find(w => w.walletAddress.toLowerCase() === connectedWallet?.toLowerCase()) && (
                             <Button
-                              variant="ghost"
                               size="sm"
-                              onClick={() => handleSetPrimaryWallet(wallet.id)}
+                              onClick={handleConnectWallet}
                               disabled={isLoading || isAuthenticating}
-                              className="h-7 px-2 text-xs"
+                              className="h-7 text-xs px-2"
                             >
-                              <Star className="h-3 w-3 mr-1" />
-                              Primary
+                              Link
                             </Button>
                           )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemoveWallet(wallet.id, wallet.isPrimary)}
-                            disabled={isLoading || isAuthenticating}
-                            className="h-7 w-7 p-0 text-red-500 hover:text-red-400"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Current Connected Wallet (if not linked to account) */}
-              {isConnected && !userWallets.find(w => w.walletAddress.toLowerCase() === connectedWallet?.toLowerCase()) && (
-                <div className={`border border-dashed rounded-lg p-4 ${isDark ? "border-gray-700 bg-gray-800/30" : "border-gray-300 bg-gray-50"}`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <Wallet className="h-4 w-4 text-blue-500" />
-                      <div>
-                        <p className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
-                          Connected Wallet
-                        </p>
-                        <p className={`text-xs font-mono ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                          {connectedWallet?.slice(0, 6)}...{connectedWallet?.slice(-4)}
-                        </p>
-                      </div>
-                    </div>
-                    <Badge variant="outline" className="text-xs">Not Linked</Badge>
-                  </div>
-                </div>
-              )}
-
-              {/* Native Wallet Connection Component - Collapsible */}
-              <Collapsible>
-                <div className={`rounded-lg border ${isDark ? "bg-gray-900/50 border-gray-800" : "bg-gray-50/50 border-gray-200"}`}>
-                  <CollapsibleTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      className="w-full flex items-center justify-between p-4 h-auto"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                          isDark ? "bg-gray-800" : "bg-gray-100"
-                        }`}>
-                          <Wallet className="h-4 w-4" />
-                        </div>
-                        <div className="text-left">
-                          <h4 className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
-                            Native Wallet
-                          </h4>
-                          <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                            Connect MetaMask, Coinbase Wallet, etc.
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {isConnected && (
-                          <div className="w-2 h-2 rounded-full bg-green-500" />
-                        )}
-                        <ChevronDown className="h-4 w-4" />
-                      </div>
-                    </Button>
-                  </CollapsibleTrigger>
-                  
-                  <CollapsibleContent>
-                    <div className="px-4 pb-4">
-                      <div className={`h-px mb-4 ${isDark ? "bg-gray-800" : "bg-gray-200"}`} />
-                      
-                      {!isConnected ? (
-                        <div className="text-center py-4">
-                          <Wallet className={`h-6 w-6 mx-auto mb-3 ${isDark ? "text-gray-500" : "text-gray-400"}`} />
-                          <p className={`text-xs mb-4 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                            No native wallet connected
-                          </p>
                           <ConnectButton />
                         </div>
-                      ) : (
-                        <div className="flex items-center justify-between p-4 rounded-lg border border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/20">
-                          <div className="flex items-center gap-3">
-                            <div className="w-2 h-2 rounded-full bg-green-500" />
-                            <div>
-                              <p className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
-                                Connected
-                              </p>
-                              <p className={`text-xs font-mono ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                                {connectedWallet?.slice(0, 6)}...{connectedWallet?.slice(-4)}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {!userWallets.find(w => w.walletAddress.toLowerCase() === connectedWallet?.toLowerCase()) && (
-                              <Button
-                                size="sm"
-                                onClick={handleConnectWallet}
-                                disabled={isLoading || isAuthenticating}
-                                className="h-7 text-xs px-2"
-                              >
-                                Link
-                              </Button>
-                            )}
-                            <ConnectButton />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </CollapsibleContent>
-                </div>
-              </Collapsible>
-            </TabsContent>
-
-            {/* Settings Tab */}
-            <TabsContent value="settings" className="flex-1 flex flex-col">
-              <div className="space-y-3">
-                <div className={`rounded-lg border p-4 ${isDark ? "bg-gray-900/50 border-gray-800" : "bg-gray-50/50 border-gray-200"}`}>
-                  <div className="flex items-center gap-2 mb-3">
-                    <Settings className="h-4 w-4" />
-                    <h4 className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
-                      Account Settings
-                    </h4>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
-                          Email Verification
-                        </p>
-                        <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                          {session?.user?.emailVerified ? "Your email is verified" : "Please verify your email"}
-                        </p>
                       </div>
+                    )}
+                  </div>
+                </CollapsibleContent>
+              </div>
+            </Collapsible>
+          </TabsContent>
+
+          {/* Settings Tab */}
+          <TabsContent value="settings" className="flex-1 flex flex-col">
+            <div className="space-y-3">
+              <div className={`rounded-lg border p-4 ${isDark ? "bg-gray-900/50 border-gray-800" : "bg-gray-50/50 border-gray-200"}`}>
+                <div className="flex items-center gap-2 mb-3">
+                  <User className="h-4 w-4" />
+                  <h4 className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Profile Information
+                  </h4>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={`text-xs font-medium block mb-1 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                      Name
+                    </label>
+                    <p className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                      {session?.user?.name || "Not set"}
+                    </p>
+                  </div>
+                  <div>
+                    <label className={`text-xs font-medium block mb-1 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                      Email
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <p className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                        {session?.user?.email?.slice(0, 20)}...
+                      </p>
                       {session?.user?.emailVerified ? (
-                        <CheckCircle className="h-4 w-4 text-green-500" />
+                        <CheckCircle className="h-3 w-3 text-green-500" />
                       ) : (
-                        <Button variant="outline" size="sm" className="h-7 text-xs px-3">
-                          Verify
-                        </Button>
+                        <AlertCircle className="h-3 w-3 text-orange-500" />
                       )}
                     </div>
                   </div>
                 </div>
               </div>
-            </TabsContent>
-          </Tabs>
-        </div>
+              <div className={`rounded-lg border p-4 ${isDark ? "bg-gray-900/50 border-gray-800" : "bg-gray-50/50 border-gray-200"}`}>
+                <div className="flex items-center gap-2 mb-3">
+                  <Settings className="h-4 w-4" />
+                  <h4 className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
+                    Account Settings
+                  </h4>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
+                        Email Verification
+                      </p>
+                      <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                        {session?.user?.emailVerified ? "Your email is verified" : "Please verify your email"}
+                      </p>
+                    </div>
+                    {session?.user?.emailVerified ? (
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Button variant="outline" size="sm" className="h-7 text-xs px-3">
+                        Verify
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Developer Tab */}
+          <TabsContent value="developer" className="flex-1 overflow-y-auto space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className={`font-medium text-sm ${isDark ? "text-white" : "text-gray-900"}`}>
+                  API Keys
+                </h4>
+                <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                  Manage your API keys for programmatic access
+                </p>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => setShowNewApiKeyForm(true)}
+                disabled={isLoading || isLoadingApiKeys}
+                className="h-8 text-xs px-3"
+              >
+                <Plus className="h-3 w-3 mr-1.5" />
+                New Key
+              </Button>
+            </div>
+
+            {/* Show created API key (one-time display) */}
+            {createdApiKey && (
+              <div className={`rounded-lg border p-4 ${isDark ? "bg-green-900/20 border-green-800/30" : "bg-green-50 border-green-200"}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                  <h5 className={`font-medium text-sm ${isDark ? "text-green-300" : "text-green-800"}`}>
+                    API Key Created
+                  </h5>
+                </div>
+                <p className={`text-xs mb-3 ${isDark ? "text-green-400" : "text-green-600"}`}>
+                  Copy this key now - it will not be shown again!
+                </p>
+                <div className="flex items-center gap-2">
+                  <code className={`flex-1 p-2 rounded text-xs font-mono ${isDark ? "bg-gray-800 text-gray-300" : "bg-gray-100 text-gray-700"}`}>
+                    {createdApiKey}
+                  </code>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      copyToClipboard(createdApiKey)
+                      setCreatedApiKey(null)
+                    }}
+                    className="h-8 w-8 p-0"
+                  >
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* New API Key Form */}
+            {showNewApiKeyForm && (
+              <div className={`rounded-lg border p-4 ${isDark ? "bg-gray-900/50 border-gray-800" : "bg-gray-50/50 border-gray-200"}`}>
+                <h5 className={`font-medium text-sm mb-3 ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Create New API Key
+                </h5>
+                <div className="space-y-3">
+                  <div>
+                    <Label className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                      Permissions
+                    </Label>
+                    <div className="space-y-2">
+                      {[
+                        { id: 'read', label: 'Read', description: 'View servers, tools, and analytics' },
+                        { id: 'write', label: 'Write', description: 'Create and modify resources' },
+                        { id: 'execute', label: 'Execute', description: 'Run tools and make payments' },
+                        { id: 'admin', label: 'Admin', description: 'Full administrative access' }
+                      ].map((permission) => (
+                        <div key={permission.id} className="flex items-start gap-3">
+                          <Checkbox
+                            id={permission.id}
+                            checked={newApiKeyPermissions.includes(permission.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setNewApiKeyPermissions([...newApiKeyPermissions, permission.id])
+                              } else {
+                                setNewApiKeyPermissions(newApiKeyPermissions.filter(p => p !== permission.id))
+                              }
+                            }}
+                          />
+                          <div>
+                            <Label htmlFor={permission.id} className={`text-sm font-medium cursor-pointer ${isDark ? "text-white" : "text-gray-900"}`}>
+                              {permission.label}
+                            </Label>
+                            <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                              {permission.description}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {newApiKeyPermissions.length === 0 && (
+                      <p className={`text-xs text-red-500 mt-1`}>
+                        At least one permission must be selected.
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={handleCreateApiKey}
+                      disabled={newApiKeyPermissions.length === 0 || isLoading}
+                      className="h-8 text-xs px-3"
+                    >
+                      Create
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setShowNewApiKeyForm(false)
+                        setNewApiKeyPermissions(['read', 'write', 'execute'])
+                      }}
+                      className="h-8 text-xs px-3"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* API Keys List */}
+            {isLoadingApiKeys ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin" />
+              </div>
+            ) : apiKeys.length > 0 ? (
+              <div className="space-y-3">
+                {apiKeys.map((key) => (
+                  <div key={key.id} className={`rounded-lg border p-4 ${isDark ? "bg-gray-900/50 border-gray-800" : "bg-white border-gray-200"}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Code className="h-4 w-4" />
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className={`text-sm font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
+                              {key.name}
+                            </p>
+                            {key.permissions && (
+                              <div className="flex gap-1">
+                                {key.permissions.map((permission: string) => (
+                                  <Badge key={permission} variant="secondary" className="text-xs px-1.5 py-0">
+                                    {permission}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 mt-1">
+                            <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                              Created: {new Date(key.createdAt).toLocaleDateString()}
+                            </p>
+                            {key.lastUsedAt && (
+                              <p className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                                Last used: {new Date(key.lastUsedAt).toLocaleDateString()}
+                              </p>
+                            )}
+                            {key.expiresAt && (
+                              <p className={`text-xs ${new Date(key.expiresAt) < new Date()
+                                ? 'text-red-500'
+                                : isDark ? "text-gray-400" : "text-gray-600"
+                                }`}>
+                                Expires: {new Date(key.expiresAt).toLocaleDateString()}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRevokeApiKey(key.id, key.name)}
+                        disabled={isLoading}
+                        className="h-7 w-7 p-0 text-red-500 hover:text-red-400"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Code className={`h-8 w-8 mx-auto mb-3 ${isDark ? "text-gray-500" : "text-gray-400"}`} />
+                <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                  No API keys yet
+                </p>
+                <p className={`text-xs mt-1 ${isDark ? "text-gray-500" : "text-gray-500"}`}>
+                  Create an API key to access MCPay programmatically
+                </p>
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
-    )
+    </div>
+  )
 
   const LoadingSpinner = ({ message }: { message?: string }) => (
     <div className="flex flex-col items-center justify-center h-full min-h-[400px] space-y-3">
-      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
+      <Loader2 className="h-6 w-6 animate-spin" />
       {message && (
         <p className={`text-sm font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
           {message}
@@ -972,10 +1247,10 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
 
   // Show loading during session loading or authentication flow
   if (sessionLoading || isAuthenticating) {
-    const loadingMessage = isAuthenticating 
-      ? "Signing you in..." 
-      : sessionLoading 
-        ? "Loading your account..." 
+    const loadingMessage = isAuthenticating
+      ? "Signing you in..."
+      : sessionLoading
+        ? "Loading your account..."
         : undefined
 
     if (isMobile) {
@@ -1021,4 +1296,4 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'profile' }: Accoun
       </DialogContent>
     </Dialog>
   )
-} 
+}

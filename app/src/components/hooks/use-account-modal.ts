@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useCallback } from 'react'
+import { AccountModalTab } from '@/types/ui'
 
-type AccountModalTab = 'profile' | 'wallets' | 'settings'
 
 interface UseAccountModalReturn {
   isOpen: boolean
@@ -13,9 +13,9 @@ interface UseAccountModalReturn {
 
 export function useAccountModal(): UseAccountModalReturn {
   const [isOpen, setIsOpen] = useState(false)
-  const [defaultTab, setDefaultTab] = useState<AccountModalTab>('profile')
+  const [defaultTab, setDefaultTab] = useState<AccountModalTab>('funds')
 
-  const openModal = useCallback((tab: AccountModalTab = 'profile') => {
+  const openModal = useCallback((tab: AccountModalTab = 'funds') => {
     setDefaultTab(tab)
     setIsOpen(true)
   }, [])

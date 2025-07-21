@@ -270,5 +270,36 @@ export const api = {
 
   getOnrampConfig: async () => {
     return apiCall('/onramp/config')
+  },
+
+  // API Keys management
+  getUserApiKeys: async (userId: string) => {
+    return apiCall(`/users/${userId}/api-keys`)
+  },
+
+  createApiKey: async (userId: string, data: {
+    name: string;
+    permissions: string[];
+    expiresInDays?: number;
+  }) => {
+    return apiCall(`/users/${userId}/api-keys`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+
+  revokeApiKey: async (userId: string, keyId: string) => {
+    return apiCall(`/users/${userId}/api-keys/${keyId}`, {
+      method: 'DELETE',
+    })
+  },
+
+  // User History
+  getUserToolUsageHistory: async (userId: string, limit = 50, offset = 0) => {
+    return apiCall(`/users/${userId}/tool-usage?limit=${limit}&offset=${offset}`)
+  },
+
+  getUserPaymentHistory: async (userId: string, limit = 50, offset = 0) => {
+    return apiCall(`/users/${userId}/payments?limit=${limit}&offset=${offset}`)
   }
 }

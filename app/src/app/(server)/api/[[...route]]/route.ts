@@ -1634,6 +1634,65 @@ app.delete('/users/:userId/api-keys/:keyId', authMiddleware, async (c) => {
     }
 });
 
+// User History endpoints
+app.get('/users/:userId/tool-usage', authMiddleware, async (c) => {
+    try {
+        const userId = c.req.param('userId');
+        const user = c.get('requireUser')();
+        
+        // Check if user is accessing their own history
+        if (user.id !== userId) {
+            return c.json({ error: 'Forbidden - Cannot access other user\'s history' }, 403);
+        }
+        
+        const limit = c.req.query('limit') ? parseInt(c.req.query('limit') as string) : 50;
+        const offset = c.req.query('offset') ? parseInt(c.req.query('offset') as string) : 0;
+        
+        if (limit > 100) {
+            return c.json({ error: 'Limit cannot exceed 100' }, 400);
+        }
+        
+        const toolUsage = await withTransaction(async (tx) => {
+            return await txOperations.getUserToolUsageHistory(userId, limit, offset)(tx);
+        });
+
+        return c.json(toolUsage);
+    } catch (error) {
+        console.error('Error fetching user tool usage history:', error);
+        return c.json({ error: (error as Error).message }, 400);
+    }
+});
+
+app.get('/users/:userId/payments', authMiddleware, async (c) => {
+    try {
+        const userId = c.req.param('userId');
+        const user = c.get('requireUser')();
+        
+        // Check if user is accessing their own payment history
+        if (user.id !== userId) {
+            return c.json({ error: 'Forbidden - Cannot access other user\'s payment history' }, 403);
+        }
+        
+        const limit = c.req.query('limit') ? parseInt(c.req.query('limit') as string) : 50;
+        const offset = c.req.query('offset') ? parseInt(c.req.query('offset') as string) : 0;
+        
+        if (limit > 100) {
+            return c.json({ error: 'Limit cannot exceed 100' }, 400);
+        }
+        
+        const payments = await withTransaction(async (tx) => {
+            return await txOperations.getUserPaymentHistory(userId, limit, offset)(tx);
+        });
+
+        // Serialize all BigInt values to strings before sending JSON response
+        const serializedResponse = serializeBigInts(payments);
+        return c.json(serializedResponse);
+    } catch (error) {
+        console.error('Error fetching user payment history:', error);
+        return c.json({ error: (error as Error).message }, 400);
+    }
+});
+
 // Auto-signing configuration endpoint
 app.get('/auto-signing/config', optionalAuthMiddleware, async (c) => {
     try {
@@ -1692,6 +1751,13 @@ app.all('*', (c) => {
             'POST /api/users/:userId/wallets/managed', // External managed wallets (Coinbase CDP, Privy, Magic, etc.)
             'GET /api/wallets/:walletAddress/user',
             'POST /api/users/:userId/migrate-legacy-wallet',
+            // API Key Management
+            'GET /api/users/:userId/api-keys', // Get user's API keys
+            'POST /api/users/:userId/api-keys', // Create new API key
+            'DELETE /api/users/:userId/api-keys/:keyId', // Revoke API key
+            // User History  
+            'GET /api/users/:userId/tool-usage', // Get user's tool usage history
+            'GET /api/users/:userId/payments', // Get user's payment history
             // CDP Managed Wallet endpoints
             'POST /api/users/:userId/wallets/cdp', // Create CDP managed wallet (with optional smart account)
             'GET /api/users/:userId/wallets/cdp', // Get user's CDP wallets

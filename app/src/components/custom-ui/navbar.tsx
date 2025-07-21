@@ -57,7 +57,7 @@ export default function Navbar() {
             {/* Account Button */}
             <Button
               variant="ghost"
-              onClick={() => openModal('profile')}
+              onClick={() => openModal('funds')}
               disabled={sessionLoading}
               className={`flex items-center gap-2 px-3 py-2 text-sm font-medium transition-colors duration-200 ${
                 isDark
