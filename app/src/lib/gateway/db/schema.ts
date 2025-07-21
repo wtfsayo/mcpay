@@ -521,30 +521,54 @@ export const dailyServerAnalyticsView = pgView("daily_server_analytics").as((qb)
   qb
     .select({
       serverId: sql<string>`mcp_servers.id`.as('server_id'),
-      date: sql<string>`DATE(COALESCE(tool_usage.timestamp, payments.created_at))`.as('date'),
+      date: sql<string>`server_dates.activity_date`.as('date'),
       totalRequests: sql<number>`COUNT(DISTINCT tool_usage.id)`.as('total_requests'),
       uniqueUsers: sql<number>`COUNT(DISTINCT COALESCE(tool_usage.user_id, payments.user_id))`.as('unique_users'),
       errorCount: sql<number>`COUNT(DISTINCT CASE WHEN tool_usage.response_status NOT IN ('success', '200') THEN tool_usage.id END)`.as('error_count'),
       avgResponseTime: sql<number>`AVG(tool_usage.execution_time_ms)`.as('avg_response_time'),
-      // Multi-currency revenue tracking using JSON arrays (no nested aggregation)
+      // Multi-currency revenue tracking - properly aggregated by currency/network
       revenueDetails: sql<RevenueDetails>`
-        JSON_AGG(
-          JSONB_BUILD_OBJECT(
-            'currency', payments.currency,
-            'network', payments.network,
-            'decimals', payments.token_decimals,
-            'amount_raw', payments.amount_raw
-          )
-        ) FILTER (WHERE payments.status = 'completed' AND payments.amount_raw IS NOT NULL)
+        CASE 
+          WHEN COUNT(DISTINCT CASE WHEN payments.status = 'completed' AND payments.amount_raw IS NOT NULL THEN payments.id END) > 0 THEN
+            JSON_AGG(
+              DISTINCT JSONB_BUILD_OBJECT(
+                'currency', payments.currency,
+                'network', payments.network,
+                'decimals', payments.token_decimals,
+                'amount_raw', (
+                  SELECT SUM(p2.amount_raw::numeric)::text
+                  FROM payments p2
+                  JOIN mcp_tools t2 ON t2.id = p2.tool_id
+                  WHERE t2.server_id = mcp_servers.id
+                    AND DATE(p2.created_at) = server_dates.activity_date
+                    AND p2.status = 'completed'
+                    AND p2.currency = payments.currency
+                    AND p2.network = payments.network
+                    AND p2.token_decimals = payments.token_decimals
+                )
+              )
+            ) FILTER (WHERE payments.status = 'completed' AND payments.amount_raw IS NOT NULL)
+          ELSE NULL
+        END
       `.as('revenue_details'),
       totalPayments: sql<number>`COUNT(DISTINCT CASE WHEN payments.status = 'completed' THEN payments.id END)`.as('total_payments'),
     })
-    .from(mcpServers)
+    .from(sql`(
+      SELECT DISTINCT 
+        mcp_servers.id as server_id,
+        dates.activity_date
+      FROM mcp_servers
+      CROSS JOIN (
+        SELECT DISTINCT DATE(timestamp) as activity_date FROM tool_usage
+        UNION
+        SELECT DISTINCT DATE(created_at) as activity_date FROM payments
+      ) dates
+    ) server_dates`)
+    .leftJoin(mcpServers, sql`mcp_servers.id = server_dates.server_id`)
     .leftJoin(mcpTools, sql`mcp_tools.server_id = mcp_servers.id`)
-    .leftJoin(toolUsage, sql`tool_usage.tool_id = mcp_tools.id`)
-    .leftJoin(payments, sql`payments.tool_id = mcp_tools.id`)
-    .where(sql`COALESCE(tool_usage.timestamp, payments.created_at) IS NOT NULL`)
-    .groupBy(sql`mcp_servers.id, DATE(COALESCE(tool_usage.timestamp, payments.created_at))`)
+    .leftJoin(toolUsage, sql`tool_usage.tool_id = mcp_tools.id AND DATE(tool_usage.timestamp) = server_dates.activity_date`)
+    .leftJoin(payments, sql`payments.tool_id = mcp_tools.id AND DATE(payments.created_at) = server_dates.activity_date`)
+    .groupBy(sql`mcp_servers.id, server_dates.activity_date`)
 );
 
 /**
@@ -570,16 +594,29 @@ export const serverSummaryAnalyticsView = pgView("server_summary_analytics").as(
           ELSE 0
         END
       `.as('success_rate'),
-      // Multi-currency revenue tracking using JSON arrays
+      // Multi-currency revenue tracking - properly aggregated by currency/network
       revenueDetails: sql<RevenueDetails>`
-        JSON_AGG(
-          JSONB_BUILD_OBJECT(
-            'currency', payments.currency,
-            'network', payments.network,
-            'decimals', payments.token_decimals,
-            'amount_raw', payments.amount_raw
-          )
-        ) FILTER (WHERE payments.status = 'completed' AND payments.amount_raw IS NOT NULL)
+        CASE 
+          WHEN COUNT(DISTINCT CASE WHEN payments.status = 'completed' AND payments.amount_raw IS NOT NULL THEN payments.id END) > 0 THEN
+            JSON_AGG(
+              DISTINCT JSONB_BUILD_OBJECT(
+                'currency', payments.currency,
+                'network', payments.network,
+                'decimals', payments.token_decimals,
+                'amount_raw', (
+                  SELECT SUM(p2.amount_raw::numeric)::text
+                  FROM payments p2
+                  JOIN mcp_tools t2 ON t2.id = p2.tool_id
+                  WHERE t2.server_id = mcp_servers.id
+                    AND p2.status = 'completed'
+                    AND p2.currency = payments.currency
+                    AND p2.network = payments.network
+                    AND p2.token_decimals = payments.token_decimals
+                )
+              )
+            ) FILTER (WHERE payments.status = 'completed' AND payments.amount_raw IS NOT NULL)
+          ELSE NULL
+        END
       `.as('revenue_details'),
       // Recent activity indicators (last 30 days)
       recentRequests: sql<number>`
@@ -624,16 +661,27 @@ export const globalAnalyticsView = pgView("global_analytics").as((qb) =>
       uniqueUsers: sql<number>`COUNT(DISTINCT COALESCE(tool_usage.user_id, payments.user_id))`.as('unique_users'),
       totalPayments: sql<number>`COUNT(DISTINCT CASE WHEN payments.status = 'completed' THEN payments.id END)`.as('total_payments'),
       avgResponseTime: sql<number>`AVG(tool_usage.execution_time_ms)`.as('avg_response_time'),
-      // Multi-currency revenue tracking using JSON arrays
+      // Multi-currency revenue tracking - properly aggregated by currency/network
       revenueDetails: sql<RevenueDetails>`
-        JSON_AGG(
-          JSONB_BUILD_OBJECT(
-            'currency', payments.currency,
-            'network', payments.network,
-            'decimals', payments.token_decimals,
-            'amount_raw', payments.amount_raw
-          )
-        ) FILTER (WHERE payments.status = 'completed' AND payments.amount_raw IS NOT NULL)
+        CASE 
+          WHEN COUNT(DISTINCT CASE WHEN payments.status = 'completed' AND payments.amount_raw IS NOT NULL THEN payments.id END) > 0 THEN
+            JSON_AGG(
+              DISTINCT JSONB_BUILD_OBJECT(
+                'currency', payments.currency,
+                'network', payments.network,
+                'decimals', payments.token_decimals,
+                'amount_raw', (
+                  SELECT SUM(p2.amount_raw::numeric)::text
+                  FROM payments p2
+                  WHERE p2.status = 'completed'
+                    AND p2.currency = payments.currency
+                    AND p2.network = payments.network
+                    AND p2.token_decimals = payments.token_decimals
+                )
+              )
+            ) FILTER (WHERE payments.status = 'completed' AND payments.amount_raw IS NOT NULL)
+          ELSE NULL
+        END
       `.as('revenue_details'),
       // Proof verification stats
       totalProofs: sql<number>`COUNT(DISTINCT proofs.id)`.as('total_proofs'),
@@ -662,16 +710,28 @@ export const toolAnalyticsView = pgView("tool_analytics").as((qb) =>
       uniqueUsers: sql<number>`COUNT(DISTINCT tool_usage.user_id)`.as('unique_users'),
       avgResponseTime: sql<number>`AVG(tool_usage.execution_time_ms)`.as('avg_response_time'),
       totalPayments: sql<number>`COUNT(DISTINCT CASE WHEN payments.status = 'completed' THEN payments.id END)`.as('total_payments'),
-      // Multi-currency revenue tracking using JSON arrays
+      // Multi-currency revenue tracking - properly aggregated by currency/network
       revenueDetails: sql<RevenueDetails>`
-        JSON_AGG(
-          JSONB_BUILD_OBJECT(
-            'currency', payments.currency,
-            'network', payments.network,
-            'decimals', payments.token_decimals,
-            'amount_raw', payments.amount_raw
-          )
-        ) FILTER (WHERE payments.status = 'completed' AND payments.amount_raw IS NOT NULL)
+        CASE 
+          WHEN COUNT(DISTINCT CASE WHEN payments.status = 'completed' AND payments.amount_raw IS NOT NULL THEN payments.id END) > 0 THEN
+            JSON_AGG(
+              DISTINCT JSONB_BUILD_OBJECT(
+                'currency', payments.currency,
+                'network', payments.network,
+                'decimals', payments.token_decimals,
+                'amount_raw', (
+                  SELECT SUM(p2.amount_raw::numeric)::text
+                  FROM payments p2
+                  WHERE p2.tool_id = mcp_tools.id
+                    AND p2.status = 'completed'
+                    AND p2.currency = payments.currency
+                    AND p2.network = payments.network
+                    AND p2.token_decimals = payments.token_decimals
+                )
+              )
+            ) FILTER (WHERE payments.status = 'completed' AND payments.amount_raw IS NOT NULL)
+          ELSE NULL
+        END
       `.as('revenue_details'),
       lastUsed: sql<string>`MAX(tool_usage.timestamp)`.as('last_used'),
       // Recent activity (last 30 days)
@@ -695,26 +755,42 @@ export const toolAnalyticsView = pgView("tool_analytics").as((qb) =>
 export const dailyActivityView = pgView("daily_activity").as((qb) =>
   qb
     .select({
-      date: sql<string>`DATE(COALESCE(tool_usage.timestamp, payments.created_at))`.as('date'),
+      date: sql<string>`activity_date`.as('date'),
       totalRequests: sql<number>`COUNT(DISTINCT tool_usage.id)`.as('total_requests'),
       uniqueUsers: sql<number>`COUNT(DISTINCT COALESCE(tool_usage.user_id, payments.user_id))`.as('unique_users'),
       totalPayments: sql<number>`COUNT(DISTINCT CASE WHEN payments.status = 'completed' THEN payments.id END)`.as('total_payments'),
       avgResponseTime: sql<number>`AVG(tool_usage.execution_time_ms)`.as('avg_response_time'),
-      // Multi-currency daily revenue tracking using JSON arrays
+      // Multi-currency daily revenue tracking - properly aggregated by currency/network
       revenueDetails: sql<RevenueDetails>`
-        JSON_AGG(
-          JSONB_BUILD_OBJECT(
-            'currency', payments.currency,
-            'network', payments.network,
-            'decimals', payments.token_decimals,
-            'amount_raw', payments.amount_raw
-          )
-        ) FILTER (WHERE payments.status = 'completed' AND payments.amount_raw IS NOT NULL)
+        CASE 
+          WHEN COUNT(DISTINCT CASE WHEN payments.status = 'completed' AND payments.amount_raw IS NOT NULL THEN payments.id END) > 0 THEN
+            JSON_AGG(
+              DISTINCT JSONB_BUILD_OBJECT(
+                'currency', payments.currency,
+                'network', payments.network,
+                'decimals', payments.token_decimals,
+                'amount_raw', (
+                  SELECT SUM(p2.amount_raw::numeric)::text
+                  FROM payments p2
+                  WHERE DATE(p2.created_at) = dates.activity_date
+                    AND p2.status = 'completed'
+                    AND p2.currency = payments.currency
+                    AND p2.network = payments.network
+                    AND p2.token_decimals = payments.token_decimals
+                )
+              )
+            ) FILTER (WHERE payments.status = 'completed' AND payments.amount_raw IS NOT NULL)
+          ELSE NULL
+        END
       `.as('revenue_details'),
     })
-    .from(toolUsage)
-    .fullJoin(payments, sql`DATE(tool_usage.timestamp) = DATE(payments.created_at)`)
-    .where(sql`COALESCE(tool_usage.timestamp, payments.created_at) IS NOT NULL`)
-    .groupBy(sql`DATE(COALESCE(tool_usage.timestamp, payments.created_at))`)
-    .orderBy(sql`DATE(COALESCE(tool_usage.timestamp, payments.created_at)) DESC`)
+    .from(sql`(
+      SELECT DISTINCT DATE(timestamp) as activity_date FROM tool_usage
+      UNION
+      SELECT DISTINCT DATE(created_at) as activity_date FROM payments
+    ) dates`)
+    .leftJoin(toolUsage, sql`DATE(tool_usage.timestamp) = dates.activity_date`)
+    .leftJoin(payments, sql`DATE(payments.created_at) = dates.activity_date`)
+    .groupBy(sql`activity_date`)
+    .orderBy(sql`activity_date DESC`)
 );
