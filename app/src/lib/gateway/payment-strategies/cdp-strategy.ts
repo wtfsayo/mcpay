@@ -11,16 +11,16 @@
  * - CDP SDK must be properly configured
  */
 
+import { getCDPNetworks, getNetworkConfig, type UnifiedNetwork } from "@/lib/commons/networks";
+import { getCDPAccount } from "@/lib/gateway/3rd-parties/cdp";
+import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
+import type { PaymentSigningContext, PaymentSigningResult, PaymentSigningStrategy } from "@/lib/gateway/payment-strategies/index";
+import { x402Version } from "@/lib/gateway/payments";
+import { type CDPNetwork, type CDPWalletMetadata, type Wallet } from "@/types";
+import { createPaymentHeader, type ExtendedPaymentRequirements } from "@/types/x402";
 import { createWalletClient, http } from "viem";
 import { toAccount } from "viem/accounts";
 import { baseSepolia, seiTestnet } from "viem/chains";
-import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
-import { getCDPAccount } from "@/lib/gateway/3rd-parties/cdp";
-import { x402Version } from "@/lib/gateway/payments";
-import { createPaymentHeader, type ExtendedPaymentRequirements } from "@/types/x402";
-import type { PaymentSigningContext, PaymentSigningResult, PaymentSigningStrategy } from "@/lib/gateway/payment-strategies/index";
-import { type CDPNetwork, type Wallet, type CDPWalletMetadata } from "@/types";
-import { getCDPNetworks, getNetworkConfig, type UnifiedNetwork } from "@/lib/commons/networks";
 
 export class CDPSigningStrategy implements PaymentSigningStrategy {
     name = "CDP";

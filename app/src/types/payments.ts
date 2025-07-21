@@ -1,4 +1,3 @@
-import { mcpTools } from "@/lib/gateway/db/schema";
 
 // Define payment information structure based on database schema
 export interface PaymentInfo {
