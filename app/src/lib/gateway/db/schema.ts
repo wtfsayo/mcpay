@@ -216,7 +216,7 @@ export const toolPricing = pgTable('tool_pricing', {
 
 export const toolUsage = pgTable('tool_usage', {
   id: uuid('id').primaryKey().defaultRandom(),
-  toolId: uuid('tool_id').references(() => mcpTools.id).notNull(),
+  toolId: uuid('tool_id').references(() => mcpTools.id, { onDelete: 'cascade' }).notNull(),
   pricingId: uuid('pricing_id').references(() => toolPricing.id, { onDelete: 'set null' }), // Direct reference to pricing used
   timestamp: timestamp('timestamp').defaultNow().notNull(),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
@@ -238,7 +238,7 @@ export const toolUsage = pgTable('tool_usage', {
 
 export const payments = pgTable('payments', {
   id: uuid('id').primaryKey().defaultRandom(),
-  toolId: uuid('tool_id').references(() => mcpTools.id).notNull(),
+  toolId: uuid('tool_id').references(() => mcpTools.id, { onDelete: 'cascade' }).notNull(),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
   amountRaw: decimal('amount_raw', { precision: 38, scale: 0 }).notNull(), // Base units as NUMERIC(38,0)
   tokenDecimals: integer('token_decimals').notNull(), // Token decimals for self-sufficient records

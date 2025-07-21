@@ -8,141 +8,139 @@ import { Separator } from "@/components/ui/separator"
 import { CheckCircle, Server, Calendar, User, Globe, ExternalLink, ChevronDown, ChevronRight, Shield, Database, Hash, AlertCircle, Home, Plus, Eye, Wrench, DollarSign, Zap } from "lucide-react"
 import { useTheme } from "@/components/providers/theme-context"
 import { openBlockscout } from "@/lib/client/blockscout"
+import { api } from "@/lib/client/utils"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
+import { ServerRegistrationData } from "@/types/mcp"
+import { 
+  formatTokenAmount,
+  fromBaseUnits,
+  getTokenInfo,
+} from "@/lib/commons"
+import { type Network } from "@/types/blockchain"
+import Image from "next/image"
 
-// Type definitions for registration data
-interface PaymentInfo {
-  maxAmountRequired: number
-  asset: string
+
+
+// Enhanced token display with verification badge
+const TokenDisplay = ({
+  currency,
+  network,
+  amount
+}: {
+  currency: string
   network: string
-  resource: string
-  description: string
+  amount?: string | number
+}) => {
+  const tokenInfo = getTokenInfo(currency, network as Network)
+
+  return (
+    <div className="flex items-center gap-2">
+      {/* Token Logo */}
+      {tokenInfo?.logoUri && (
+        <div className="w-5 h-5 rounded-full overflow-hidden">
+          <Image
+            src={tokenInfo.logoUri}
+            alt={tokenInfo.symbol}
+            width={20}
+            height={20}
+            className="w-full h-full object-cover"
+          />
+        </div>
+      )}
+
+      {/* Amount and Symbol */}
+      <div className="flex items-center gap-1">
+        {amount && (
+          <span className="font-medium">
+            {formatCurrency(amount, currency, network)}
+          </span>
+        )}
+        {!amount && tokenInfo && (
+          <span className="font-medium">{tokenInfo.symbol}</span>
+        )}
+        {!amount && !tokenInfo && (
+          <span className="font-mono text-xs">
+            {currency && currency.startsWith('0x') ? `${currency.slice(0, 6)}...` : currency || 'Unknown'}
+          </span>
+        )}
+      </div>
+    </div>
+  )
 }
 
-interface Tool {
-  name: string
-  description: string
-  payment?: PaymentInfo
-}
+// Enhanced formatCurrency function using token registry
+const formatCurrency = (amount: string | number, currency: string, network?: string) => {
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount
 
-interface RegistrationMetadata {
-  timestamp: string
-  toolsCount: number
-  registeredFromUI: boolean
-  monetizedToolsCount: number
-}
-
-interface RegistrationData {
-  id: string
-  serverId: string
-  mcpOrigin: string
-  creatorId: string
-  receiverAddress: string
-  requireAuth: boolean
-  authHeaders: string | null
-  createdAt: string
-  updatedAt: string
-  status: string
-  name: string
-  description: string
-  tools: Tool[]
-  metadata: RegistrationMetadata
-}
-
-// Mock data - fallback if no query params are provided
-const mockRegistrationResult: RegistrationData = {
-  "id": "4233460e-8520-4821-809d-027ba19fc809",
-  "serverId": "cf9fc475-321f-455a-9813-96e88851497f",
-  "mcpOrigin": "https://mcp.bitte.ai/mcp?agentId=near-cow-agent.vercel.app",
-  "creatorId": "bdbc30be-a671-4b7e-86c4-c9402ed7547d",
-  "receiverAddress": "0x58E165Ae2dcEAc87481D56009Af5FBf5B9887aB8",
-  "requireAuth": false,
-  "authHeaders": null,
-  "createdAt": "2025-06-11T16:52:21.606Z",
-  "updatedAt": "2025-06-11T16:52:21.606Z",
-  "status": "active",
-  "name": "MCP ToolBox",
-  "description": "MCP ToolBox is a versatile MCP server equipped with essential tools for seamless token management. Utilizing features like 'check-health' to ensure system reliability, 'get-balances' to retrieve wallet token balances, 'swap' to calculate fees and prices for orders, and 'erc20-transfer' to facilitate encoded ERC20 transactions as MetaTransactions, this server is designed to streamline your cryptocurrency operations efficiently.",
-  "tools": [
-    {
-      "name": "check-health",
-      "description": "Checks the health status of the system and returns current operational metrics",
-      "payment": {
-        "maxAmountRequired": 0.05,
-        "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-        "network": "base-sepolia",
-        "resource": "tool://check-health",
-        "description": "Payment for check-health tool usage"
-      }
-    },
-    {
-      "name": "get-balances",
-      "description": "Retrieves wallet token balances for specified addresses and networks",
-      "payment": {
-        "maxAmountRequired": 0.10,
-        "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-        "network": "base-sepolia",
-        "resource": "tool://get-balances",
-        "description": "Payment for get-balances tool usage"
-      }
-    },
-    {
-      "name": "swap",
-      "description": "Calculates fees and prices for token swap orders across different DEX protocols",
-      "payment": {
-        "maxAmountRequired": 0.25,
-        "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-        "network": "base-sepolia",
-        "resource": "tool://swap",
-        "description": "Payment for swap tool usage"
-      }
-    },
-    {
-      "name": "erc20-transfer",
-      "description": "Facilitates encoded ERC20 transactions as MetaTransactions for gasless transfers",
-      "payment": {
-        "maxAmountRequired": 0.15,
-        "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-        "network": "base-sepolia",
-        "resource": "tool://erc20-transfer",
-        "description": "Payment for erc20-transfer tool usage"
-      }
-    }
-  ],
-  "metadata": {
-    "timestamp": "2025-06-11T16:52:16.726Z",
-    "toolsCount": 4,
-    "registeredFromUI": true,
-    "monetizedToolsCount": 4
+  // Handle undefined or null currency
+  if (!currency) {
+    return `${num.toFixed(6)} Unknown`
   }
+
+  // If we have network info, try to get token info from registry
+  if (network) {
+    const tokenInfo = getTokenInfo(currency, network as Network)
+    if (tokenInfo) {
+      // Use formatTokenAmount for precise formatting
+      // Since we already have human-readable amounts, pass them directly
+      return formatTokenAmount(num, currency, network as Network, {
+        showSymbol: true,
+        precision: tokenInfo.isStablecoin ? 2 : 4,
+        compact: num >= 1000
+      });
+    }
+  }
+
+  // Fallback: check if it's a token address and show abbreviated
+  if (currency.startsWith('0x') && currency.length === 42) {
+    return `${num.toFixed(6)} ${currency.slice(0, 6)}...${currency.slice(-4)}`
+  }
+
+  // Simple currency display
+  return `${num.toFixed(6)} ${currency}`
 }
 
 function RegisterSuccessContent() {
   const { isDark } = useTheme()
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false)
-  const [registrationData, setRegistrationData] = useState<RegistrationData | null>(null)
+  const [registrationData, setRegistrationData] = useState<ServerRegistrationData | null>(null)
   const [dataError, setDataError] = useState<string>("")
   const searchParams = useSearchParams()
 
-  // Load registration data from query params or fallback to mock
+    // Load registration data from server ID
   useEffect(() => {
-    try {
-      const dataParam = searchParams.get('data')
-      if (dataParam) {
-        const decodedData = decodeURIComponent(dataParam)
-        const parsedData = JSON.parse(decodedData) as RegistrationData
-        setRegistrationData(parsedData)
-      } else {
-        // No data parameter, use mock data and show warning
-        setRegistrationData(mockRegistrationResult)
-        setDataError("No registration data found in URL. Showing example data.")
+    const fetchRegistrationData = async () => {
+      try {
+        const serverIdParam = searchParams.get('serverId')
+        
+        if (serverIdParam) {
+          // Fetch data from API using server ID
+          const data = await api.getServerRegistration(serverIdParam)
+          setRegistrationData(data)
+        } else {
+          // No server ID provided
+          setDataError("No server ID found in URL. Please register a server first.")
+        }
+      } catch (error) {
+        console.error("Failed to load registration data:", error)
+        
+        // Handle different error types
+        if (error instanceof Error) {
+          if (error.message.includes('403') || error.message.includes('Forbidden')) {
+            setDataError("You can only view registration details for servers you created. Please sign in with the correct account.")
+          } else if (error.message.includes('404')) {
+            setDataError("Server registration not found. The server may have been deleted or the ID is incorrect.")
+          } else {
+            setDataError("Failed to load registration data. Please try again or contact support.")
+          }
+        } else {
+          setDataError("Failed to load registration data. Please try again or contact support.")
+        }
       }
-    } catch (error) {
-      console.error("Failed to parse registration data:", error)
-      setRegistrationData(mockRegistrationResult)
-      setDataError("Failed to load registration data. Showing example data.")
     }
+
+    fetchRegistrationData()
   }, [searchParams])
 
   // Format date for display
@@ -166,14 +164,53 @@ function RegisterSuccessContent() {
     }
   }
 
-  // Don't render anything until we have data
+  // Don't render anything until we have data or show error
   if (!registrationData) {
     return (
       <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950' : 'bg-gradient-to-br from-gray-50 via-white to-gray-50'}`}>
-        <div className={`p-8 rounded-xl border ${isDark ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'} backdrop-blur-sm`}>
+        <div className={`p-8 rounded-xl border ${isDark ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'} backdrop-blur-sm max-w-md w-full`}>
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className={`${isDark ? "text-gray-300" : "text-gray-600"}`}>Loading registration data...</p>
+            {dataError ? (
+              <>
+                <div className={`w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center ${isDark ? 'bg-red-500/20' : 'bg-red-50'}`}>
+                  <AlertCircle className={`h-8 w-8 ${isDark ? 'text-red-400' : 'text-red-600'}`} />
+                </div>
+                <h3 className={`text-lg font-semibold mb-2 ${isDark ? "text-white" : "text-gray-900"}`}>
+                  Registration Not Found
+                </h3>
+                                 <p className={`${isDark ? "text-gray-300" : "text-gray-600"} mb-6`}>
+                   {dataError}
+                 </p>
+                 <div className="space-y-3">
+                   {dataError.includes("sign in") ? (
+                     <>
+                       <Link href="/register">
+                         <Button className="w-full">
+                           <User className="h-4 w-4 mr-2" />
+                           Sign In to Account
+                         </Button>
+                       </Link>
+                       <Link href="/register">
+                         <Button variant="outline" className="w-full">
+                           Register New Server
+                         </Button>
+                       </Link>
+                     </>
+                   ) : (
+                     <Link href="/register">
+                       <Button className="w-full">
+                         Register New Server
+                       </Button>
+                     </Link>
+                   )}
+                 </div>
+              </>
+            ) : (
+              <>
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p className={`${isDark ? "text-gray-300" : "text-gray-600"}`}>Loading registration data...</p>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -185,18 +222,6 @@ function RegisterSuccessContent() {
       {/* Header Section */}
       <div className={`border-b ${isDark ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white/50'} backdrop-blur-sm`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Data Error Warning */}
-          {dataError && (
-            <div className={`mb-6 p-4 rounded-xl border ${isDark ? "bg-amber-900/20 border-amber-800" : "bg-amber-50 border-amber-200"}`}>
-              <div className="flex items-center gap-3">
-                <AlertCircle className={`h-5 w-5 ${isDark ? "text-amber-400" : "text-amber-600"}`} />
-                <p className={`text-sm ${isDark ? "text-amber-200" : "text-amber-800"}`}>
-                  {dataError}
-                </p>
-              </div>
-            </div>
-          )}
-
           {/* Success Header */}
           <div className="text-center space-y-6">
             <div className={`inline-flex items-center justify-center w-20 h-20 rounded-full ${isDark ? "bg-green-500/20" : "bg-green-50"} mb-2`}>
@@ -216,7 +241,7 @@ function RegisterSuccessContent() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8 max-w-lg mx-auto">
               <div className={`p-4 rounded-xl border ${isDark ? "bg-gray-800/50 border-gray-700" : "bg-white border-gray-200"} backdrop-blur-sm`}>
                 <div className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
-                  {registrationData.metadata.toolsCount}
+                  {(registrationData.metadata as any)?.toolsCount || 0}
                 </div>
                 <div className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                   Total Tools
@@ -224,7 +249,7 @@ function RegisterSuccessContent() {
               </div>
               <div className={`p-4 rounded-xl border ${isDark ? "bg-gray-800/50 border-gray-700" : "bg-white border-gray-200"} backdrop-blur-sm`}>
                 <div className="text-2xl font-bold text-green-600">
-                  {registrationData.metadata.monetizedToolsCount}
+                  {(registrationData.metadata as any)?.monetizedToolsCount || 0}
                 </div>
                 <div className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                   Monetized
@@ -376,7 +401,7 @@ function RegisterSuccessContent() {
           </div>
 
           {/* Tools Information */}
-          {registrationData.tools && registrationData.tools.length > 0 && (
+          {registrationData.tools && registrationData.tools.length > 0 ? (
             <div className={`p-6 rounded-xl border ${isDark ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                 <div className="flex items-center gap-3">
@@ -391,13 +416,13 @@ function RegisterSuccessContent() {
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary" className="flex items-center gap-1">
                     <DollarSign className="h-3 w-3" />
-                    {registrationData.metadata.monetizedToolsCount} monetized
+                    {(registrationData.metadata as any)?.monetizedToolsCount || 0} monetized
                   </Badge>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {registrationData.tools.map((tool: Tool) => (
+                {registrationData.tools.map((tool) => (
                   <div
                     key={tool.name}
                     className={`p-5 rounded-lg border ${isDark ? "bg-gray-800 border-gray-700" : "bg-gray-50 border-gray-200"} transition-all hover:shadow-md`}
@@ -420,18 +445,62 @@ function RegisterSuccessContent() {
                       <Separator className={isDark ? "bg-gray-700" : "bg-gray-200"} />
                       
                       {/* Payment Information */}
-                      {tool.payment && (
+                      {('payment' in tool) && tool.payment && (
                         <div className="space-y-3">
                           <div className="flex items-center justify-between">
                             <span className={`text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>
                               Price per use
                             </span>
-                            <div className="flex items-center gap-1">
-                              <DollarSign className={`h-4 w-4 ${isDark ? "text-green-400" : "text-green-600"}`} />
-                              <span className={`font-semibold ${isDark ? "text-green-400" : "text-green-600"}`}>
-                                {tool.payment.maxAmountRequired.toFixed(2)}
-                              </span>
-                            </div>
+                            <TokenDisplay
+                              currency={(tool.payment as any)?.asset || '0x0000000000000000000000000000000000000000'}
+                              network={(tool.payment as any)?.network || 'base-sepolia'}
+                              amount={(() => {
+                                const rawAmount = (tool.payment as any)?.maxAmountRequired;
+                                const network = (tool.payment as any)?.network || 'base-sepolia';
+                                const currency = (tool.payment as any)?.asset || '0x0000000000000000000000000000000000000000';
+                                
+                                // Debug logging
+                                console.log('Payment data debug:', {
+                                  rawAmount,
+                                  currency,
+                                  network,
+                                  fullPayment: tool.payment
+                                });
+                                
+                                // Get token info to determine decimals
+                                const tokenInfo = getTokenInfo(currency, network as Network);
+                                const decimals = tokenInfo?.decimals || 6; // Default to 6 for USDC
+                                
+                                console.log('Token info debug:', {
+                                  tokenInfo,
+                                  decimals,
+                                  currency,
+                                  network
+                                });
+                                
+                                // Convert from base units to human-readable amount
+                                if (rawAmount !== null && rawAmount !== undefined) {
+                                  try {
+                                    // Convert to string if it's a number
+                                    const rawAmountStr = typeof rawAmount === 'number' ? rawAmount.toString() : rawAmount;
+                                    const converted = fromBaseUnits(rawAmountStr, decimals);
+                                    console.log('Conversion debug:', {
+                                      rawAmount,
+                                      rawAmountStr,
+                                      decimals,
+                                      converted
+                                    });
+                                    return converted;
+                                  } catch (error) {
+                                    console.error('Error converting amount:', error);
+                                    return '0';
+                                  }
+                                }
+                                
+                                console.log('No raw amount found, returning 0');
+                                return '0';
+                              })()}
+                            />
                           </div>
                           
                           <div className="space-y-2">
@@ -440,16 +509,8 @@ function RegisterSuccessContent() {
                                 Network
                               </span>
                               <Badge variant="outline" className="text-xs py-0 px-2">
-                                {tool.payment.network}
+                                {(tool.payment as any)?.network || 'base-sepolia'}
                               </Badge>
-                            </div>
-                            <div className="flex items-center justify-between text-xs">
-                              <span className={`${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                                Asset
-                              </span>
-                              <span className={`font-mono ${isDark ? "text-gray-300" : "text-gray-600"}`}>
-                                {tool.payment.asset.slice(0, 6)}...{tool.payment.asset.slice(-4)}
-                              </span>
                             </div>
                           </div>
                         </div>
@@ -476,6 +537,18 @@ function RegisterSuccessContent() {
                   </div>
                 </div>
               </div>
+            </div>
+          ) : (
+            <div className={`p-6 rounded-xl border ${isDark ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
+              <div className="flex items-center gap-3 mb-4">
+                <Zap className={`h-5 w-5 ${isDark ? 'text-gray-300' : 'text-gray-700'}`} />
+                <h3 className={`font-semibold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  No Tools Detected
+                </h3>
+              </div>
+              <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                This server doesn't have any tools registered yet. Tools will appear here once they are added to your MCP server.
+              </p>
             </div>
           )}
 
@@ -570,7 +643,7 @@ function RegisterSuccessContent() {
                         Metadata Timestamp
                       </label>
                       <div className={`p-3 rounded-lg ${isDark ? "bg-gray-800" : "bg-gray-50"} text-sm ${isDark ? "text-gray-300" : "text-gray-600"}`}>
-                        {formatDate(registrationData.metadata.timestamp)}
+                        {formatDate((registrationData.metadata as any)?.timestamp || registrationData.createdAt)}
                       </div>
                     </div>
 

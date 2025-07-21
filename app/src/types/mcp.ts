@@ -14,6 +14,9 @@ export type ToolFromMcpServerWithStats = NonNullable<McpServerWithStats>['tools'
 
 export type ServerSummaryAnalytics = Awaited<ReturnType<ReturnType<typeof txOperations.getServerSummaryAnalytics>>>;
 
+export type ServerRegistrationData = Awaited<ReturnType<ReturnType<typeof txOperations.getServerRegistrationData>>>;
+export type ServerCreateData = Awaited<ReturnType<ReturnType<typeof txOperations.createServer>>>;
+
 export type MCPClient = Awaited<ReturnType<typeof experimental_createMCPClient>>
 export type MCPToolsCollection = Record<string, unknown>
 

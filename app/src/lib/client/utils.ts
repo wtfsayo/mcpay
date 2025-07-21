@@ -1,5 +1,5 @@
 import { type ApiError } from "@/types/api"
-import { DailyServerAnalytics, McpServerWithStats, ServerSummaryAnalytics } from "@/types/mcp"
+import { DailyServerAnalytics, McpServerWithStats, ServerCreateData, ServerRegistrationData, ServerSummaryAnalytics } from "@/types/mcp"
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 
@@ -140,7 +140,9 @@ export async function apiCall<T = unknown>(
         errorMessage = `${response.status}: ${response.statusText}`
       }
 
-      const error = new Error(errorMessage) as ApiError
+      // Include status code in error message for frontend handling
+      const statusAwareMessage = `${response.status}: ${errorMessage}`
+      const error = new Error(statusAwareMessage) as ApiError
       error.status = response.status
       error.details = errorDetails
       throw error
@@ -182,7 +184,7 @@ export const api = {
       }
     }>
     metadata?: Record<string, unknown>
-  }) => {
+  }): Promise<ServerCreateData> => {
     return apiCall('/servers', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -202,6 +204,11 @@ export const api = {
   // Get server by ID
   getServer: async (serverId: string): Promise<McpServerWithStats & { dailyAnalytics: DailyServerAnalytics, summaryAnalytics: ServerSummaryAnalytics }> => {
     return apiCall(`/servers/${serverId}`)
+  },
+
+  // Get server registration data
+  getServerRegistration: async (serverId: string): Promise<ServerRegistrationData> => {
+    return apiCall(`/servers/${serverId}/registration`)
   },
 
   // Get server tools

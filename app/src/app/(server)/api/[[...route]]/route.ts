@@ -342,6 +342,42 @@ app.get('/servers/:id', async (c) => {
     }
 })
 
+app.get('/servers/:id/registration', authMiddleware, async (c) => {
+    const serverId = c.req.param('id')
+    const user = c.get('requireUser')()
+    
+    try {
+        const registrationData = await withTransaction(async (tx) => {
+            const data = await txOperations.getServerRegistrationData(serverId)(tx);
+            
+            if (!data) {
+                return null;
+            }
+
+            // Check if the authenticated user is the creator of this server
+            if (data.creatorId !== user.id) {
+                throw new Error('Forbidden - You are not the creator of this server');
+            }
+
+            return data;
+        });
+
+        if (!registrationData) {
+            return c.json({ error: 'Server registration not found' }, 404);
+        }
+
+        return c.json(registrationData);
+    } catch (error) {
+        console.error('Error fetching server registration:', error);
+        
+        if (error instanceof Error && error.message.includes('Forbidden')) {
+            return c.json({ error: 'Forbidden - You can only view registration details for servers you created' }, 403);
+        }
+        
+        return c.json({ error: 'Internal server error' }, 500);
+    }
+})
+
 app.post('/servers', authMiddleware, async (c) => {
     try {
         const data = await c.req.json() as {
@@ -409,100 +445,40 @@ app.post('/servers', authMiddleware, async (c) => {
 
 
         try {
-            let userId: string
-            console.log('Starting database transaction')
+            const user = c.get('requireUser')()
+            console.log('Creating server for authenticated user:', user.id)
 
-            const server = await db.transaction(async (tx) => {
-                // Check if user exists, create if not
-                console.log('Checking if user exists with wallet address:', data.receiverAddress)
-                
-                if (!data.receiverAddress) {
-                    throw new Error('Receiver address is required for wallet-based user creation');
-                }
-                
-                let user = await txOperations.getUserByWalletAddress(data.receiverAddress)(tx)
-
-                if (!user) {
-                    console.log('User not found, creating new user with wallet address:', data.receiverAddress)
-                    // Extract wallet info from request if provided
-                    const walletInfo = data.walletInfo
-                    user = await txOperations.createUser({
-                        walletAddress: data.receiverAddress,
-                        displayName: `User ${data.receiverAddress.substring(0, 8)}`,
-                        // Use wallet info from frontend if available
-                        blockchain: walletInfo?.blockchain || 'ethereum',
-                        walletType: (walletInfo?.walletType as 'external' | 'managed' | 'custodial') || 'external',
-                        walletProvider: walletInfo?.provider || 'unknown',
-                        walletMetadata: {
-                            registrationNetwork: walletInfo?.network || 'base-sepolia',
-                            ...(walletInfo || {})
-                        }
-                    })(tx)
-                    console.log('Created new user with ID:', user.id)
-                } else {
-                    console.log('Found existing user with ID:', user.id)
-                }
-
-                userId = user.id
-
-                console.log('Creating server record')
-                const serverRecord = await txOperations.createServer({
+            // Use the new action that properly handles authenticated users
+            const result = await withTransaction(async (tx) => {
+                return await txOperations.createServerForAuthenticatedUser({
                     serverId: id,
-                    creatorId: user.id,
                     mcpOrigin: data.mcpOrigin,
+                    authenticatedUserId: user.id,
                     receiverAddress: data.receiverAddress,
                     requireAuth: data.requireAuth,
                     authHeaders: data.authHeaders,
-                    name: data.name || 'No name available',
-                    description: data.description || 'No description available',
-                    metadata: data.metadata
-                })(tx)
+                    name: data.name,
+                    description: data.description,
+                    metadata: data.metadata,
+                    walletInfo: data.walletInfo,
+                    tools: toolsData.map((tool) => {
+                        const monetizedTool = data.tools?.find((t) => t.name === tool.name)
+                        return {
+                            name: tool.name,
+                            description: tool.description,
+                            inputSchema: tool.inputSchema ? JSON.parse(JSON.stringify(tool.inputSchema)) : {},
+                            payment: monetizedTool?.payment ? {
+                                maxAmountRequired: parseFloat(monetizedTool.payment.maxAmountRequired),
+                                asset: monetizedTool.payment.asset,
+                                network: monetizedTool.payment.network
+                            } : undefined
+                        }
+                    })
+                })(tx);
+            });
 
-                console.log('Server created, creating tools:', toolsData.length)
-                for (const tool of toolsData) {
-                    const monetizedTool = data.tools?.find((t) => t.name === tool.name)
-                    console.log('Creating tool:', tool.name, 'Monetized:', !!monetizedTool)
-
-                    const _tool = await txOperations.createTool({
-                        serverId: serverRecord.id,
-                        name: tool.name,
-                        description: tool.description || `Access to ${tool.name}`,
-                        inputSchema: tool.inputSchema ? JSON.parse(JSON.stringify(tool.inputSchema)) : {},
-                        isMonetized: monetizedTool?.payment ? true : false,
-                        payment: monetizedTool?.payment as Record<string, unknown> | undefined
-                    })(tx)
-
-                    if (monetizedTool?.payment) {
-                        console.log('Creating pricing for tool:', tool.name)
-                        // Type the payment as the expected schema since we know it comes from user input
-                        const paymentInfo = monetizedTool.payment as ToolPaymentInfo
-                        const currency = String(paymentInfo.asset || 'USDC');
-                        const tokenDecimals = COMMON_DECIMALS[currency as keyof typeof COMMON_DECIMALS] || 6; // Default to USDC decimals
-                        
-                        await txOperations.createToolPricing(
-                            _tool.id,
-                            {
-                                priceRaw: String(paymentInfo.maxAmountRequired || 0),
-                                tokenDecimals,
-                                currency,
-                                network: String(paymentInfo.network || 'base-sepolia'),
-                                assetAddress: String(paymentInfo.asset || 'USDC'),
-                            }
-                        )(tx)
-                    }
-                }
-
-                // Assign ownership of the server to the user
-                console.log('Assigning server ownership to user:', userId)
-                await txOperations.assignOwnership(serverRecord.id, userId, 'owner')(tx)
-                console.log('Server ownership assigned successfully')
-
-                console.log('Transaction completed successfully')
-                return serverRecord
-            })
-
-            console.log('Server creation completed, returning response')
-            return c.json(server, 201)
+            console.log('Server creation completed successfully')
+            return c.json(result.server, 201)
         } catch (error) {
             console.error('Error during server creation:', error)
             return c.json({ error: (error as Error).message }, 400)
@@ -1694,6 +1670,7 @@ app.all('*', (c) => {
             'POST /api/users',
             'GET /api/servers',
             'GET /api/servers/:id',
+            'GET /api/servers/:id/registration', // Get server registration details (creator only)
             'POST /api/servers',
             'GET /api/servers/:serverId/tools',
             'GET /api/analytics/usage',

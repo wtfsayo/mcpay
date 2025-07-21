@@ -227,15 +227,13 @@ export default function RegisterPage() {
       const result = await api.registerServer(payload)
       console.log("Server registration successful:", result)
 
-      // Prepare enhanced result with complete tools data for the success page
-      const enhancedResult = {
-        ...(result as Record<string, unknown>),
-        tools: completeToolsData
+      // Extract server ID from the result and redirect to success page
+      const serverId = (result)?.serverId
+      if (serverId) {
+        router.push(`/register/success?serverId=${serverId}`)
+      } else {
+        throw new Error("Server ID not found in registration result")
       }
-
-      // Encode the registration result and redirect to success page
-      const encodedData = encodeURIComponent(JSON.stringify(enhancedResult))
-      router.push(`/register/success?data=${encodedData}`)
 
     } catch (error) {
       console.error("Server registration failed:", error)

@@ -25,7 +25,7 @@
 import {
     addRevenueToCurrency, formatRevenueByCurrency,
     formatAmount,
-    fromBaseUnits, getBlockchainArchitecture
+    fromBaseUnits, getBlockchainArchitecture, COMMON_DECIMALS
 } from '@/lib/commons';
 import { type BlockchainArchitecture, type RevenueByCurrency } from '@/types/blockchain';
 
@@ -1831,28 +1831,38 @@ export const txOperations = {
                 id: true,
                 name: true,
                 permissions: true,
+                lastUsedAt: true,
                 createdAt: true,
                 expiresAt: true,
-                lastUsedAt: true,
-                // Exclude keyHash for security
+                keyHash: false // Never return the hash
             },
             orderBy: [desc(apiKeys.createdAt)]
         });
     },
 
     revokeApiKey: (keyId: string, userId: string) => async (tx: TransactionType) => {
-        const result = await tx.update(apiKeys)
-            .set({ 
-                active: false,
-                lastUsedAt: new Date()
-            })
-            .where(and(
+        // Verify ownership before revoking
+        const apiKey = await tx.query.apiKeys.findFirst({
+            where: and(
                 eq(apiKeys.id, keyId),
-                eq(apiKeys.userId, userId)
-            ))
+                eq(apiKeys.userId, userId),
+                eq(apiKeys.active, true)
+            )
+        });
+
+        if (!apiKey) {
+            throw new Error("API key not found or access denied");
+        }
+
+        const result = await tx.update(apiKeys)
+            .set({
+                active: false,
+                lastUsedAt: new Date() // Mark revocation time
+            })
+            .where(eq(apiKeys.id, keyId))
             .returning();
 
-        if (!result[0]) throw new Error(`API key with ID ${keyId} not found or doesn't belong to user`);
+        if (!result[0]) throw new Error(`API key with ID ${keyId} not found`);
         return result[0];
     },
 
@@ -2485,6 +2495,99 @@ export const txOperations = {
         };
     },
 
+    getServerRegistrationData: (serverId: string) => async (tx: TransactionType) => {
+        // Get the server with its related data for registration details
+        const server = await tx.query.mcpServers.findFirst({
+            where: eq(mcpServers.serverId, serverId),
+            columns: {
+                id: true,
+                serverId: true,
+                name: true,
+                description: true,
+                mcpOrigin: true,
+                receiverAddress: true,
+                requireAuth: true,
+                authHeaders: true,
+                status: true,
+                createdAt: true,
+                updatedAt: true,
+                metadata: true
+            },
+            with: {
+                creator: {
+                    columns: {
+                        id: true,
+                        displayName: true,
+                        walletAddress: true
+                    }
+                },
+                tools: {
+                    columns: {
+                        id: true,
+                        name: true,
+                        description: true,
+                        inputSchema: true,
+                        payment: true,
+                        isMonetized: true
+                    }
+                }
+            }
+        });
+
+        if (!server) {
+            return null;
+        }
+
+        // Transform tools data to include payment information formatted properly
+        const toolsWithPaymentInfo = server.tools.map(tool => {
+            const baseToolData = {
+                name: tool.name,
+                description: tool.description,
+                inputSchema: tool.inputSchema
+            };
+
+            // Add payment info if tool is monetized and has payment data
+            if (tool.isMonetized && tool.payment) {
+                return {
+                    ...baseToolData,
+                    payment: tool.payment
+                };
+            }
+
+            return baseToolData;
+        });
+
+        // Create registration metadata including counts
+        const registrationMetadata: Record<string, unknown> = {
+            timestamp: server.createdAt.toISOString(),
+            toolsCount: server.tools.length,
+            monetizedToolsCount: server.tools.filter(tool => tool.isMonetized).length,
+            registeredFromUI: (server.metadata as any)?.registeredFromUI || false
+        };
+
+        // Safely merge additional metadata if it exists and is an object
+        if (server.metadata && typeof server.metadata === 'object') {
+            Object.assign(registrationMetadata, server.metadata);
+        }
+
+        return {
+            id: server.id,
+            serverId: server.serverId,
+            mcpOrigin: server.mcpOrigin,
+            creatorId: server.creator?.id,
+            receiverAddress: server.receiverAddress,
+            requireAuth: server.requireAuth,
+            authHeaders: server.authHeaders,
+            createdAt: server.createdAt.toISOString(),
+            updatedAt: server.updatedAt.toISOString(),
+            status: server.status,
+            name: server.name,
+            description: server.description,
+            tools: toolsWithPaymentInfo,
+            metadata: registrationMetadata
+        };
+    },
+
     getMcpServerWithStats: (serverId: string) => async (tx: TransactionType) => {
         const server = await tx.query.mcpServers.findFirst({
             where: eq(mcpServers.serverId, serverId),
@@ -2733,6 +2836,134 @@ export const txOperations = {
         return {
             ...server,
             stats
+        };
+    },
+
+    // Server Creation with Authenticated User
+    createServerForAuthenticatedUser: (data: {
+        serverId: string;
+        mcpOrigin: string;
+        authenticatedUserId: string;
+        receiverAddress: string;
+        requireAuth?: boolean;
+        authHeaders?: Record<string, unknown>;
+        description?: string;
+        name?: string;
+        metadata?: Record<string, unknown>;
+        walletInfo?: {
+            blockchain?: string;
+            walletType?: 'external' | 'managed' | 'custodial';
+            provider?: string;
+            network?: string;
+        };
+        tools: Array<{
+            name: string;
+            description?: string;
+            inputSchema?: Record<string, unknown>;
+            payment?: {
+                maxAmountRequired?: number;
+                asset?: string;
+                network?: string;
+            };
+        }>;
+    }) => async (tx: TransactionType) => {
+        console.log('Creating server for authenticated user:', data.authenticatedUserId);
+        
+        // Use the authenticated user - no need to lookup by wallet
+        const user = await txOperations.getUserById(data.authenticatedUserId)(tx);
+        if (!user) {
+            throw new Error('Authenticated user not found');
+        }
+
+        // Check if the user already has this wallet address
+        const existingWallet = await tx.query.userWallets.findFirst({
+            where: and(
+                eq(userWallets.userId, user.id),
+                eq(userWallets.walletAddress, data.receiverAddress),
+                eq(userWallets.isActive, true)
+            )
+        });
+
+        // Add wallet to user if they don't have it
+        if (!existingWallet) {
+            console.log('Adding new wallet to authenticated user:', data.receiverAddress);
+            const walletInfo = data.walletInfo;
+            
+            await txOperations.addWalletToUser({
+                userId: user.id,
+                walletAddress: data.receiverAddress,
+                walletType: (walletInfo?.walletType as 'external' | 'managed' | 'custodial') || 'external',
+                provider: walletInfo?.provider || 'unknown',
+                blockchain: walletInfo?.blockchain || 'ethereum',
+                architecture: getBlockchainArchitecture(walletInfo?.blockchain),
+                isPrimary: false, // Don't make it primary automatically
+                walletMetadata: {
+                    registrationNetwork: walletInfo?.network || 'base-sepolia',
+                    addedViaServerCreation: true,
+                    ...(walletInfo || {})
+                }
+            })(tx);
+        }
+
+        // Create the server under the authenticated user
+        console.log('Creating server record for user:', user.id);
+        const serverRecord = await txOperations.createServer({
+            serverId: data.serverId,
+            creatorId: user.id,
+            mcpOrigin: data.mcpOrigin,
+            receiverAddress: data.receiverAddress,
+            requireAuth: data.requireAuth,
+            authHeaders: data.authHeaders,
+            name: data.name || 'No name available',
+            description: data.description || 'No description available',
+            metadata: data.metadata
+        })(tx);
+
+        // Create tools
+        console.log('Creating tools:', data.tools.length);
+        const createdTools = [];
+        
+        for (const tool of data.tools) {
+            const createdTool = await txOperations.createTool({
+                serverId: serverRecord.id,
+                name: tool.name,
+                description: tool.description || `Access to ${tool.name}`,
+                inputSchema: tool.inputSchema || {},
+                isMonetized: !!tool.payment,
+                payment: tool.payment as Record<string, unknown> | undefined
+            })(tx);
+
+            createdTools.push(createdTool);
+
+            // Create pricing if monetized
+            if (tool.payment) {
+                console.log('Creating pricing for tool:', tool.name);
+                const paymentInfo = tool.payment;
+                const currency = String(paymentInfo.asset || 'USDC');
+                const tokenDecimals = COMMON_DECIMALS[currency as keyof typeof COMMON_DECIMALS] || 6;
+                
+                await txOperations.createToolPricing(
+                    createdTool.id,
+                    {
+                        priceRaw: String(paymentInfo.maxAmountRequired || 0),
+                        tokenDecimals,
+                        currency,
+                        network: String(paymentInfo.network || 'base-sepolia'),
+                        assetAddress: String(paymentInfo.asset || 'USDC'),
+                    }
+                )(tx);
+            }
+        }
+
+        // Assign ownership to the authenticated user
+        console.log('Assigning server ownership to authenticated user:', user.id);
+        await txOperations.assignOwnership(serverRecord.id, user.id, 'owner')(tx);
+
+        console.log('Server creation completed successfully');
+        return {
+            server: serverRecord,
+            tools: createdTools,
+            user: user
         };
     }
 };
