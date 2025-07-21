@@ -214,6 +214,11 @@ export const api = {
     return apiCall(`/users/${userId}/wallets`)
   },
 
+  // Get user wallets with balance information
+  getUserWalletsWithBalances: async (userId: string, includeTestnet = true) => {
+    return apiCall(`/users/${userId}/wallets?includeTestnet=${includeTestnet}`)
+  },
+
   addWalletToUser: async (userId: string, walletData: {
     walletAddress: string;
     blockchain: string;

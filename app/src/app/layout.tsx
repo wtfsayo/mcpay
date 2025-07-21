@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/providers/theme-context";
+import { UserProvider } from "@/components/providers/user";
 import { Toaster } from "@/components/ui/sonner";
 import Navbar from "@/components/custom-ui/navbar";
 import { wagmiConfig } from "@/lib/client/config";
@@ -55,9 +56,11 @@ export default function RootLayout({
         <ThemeProvider>
           <WagmiProvider config={wagmiConfig}>
             <AppReactQueryProvider>
-              <Navbar />
-              {children}
-              <Toaster />
+              <UserProvider>
+                <Navbar />
+                {children}
+                <Toaster />
+              </UserProvider>
             </AppReactQueryProvider>
           </WagmiProvider>
         </ThemeProvider>

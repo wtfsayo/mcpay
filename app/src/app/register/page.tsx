@@ -2,8 +2,10 @@
 
 import type React from "react"
 
-import { ConnectButton } from "@/components/custom-ui/connect-button"
+import { AccountModal } from "@/components/custom-ui/account-modal"
+import { useAccountModal } from "@/components/hooks/use-account-modal"
 import { useTheme } from "@/components/providers/theme-context"
+import { usePrimaryWallet, useUser, useUserWallets } from "@/components/providers/user"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -12,19 +14,29 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
-import { openBlockscout } from "@/lib/client/blockscout"
+import { useSession } from "@/lib/client/auth"
 import { api } from "@/lib/client/utils"
 import { getTokenInfo, toBaseUnits } from "@/lib/commons"
 import { getNetworkConfig, type UnifiedNetwork } from "@/lib/commons/networks"
 import { type Network } from "@/types/blockchain"
 import { type RegisterMCPTool } from "@/types/mcp"
-import { AlertCircle, ArrowRight, BookOpen, CheckCircle, ExternalLink, Globe, Info, Loader2, Lock, RefreshCw, Server, Wallet, Zap } from "lucide-react"
+import { type UserWallet } from "@/types/wallet"
+import { AlertCircle, ArrowRight, BookOpen, CheckCircle, ChevronDown, Copy, Globe, Info, Loader2, Lock, RefreshCw, Server, User, Wallet, Zap } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useState } from "react"
-import { useAccount, useConnect, useDisconnect } from "wagmi"
+import { toast } from "sonner"
+import { useConnect } from "wagmi"
 
 import { getNetworkByChainId } from "@/lib/commons"
 import { useChainId } from "wagmi"
+
+// Helper function to format wallet address for display
+const formatWalletAddress = (address: string): string => {
+  if (!address) return ''
+  return `${address.slice(0, 6)}...${address.slice(-4)}`
+}
+
+
 
 // Helper function to extract a display name from a URL
 const generateDisplayNameFromUrl = (urlStr: string): string => {
@@ -33,15 +45,15 @@ const generateDisplayNameFromUrl = (urlStr: string): string => {
     let path = url.pathname
     if (path.startsWith("/")) path = path.substring(1)
     if (path.endsWith("/")) path = path.substring(0, path.length - 1)
-    
+
     // Replace common repository hosting prefixes or suffixes if any
     path = path.replace(/^github\.com\//i, '').replace(/^gitlab\.com\//i, '').replace(/^bitbucket\.org\//i, '')
     path = path.replace(/\.git$/i, '')
 
     if (!path && url.hostname) { // If path is empty, use hostname
-        path = url.hostname;
+      path = url.hostname;
     }
-    
+
     return path
       .split(/[\/\-_]/)
       .map(part => part.charAt(0).toUpperCase() + part.slice(1))
@@ -54,7 +66,11 @@ const generateDisplayNameFromUrl = (urlStr: string): string => {
 export default function RegisterPage() {
   const { isDark } = useTheme()
   const router = useRouter()
-  
+  const { data: session, isPending: isSessionPending } = useSession()
+
+  console.log("Session:", session)
+  console.log("Session Pending:", isSessionPending)
+
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -72,10 +88,32 @@ export default function RegisterPage() {
   const [selectedPaymentToken, setSelectedPaymentToken] = useState<string>('')
   const [showNetworkSelection, setShowNetworkSelection] = useState(false)
 
-  const { address: walletAddress, isConnected: isWalletConnected } = useAccount()
   const { error: connectError } = useConnect()
-  const { disconnect, isPending: isDisconnectingWallet } = useDisconnect()
   const chainId = useChainId()
+
+  // Use UserProvider for wallet data
+  const { hasWallets } = useUser()
+  const primaryWallet = usePrimaryWallet()
+  const userWallets = useUserWallets()
+  
+  // State for selected wallet (defaults to primary wallet)
+  const [selectedWallet, setSelectedWallet] = useState<UserWallet | null>(null)
+  const [showWalletSelection, setShowWalletSelection] = useState(false)
+
+  // Account modal for wallet management
+  const { isOpen: isAccountModalOpen, openModal: openAccountModal, closeModal: closeAccountModal } = useAccountModal()
+
+  // Set selected wallet to primary when primary wallet changes
+  useEffect(() => {
+    if (primaryWallet && !selectedWallet) {
+      setSelectedWallet(primaryWallet)
+    }
+  }, [primaryWallet, selectedWallet])
+
+  // Require account setup - use selected wallet or fallback to primary
+  const activeWallet = selectedWallet || primaryWallet
+  const walletAddress = activeWallet?.walletAddress
+  const hasValidWallet = session?.user && hasWallets()
 
   // Get current network and blockchain info
   const currentNetwork = chainId ? getNetworkByChainId(chainId) : null
@@ -84,8 +122,8 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!walletAddress) {
-      setSubmitError("Please connect your wallet first")
+    if (!hasValidWallet || !walletAddress) {
+      setSubmitError("Please sign in and connect a wallet to continue")
       return
     }
 
@@ -116,8 +154,8 @@ export default function RegisterPage() {
         'sei-testnet': '0x4fCF1784B31630811181f670Aea7A7bEF803eaED', // USDC on Sei Testnet
         // 'polygon': '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359', // USDC on Polygon
       }
-      
-      const paymentTokenAddress = selectedPaymentToken || defaultPaymentTokens[selectedNetwork] || 
+
+      const paymentTokenAddress = selectedPaymentToken || defaultPaymentTokens[selectedNetwork] ||
         '0x0000000000000000000000000000000000000000' // fallback to native token
 
       // Get token info for decimal conversion
@@ -229,7 +267,7 @@ export default function RegisterPage() {
         console.error("Fetched data is not an array:", fetchedTools)
         throw new Error("Invalid data format received from server.")
       }
-      
+
       // Set default price for all tools
       const toolsWithDefaultPrice = fetchedTools.map(tool => ({
         ...tool,
@@ -241,7 +279,7 @@ export default function RegisterPage() {
       // and if tools were successfully fetched.
       if (fetchedTools.length > 0) {
         const displayName = generateDisplayNameFromUrl(url)
-        
+
         if (!formData.name) {
           handleInputChange("name", `${displayName} MCP Server`)
         }
@@ -265,9 +303,7 @@ export default function RegisterPage() {
     }
   }, [formData.name, formData.description])
 
-  const handleDisconnectWallet = () => {
-    disconnect()
-  }
+
 
   const updateToolPrice = (toolName: string, price: string) => {
     setTools(tools.map((tool) => (tool.name === toolName ? { ...tool, price } : tool)))
@@ -298,7 +334,7 @@ export default function RegisterPage() {
     }
   }, [connectError]);
 
-  const isFormValid = formData.name && formData.description && formData.url && isWalletConnected && tools.length > 0
+  const isFormValid = formData.name && formData.description && formData.url && hasValidWallet && tools.length > 0
 
   return (
     <div className={`min-h-screen ${isDark ? 'bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950' : 'bg-gradient-to-br from-gray-50 via-white to-gray-50'}`}>
@@ -319,12 +355,12 @@ export default function RegisterPage() {
                 </p>
               </div>
             </div>
-            
+
             {/* Getting Started Guide */}
             <Dialog>
               <DialogTrigger asChild>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   size="sm"
                   className={`shrink-0 ${isDark ? "border-gray-600 text-gray-400 hover:text-white hover:bg-gray-700" : "border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-50"}`}
                 >
@@ -342,7 +378,7 @@ export default function RegisterPage() {
                     Everything you need to know about MCP server registration
                   </p>
                 </DialogHeader>
-                
+
                 <div className="space-y-6 mt-6">
                   {/* Quick Start Section */}
                   <div className={`rounded-xl p-6 border-l-4 border-blue-500 ${isDark ? "bg-blue-500/5 bg-gradient-to-r from-blue-500/10 to-transparent" : "bg-gradient-to-r from-blue-50 to-blue-25"}`}>
@@ -354,10 +390,10 @@ export default function RegisterPage() {
                         <h5 className={`font-semibold mb-3 text-lg ${isDark ? "text-blue-200" : "text-blue-900"}`}>Need to build an MCP server?</h5>
                         <p className={`text-sm leading-relaxed ${isDark ? "text-blue-200" : "text-blue-800"}`}>
                           Try{" "}
-                          <a 
-                            href="https://github.com/punkpeye/fastmcp" 
+                          <a
+                            href="https://github.com/punkpeye/fastmcp"
                             className={`font-semibold underline decoration-2 underline-offset-2 transition-colors ${isDark ? "hover:text-blue-100" : "hover:text-blue-900"}`}
-                            target="_blank" 
+                            target="_blank"
                             rel="noopener noreferrer"
                           >
                             fastmcp
@@ -378,10 +414,10 @@ export default function RegisterPage() {
                         <h5 className={`font-semibold mb-3 text-lg ${isDark ? "text-amber-200" : "text-amber-900"}`}>Technical Requirements</h5>
                         <p className={`text-sm leading-relaxed ${isDark ? "text-amber-200" : "text-amber-800"}`}>
                           MCP servers must implement the{" "}
-                          <a 
-                            href="https://modelcontextprotocol.io/specification/draft/basic/transports#streamable-http" 
+                          <a
+                            href="https://modelcontextprotocol.io/specification/draft/basic/transports#streamable-http"
                             className={`font-semibold underline decoration-2 underline-offset-2 transition-colors ${isDark ? "hover:text-amber-100" : "hover:text-amber-900"}`}
-                            target="_blank" 
+                            target="_blank"
                             rel="noopener noreferrer"
                           >
                             Streamable HTTP transport
@@ -403,7 +439,7 @@ export default function RegisterPage() {
                     <div className="grid gap-4">
                       {[
                         "Connect your wallet for payment processing",
-                        "Enter your MCP server URL to auto-detect available tools", 
+                        "Enter your MCP server URL to auto-detect available tools",
                         "Enable authentication if your server requires it",
                         "Set individual pricing for each tool",
                         "Server details are auto-filled from tool inspection",
@@ -444,12 +480,70 @@ export default function RegisterPage() {
                   <Badge variant="secondary" className="ml-auto">Required</Badge>
                 </div>
 
-                {!isWalletConnected ? (
+                {isSessionPending ? (
                   <div className="space-y-4">
                     <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                      Connect your wallet to receive payments from tool usage
+                      Loading your account...
                     </p>
-                    <ConnectButton />
+                    <div className="p-6 rounded-xl border-2 bg-gray-900/50 border-gray-800">
+                      <div className="flex items-center justify-center h-24">
+                        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                      </div>
+                    </div>
+                  </div>
+                ) : !session?.user ? (
+                  <div className="space-y-4">
+                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                      Create your MCPay account to get started
+                    </p>
+                    <div className={`p-6 rounded-xl border-2 ${isDark ? 'border-blue-600 bg-gradient-to-br from-blue-900/20 to-blue-800/10' : 'border-blue-500 bg-gradient-to-br from-blue-50 to-blue-25'} relative`}>
+                      <div className="text-center">
+                        <div className={`w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center ${isDark ? 'bg-blue-600/20' : 'bg-blue-100'}`}>
+                          <User className={`h-8 w-8 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
+                        </div>
+                        <h4 className={`font-semibold text-xl mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                          Sign In
+                        </h4>
+                        <p className={`text-sm mb-6 leading-relaxed ${isDark ? 'text-blue-100' : 'text-blue-900'}`}>
+                          Sign in with GitHub to manage wallets, track your servers, and receive payments from tool usage
+                        </p>
+                        <Button
+                          type="button"
+                          onClick={() => openAccountModal('wallets')}
+                          className={`h-12 px-8 font-medium text-base ${isDark ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
+                        >
+                          <User className="h-5 w-5 mr-3" />
+                          Sign In with GitHub
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ) : !hasValidWallet ? (
+                  <div className="space-y-4">
+                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                      {userWallets.length === 0 ? "No wallets connected" : "Loading wallet status..."}
+                    </p>
+                    <div className={`p-6 rounded-xl border-2 ${isDark ? 'border-amber-600 bg-gradient-to-br from-amber-900/20 to-amber-800/10' : 'border-amber-500 bg-gradient-to-br from-amber-50 to-amber-25'} relative`}>
+                      <div className="text-center">
+                        <div className={`w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center ${isDark ? 'bg-amber-600/20' : 'bg-amber-100'}`}>
+                          <Wallet className={`h-8 w-8 ${isDark ? 'text-amber-400' : 'text-amber-600'}`} />
+                        </div>
+                        <h4 className={`font-semibold text-xl mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                          Connect Wallet
+                        </h4>
+                        <p className={`text-sm mb-6 leading-relaxed ${isDark ? 'text-amber-100' : 'text-amber-900'}`}>
+                          Connect a wallet to your MCPay account to receive payments from tool usage
+                        </p>
+                        <Button
+                          type="button"
+                          onClick={() => openAccountModal('wallets')}
+                          className={`h-12 px-8 font-medium text-base ${isDark ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-amber-600 hover:bg-amber-700 text-white'}`}
+                        >
+                          <Wallet className="h-5 w-5 mr-3" />
+                          Manage Wallets
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -457,40 +551,145 @@ export default function RegisterPage() {
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-green-500" />
                         <span className={`text-sm font-medium ${isDark ? 'text-green-400' : 'text-green-600'}`}>
-                          Connected
+                          {userWallets.length} Wallet{userWallets.length !== 1 ? 's' : ''} Connected
                         </span>
                       </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleDisconnectWallet}
-                        disabled={isDisconnectingWallet}
-                        className={`text-xs ${isDark ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-gray-900"}`}
-                      >
-                        {isDisconnectingWallet ? (
-                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                        ) : null}
-                        Disconnect
-                      </Button>
+                      {userWallets.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowWalletSelection(!showWalletSelection)}
+                          className={`text-xs ${isDark ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-gray-900"}`}
+                        >
+                          {showWalletSelection ? "Hide Options" : "Change Wallet"}
+                          <ChevronDown className={`h-3 w-3 ml-1 transition-transform ${showWalletSelection ? 'rotate-180' : ''}`} />
+                        </Button>
+                      )}
                     </div>
 
-                    <div className="flex gap-2">
-                      <Input
-                        value={walletAddress || ''}
-                        readOnly
-                        className={`flex-1 font-mono text-xs ${isDark ? "bg-gray-800 border-gray-700 text-gray-300" : "bg-gray-50 border-gray-300 text-gray-700"}`}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openBlockscout(walletAddress || '')}
-                        className={`px-2 ${isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-300 hover:bg-gray-50"}`}
-                        title="View on Blockscout"
-                      >
-                        <ExternalLink className="h-3 w-3" />
-                      </Button>
+                    {/* Selected Wallet Display */}
+                    <div className={`p-3 rounded-lg border ${isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-300 bg-gray-50'}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                              {activeWallet?.isPrimary ? 'Primary Wallet' : 'Selected Wallet'}
+                            </span>
+                            {activeWallet?.isPrimary && (
+                              <Badge variant="secondary" className="text-xs">Primary</Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`font-mono text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                              {formatWalletAddress(walletAddress || '')}
+                            </span>
+                            {activeWallet?.provider && (
+                              <Badge variant="outline" className="text-xs">
+                                {activeWallet.provider}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {navigator.clipboard.writeText(walletAddress || ''); toast.success("Copied to clipboard")}}
+                          className={`px-2 ml-2 ${isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-300 hover:bg-gray-50"}`}
+                          title="Copy full address"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Wallet Selection Dropdown */}
+                    {showWalletSelection && userWallets.length > 1 && (
+                      <div className={`space-y-2 p-4 rounded-lg border ${isDark ? 'border-gray-700 bg-gray-800/30' : 'border-gray-300 bg-gray-50/50'}`}>
+                        <h4 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} mb-3`}>
+                          Select Payment Wallet
+                        </h4>
+                        {/* Sort wallets: primary first, then by creation date */}
+                        {[...userWallets]
+                          .sort((a, b) => {
+                            if (a.isPrimary && !b.isPrimary) return -1
+                            if (!a.isPrimary && b.isPrimary) return 1
+                            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                          })
+                          .map((wallet) => (
+                            <div
+                              key={wallet.id}
+                              onClick={() => {
+                                setSelectedWallet(wallet)
+                                setShowWalletSelection(false)
+                              }}
+                              className={`p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
+                                selectedWallet?.id === wallet.id
+                                  ? isDark 
+                                    ? 'border-blue-500 bg-blue-500/10 ring-1 ring-blue-500/20' 
+                                    : 'border-blue-500 bg-blue-50 ring-1 ring-blue-500/20'
+                                  : isDark 
+                                    ? 'border-gray-600 bg-gray-700/50 hover:border-gray-500 hover:bg-gray-700' 
+                                    : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3 w-full">
+                                <div className={`w-2 h-2 rounded-full ${
+                                  wallet.isActive ? "bg-green-500" : "bg-gray-400"
+                                }`} />
+                                <div className="text-left flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className={`font-mono text-sm font-medium ${
+                                      selectedWallet?.id === wallet.id
+                                        ? isDark ? 'text-blue-200' : 'text-blue-700'
+                                        : isDark ? 'text-gray-200' : 'text-gray-800'
+                                    }`}>
+                                      {formatWalletAddress(wallet.walletAddress)}
+                                    </span>
+                                    {wallet.isPrimary && (
+                                      <Badge variant="secondary" className="text-xs">Primary</Badge>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    {wallet.provider && (
+                                      <Badge variant="outline" className={`text-xs ${
+                                        selectedWallet?.id === wallet.id
+                                          ? isDark ? 'border-blue-400/50 text-blue-300' : 'border-blue-400/50 text-blue-600'
+                                          : ''
+                                      }`}>
+                                        {wallet.provider}
+                                      </Badge>
+                                    )}
+                                    <span className={`text-xs ${
+                                      selectedWallet?.id === wallet.id
+                                        ? isDark ? 'text-blue-300' : 'text-blue-600'
+                                        : isDark ? 'text-gray-400' : 'text-gray-500'
+                                    }`}>
+                                      {wallet.blockchain}
+                                    </span>
+                                  </div>
+                                </div>
+                                {selectedWallet?.id === wallet.id && (
+                                  <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
+                                    isDark ? 'bg-blue-500' : 'bg-blue-500'
+                                  }`}>
+                                    <CheckCircle className="w-3 h-3 text-white" />
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+
+                    <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                      {userWallets.length > 1 
+                        ? `You can select any of your ${userWallets.length} connected wallets for payments`
+                        : activeWallet?.isPrimary 
+                          ? "Using your primary wallet from account settings"
+                          : "Using your connected wallet for payments"
+                      }
                     </div>
                   </div>
                 )}
@@ -542,7 +741,7 @@ export default function RegisterPage() {
                     {(['base-sepolia', 'sei-testnet'] as Network[]).map((networkKey) => {
                       const networkConfig = getNetworkConfig(networkKey as UnifiedNetwork)
                       if (!networkConfig) return null
-                      
+
                       return (
                         <Button
                           key={networkKey}
@@ -552,17 +751,16 @@ export default function RegisterPage() {
                             handleNetworkChange(networkKey)
                             setShowNetworkSelection(false)
                           }}
-                          className={`w-full h-auto p-3 justify-start ${selectedNetwork === networkKey 
+                          className={`w-full h-auto p-3 justify-start ${selectedNetwork === networkKey
                             ? isDark ? "bg-gray-700 text-white" : "bg-gray-900 text-white"
                             : isDark ? "text-gray-300 hover:bg-gray-800" : "text-gray-700 hover:bg-gray-50"
-                          }`}
+                            }`}
                         >
                           <div className="flex items-center gap-3 w-full">
-                            <div className={`w-2 h-2 rounded-full ${
-                              networkConfig.isTestnet 
-                                ? "bg-orange-500" 
-                                : "bg-green-500"
-                            }`} />
+                            <div className={`w-2 h-2 rounded-full ${networkConfig.isTestnet
+                              ? "bg-orange-500"
+                              : "bg-green-500"
+                              }`} />
                             <div className="text-left">
                               <div className="font-medium text-sm">{networkConfig.name}</div>
                               <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
@@ -589,10 +787,19 @@ export default function RegisterPage() {
                   </h3>
                   <Badge variant="secondary" className="ml-auto">Required</Badge>
                 </div>
-
+                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-4`}>
+                  Your MCP server&apos;s URL must use the <a
+                    href="https://modelcontextprotocol.io/specification/draft/basic/transports#streamable-http"
+                    className={`font-semibold underline decoration-2 underline-offset-2 transition-colors ${isDark ? "hover:text-blue-100" : "hover:text-blue-900"}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Streamable HTTP transport
+                  </a>.
+                </p>
                 <div className="relative">
                   <Input
-                    placeholder="https://your-server.com/mcp/•••••••/sse"
+                    placeholder="https://your-server.com/mcp?•••••••"
                     value={formData.url}
                     onChange={(e) => handleInputChange("url", e.target.value)}
                     required
@@ -733,9 +940,9 @@ X-API-Key: your-api-key`}
                             {tool.description}
                           </p>
                         </div>
-                        
+
                         <Separator className={isDark ? "bg-gray-700" : "bg-gray-200"} />
-                        
+
                         <div className="flex items-center justify-between">
                           <span className={`text-sm font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                             Price per use
@@ -771,13 +978,12 @@ X-API-Key: your-api-key`}
                   Your MCP server will be registered and available for monetized usage
                 </p>
               </div>
-              
+
               <Button
                 type="submit"
                 size="lg"
-                className={`w-full sm:w-auto min-w-[200px] h-12 text-base font-medium ${
-                  isDark ? "bg-gray-700 text-white hover:bg-gray-600" : "bg-gray-900 text-white hover:bg-gray-800"
-                } transition-all duration-200`}
+                className={`w-full sm:w-auto min-w-[200px] h-12 text-base font-medium ${isDark ? "bg-gray-700 text-white hover:bg-gray-600" : "bg-gray-900 text-white hover:bg-gray-800"
+                  } transition-all duration-200`}
                 disabled={!isFormValid || isSubmitting}
               >
                 {isSubmitting ? (
@@ -803,6 +1009,13 @@ X-API-Key: your-api-key`}
           </div>
         </form>
       </div>
+
+      {/* Account Modal */}
+      <AccountModal
+        isOpen={isAccountModalOpen}
+        onClose={closeAccountModal}
+        defaultTab="wallets"
+      />
     </div>
   )
 }
