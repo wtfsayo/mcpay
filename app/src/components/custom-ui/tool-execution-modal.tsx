@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Textarea } from "@/components/ui/textarea"
 import { urlUtils } from "@/lib/client/utils"
 import { switchToNetwork } from "@/lib/client/wallet-utils"
@@ -16,6 +17,7 @@ import {
   getNetworkByChainId,
   getTokenInfo,
 } from "@/lib/commons"
+import { getNetworkInfo } from "@/lib/commons/tokens"
 import { type Network } from "@/types/blockchain"
 import { InputProperty, MCPClient, MCPToolFromClient, MCPToolsCollection, ToolExecutionModalProps, ToolInputSchema, type ToolFromMcpServerWithStats } from "@/types/mcp"
 import { type UserWallet } from "@/types/wallet"
@@ -35,9 +37,9 @@ import {
 import { createPaymentTransport } from "mcpay/client"
 import Image from "next/image"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { useAccount, useChainId, useWalletClient } from "wagmi"
-import { getNetworkConfig, getNetworkInfo } from "@/lib/commons/tokens"
+import { toast } from "sonner"
 import { privateKeyToAccount } from "viem/accounts"
+import { useAccount, useChainId, useWalletClient } from "wagmi"
 
 // Helper function to format wallet address for display
 const formatWalletAddress = (address: string): string => {
@@ -57,6 +59,7 @@ interface ToolExecution {
   status: ExecutionStatus
   result?: unknown
   error?: string
+  transactionId?: string
 }
 
 
@@ -98,7 +101,9 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
   
   // State for selected wallet (defaults to primary wallet)
   const [selectedWallet, setSelectedWallet] = useState<UserWallet | null>(null)
-  const [showWalletSelection, setShowWalletSelection] = useState(false)
+  const [walletPopoverOpen, setWalletPopoverOpen] = useState(false)
+  const [pricingPopoverOpen, setPricingPopoverOpen] = useState(false)
+  const [selectedPricingTier, setSelectedPricingTier] = useState(0) // Index of selected pricing tier
 
   // Set selected wallet to primary when primary wallet changes
   useEffect(() => {
@@ -138,6 +143,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
   const [mcpToolsCollection, setMcpToolsCollection] = useState<MCPToolsCollection>({})
   const [isInitialized, setIsInitialized] = useState(false)
   const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false)
+  const [showPrettyJson, setShowPrettyJson] = useState(true)
 
   // =============================================================================
   // NETWORK UTILITIES
@@ -145,8 +151,9 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
 
   const getRequiredNetwork = useCallback((): string | null => {
     if (!stableTool?.isMonetized || !stableTool.pricing.length) return null
-    return stableTool.pricing[0].network
-  }, [stableTool])
+    const selectedPricing = stableTool.pricing[selectedPricingTier] || stableTool.pricing[0]
+    return selectedPricing.network
+  }, [stableTool, selectedPricingTier])
 
   const getCurrentNetwork = useCallback((): string | null => {
     const network = chainId ? getNetworkByChainId(chainId) : undefined
@@ -516,7 +523,9 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
       setMcpToolsCollection({})
       setExecution({ status: 'idle' })
       setIsSwitchingNetwork(false)
-      setShowWalletSelection(false)
+      setWalletPopoverOpen(false)
+      setPricingPopoverOpen(false)
+      setSelectedPricingTier(0)
     }
   }, [isOpen])
 
@@ -560,9 +569,20 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
 
       console.log(`[Tool Execution] Execution successful:`, result)
 
+      // Try to extract transaction ID from result if available
+      let transactionId: string | undefined
+      if (typeof result === 'object' && result !== null) {
+        const resultObj = result as Record<string, unknown>
+        transactionId = resultObj.transactionId as string || 
+                      resultObj.txId as string || 
+                      resultObj.hash as string ||
+                      resultObj.transaction_id as string
+      }
+
       setExecution({
         status: 'success',
-        result
+        result,
+        transactionId
       })
     } catch (error) {
       console.error("[Tool Execution] Execution failed:", error)
@@ -589,8 +609,27 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     }
   }
 
-  const copyResult = (result: unknown) => {
-    navigator.clipboard.writeText(JSON.stringify(result, null, 2))
+  const copyResult = (result: unknown, format: 'json' | 'raw' = 'json') => {
+    if (format === 'raw') {
+      navigator.clipboard.writeText(String(result))
+      toast.success("Raw result copied to clipboard")
+    } else {
+      navigator.clipboard.writeText(JSON.stringify(result, null, 2))
+      toast.success("JSON copied to clipboard")
+    }
+  }
+
+  const downloadResult = (result: unknown) => {
+    const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${stableTool?.name || 'tool'}-result.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    toast.success("Result downloaded as JSON")
   }
 
   // =============================================================================
@@ -786,81 +825,90 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
   // CONTENT RENDERING
   // =============================================================================
 
-  const renderNetworkSwitchCard = () => {
-    if (!tool?.isMonetized || !tool.pricing.length || !isConnected || isOnCorrectNetwork()) {
-      return null
+  const renderPricingSection = () => {
+    if (!stableTool?.isMonetized || !stableTool.pricing.length) {
+      return (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Coins className="h-4 w-4 text-green-600" />
+            <h4 className="font-medium">Pricing</h4>
+          </div>
+          <div className="text-sm text-gray-600 dark:text-gray-400 ml-6">
+            This tool is free to use
+          </div>
+        </div>
+      )
     }
 
+    const selectedPricing = stableTool.pricing[selectedPricingTier] || stableTool.pricing[0]
+    const amount = parseFloat(selectedPricing.priceRaw) / Math.pow(10, selectedPricing.tokenDecimals)
+    const hasMultipleTiers = stableTool.pricing.length > 1
+
     return (
-      <div className={`p-3 rounded-md border ${themeClasses.background.warning}`}>
-        <div className="flex items-start gap-3">
-          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-          <div className="flex-1">
-            <div className="text-sm font-medium mb-1">Network Mismatch</div>
-            <div className="text-xs mb-3">
-              This tool requires <strong>{getRequiredNetwork()}</strong> network, but you&apos;re connected to{" "}
-              <strong>{getCurrentNetwork() || 'unknown network'}</strong>.
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Coins className="h-4 w-4" />
+          <h4 className="font-medium">Pricing</h4>
+        </div>
+        <div className="ml-6">
+          <div className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30">
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-sm">{formatCurrency(amount, selectedPricing.currency, selectedPricing.network)}</span>
+              <span className="text-gray-600 dark:text-gray-400 text-sm">on {selectedPricing.network}</span>
             </div>
-            <div className="flex gap-2">
-              <Button
-                onClick={handleNetworkSwitch}
-                disabled={isSwitchingNetwork}
-                size="sm"
-                className={`text-xs ${isDark
-                    ? "bg-orange-600 hover:bg-orange-700 text-white"
-                    : "bg-orange-600 hover:bg-orange-700 text-white"
-                  }`}
-              >
-                {isSwitchingNetwork ? (
-                  <>
-                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                    Switching...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-3 w-3 mr-1" />
-                    Switch to {getRequiredNetwork()}
-                  </>
-                )}
-              </Button>
-
-              {/* Manual add network info */}
-              {getRequiredNetwork() === 'sei-testnet' && (
-                <Button
-                  onClick={async () => {
-                    const networkConfig = getNetworkConfig('sei-testnet')
-                    if (!networkConfig) return
-                    
-                    const config = {
-                      chainId: `0x${networkConfig.chainId.toString(16)}`,
-                      chainName: networkConfig.name,
-                      nativeCurrency: networkConfig.nativeCurrency,
-                      rpcUrls: networkConfig.rpcUrls,
-                      blockExplorerUrls: networkConfig.blockExplorerUrls,
-                    }
-                    await navigator.clipboard.writeText(JSON.stringify(config, null, 2))
-                  }}
-                  variant="outline"
-                  size="sm"
-                  className="text-xs"
-                >
-                  <Copy className="h-3 w-3 mr-1" />
-                  Manual Setup
-                </Button>
-              )}
-            </div>
-
-            {/* Manual Instructions for Sei Testnet */}
-            {getRequiredNetwork() === 'sei-testnet' && (
-              <div className="mt-3 p-2 rounded text-xs bg-orange-100 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800">
-                <div className="font-medium mb-1">Sei Testnet Network Details:</div>
-                <div className="space-y-1 font-mono text-xs">
-                  <div>Chain ID: 1328 (0x530)</div>
-                  <div>RPC: https://evm-rpc-testnet.sei-apis.com</div>
-                  <div>Symbol: SEI</div>
-                  <div>Explorer: https://seitrace.com/?chain=atlantic-2</div>
-                </div>
-              </div>
+            
+            {hasMultipleTiers && (
+              <Popover open={pricingPopoverOpen} onOpenChange={setPricingPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                  >
+                    {stableTool.pricing.length} Options
+                    <ChevronDown className="h-3 w-3 ml-1" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 p-0" align="end">
+                  <div className="p-4">
+                    <h5 className="text-sm font-medium mb-3">Select Pricing Tier</h5>
+                    <div className="space-y-2">
+                      {stableTool.pricing.map((pricing, index) => {
+                        const tierAmount = parseFloat(pricing.priceRaw) / Math.pow(10, pricing.tokenDecimals)
+                        return (
+                          <div
+                            key={index}
+                            onClick={() => {
+                              setSelectedPricingTier(index)
+                              setPricingPopoverOpen(false)
+                            }}
+                            className={`p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
+                              selectedPricingTier === index
+                                ? 'border-blue-500 bg-blue-50 dark:bg-blue-500/10' 
+                                : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700/30'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="space-y-1">
+                                                                 <div className="flex items-center gap-2">
+                                   <span className="font-medium text-sm">
+                                     {formatCurrency(tierAmount, pricing.currency, pricing.network)}
+                                   </span>
+                                   <span className="text-xs text-gray-500">on {pricing.network}</span>
+                                 </div>
+                              </div>
+                              {selectedPricingTier === index && (
+                                <CheckCircle className="w-4 h-4 text-blue-500" />
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
             )}
           </div>
         </div>
@@ -868,127 +916,357 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     )
   }
 
-  const renderConnectionStatus = () => {
+  const renderWalletSection = () => {
     if (!hasAccountWallets) {
       return (
-        <div className={`p-4 rounded-md border ${themeClasses.background.warning}`}>
+        <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <AlertCircle className="h-4 w-4" />
-            <p className="text-sm">Please connect a wallet to your account to execute this tool.</p>
+            <Wallet className="h-4 w-4" />
+            <h4 className="font-medium">Payment Wallet</h4>
           </div>
-        </div>
-      )
-    }
-
-    if (needsBrowserConnection) {
-      return (
-        <div className={`p-4 rounded-md border ${themeClasses.background.warning}`}>
-          <div className="space-y-3">
+          <div className={`ml-6 p-3 rounded-lg border ${themeClasses.background.warning}`}>
             <div className="flex items-center gap-2">
               <AlertCircle className="h-4 w-4" />
-              <div>
-                <p className="text-sm font-medium">Browser wallet connection required</p>
-                <p className="text-xs">
-                  {!isBrowserWalletConnected 
-                    ? `Connect your ${activeWallet?.provider || 'browser'} wallet to execute this tool.`
-                    : `Please connect to the wallet address: ${formatWalletAddress(walletAddress || '')}`
-                  }
-                </p>
-              </div>
-            </div>
-            <ConnectButton />
-          </div>
-        </div>
-      )
-    }
-
-    if (needsWalletClient && !hasWalletClient) {
-      return (
-        <div className={`p-4 rounded-md border ${themeClasses.background.warning}`}>
-          <div className="flex items-center gap-2">
-            <AlertCircle className="h-4 w-4" />
-            <div>
-              <p className="text-sm font-medium mb-1">Wallet client not ready</p>
-              <p className="text-xs">Waiting for wallet client to be ready...</p>
+              <p className="text-sm">Connect a wallet to execute this tool</p>
             </div>
           </div>
         </div>
       )
     }
 
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Wallet className="h-4 w-4" />
+          <h4 className="font-medium">Payment Wallet</h4>
+        </div>
+        <div className="ml-6">
+          <div className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30">
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-sm">
+                {activeWallet?.provider || 'Wallet'} ({formatWalletAddress(walletAddress || '')})
+              </span>
+              {needsBrowserConnection && (
+                <div className="flex items-center gap-1 text-yellow-600 dark:text-yellow-400" title="Connection required">
+                  <AlertCircle className="h-3 w-3" />
+                </div>
+              )}
+            </div>
+            
+            <div className="flex items-center gap-2">
+              {needsBrowserConnection && (
+                <ConnectButton />
+              )}
+              {userWallets.length > 1 && (
+                <Popover open={walletPopoverOpen} onOpenChange={setWalletPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="text-xs"
+                    >
+                      Change
+                      <ChevronDown className="h-3 w-3 ml-1" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80 p-0" align="end">
+                    <div className="p-4">
+                      <h5 className="text-sm font-medium mb-3">Select Payment Wallet</h5>
+                      <div className="space-y-2">
+                        {[...userWallets]
+                          .sort((a, b) => {
+                            if (a.isPrimary && !b.isPrimary) return -1
+                            if (!a.isPrimary && b.isPrimary) return 1
+                            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                          })
+                          .map((wallet) => (
+                            <div
+                              key={wallet.id}
+                              onClick={() => {
+                                setSelectedWallet(wallet)
+                                setWalletPopoverOpen(false)
+                              }}
+                              className={`p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
+                                selectedWallet?.id === wallet.id
+                                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-500/10' 
+                                  : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700/30'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono text-sm">
+                                    {formatWalletAddress(wallet.walletAddress)}
+                                  </span>
+                                  {wallet.provider && (
+                                    <Badge variant="outline" className="text-xs">{wallet.provider}</Badge>
+                                  )}
+                                </div>
+                                {selectedWallet?.id === wallet.id && (
+                                  <CheckCircle className="w-4 h-4 text-blue-500" />
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
+            </div>
+          </div>
+          {needsBrowserConnection && (
+            <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1 ml-3">
+              Browser wallet connection required
+            </p>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const renderPaymentPreview = () => {
+    if (!stableTool?.isMonetized || !stableTool.pricing.length || !isConnected) return null
+    
+    const selectedPricing = stableTool.pricing[selectedPricingTier] || stableTool.pricing[0]
+    const amount = parseFloat(selectedPricing.priceRaw) / Math.pow(10, selectedPricing.tokenDecimals)
+
+    return (
+      <div className="text-center text-sm text-gray-600 dark:text-gray-400 py-2">
+        You'll be charged <span className="font-medium">{formatCurrency(amount, selectedPricing.currency, selectedPricing.network)}</span> via{" "}
+        <span className="font-medium">{activeWallet?.provider || 'your wallet'}</span>
+      </div>
+    )
+  }
+
+
+
+  const getStatusIndicator = () => {
+    if (!hasAccountWallets) {
+      return { icon: AlertCircle, text: "Wallet Required", variant: "warning" as const }
+    }
+    
+    if (needsBrowserConnection) {
+      return { icon: AlertCircle, text: "Connection Required", variant: "warning" as const }
+    }
+    
     if (!isInitialized && execution.status !== 'error') {
-      return (
-        <div className={`p-4 rounded-md border ${themeClasses.background.info}`}>
+      return { icon: Loader2, text: "Initializing...", variant: "info" as const, animate: true }
+    }
+    
+    if (execution.status === 'error') {
+      return { icon: AlertCircle, text: "Error", variant: "error" as const }
+    }
+    
+    if (stableTool?.isMonetized && !isOnCorrectNetwork()) {
+      return { icon: RefreshCw, text: "Network Switch Required", variant: "warning" as const }
+    }
+    
+    if (isSwitchingNetwork) {
+      return { icon: Loader2, text: "Switching Network...", variant: "info" as const, animate: true }
+    }
+    
+    if (execution.status === 'executing') {
+      return { icon: Loader2, text: "Executing...", variant: "info" as const, animate: true }
+    }
+    
+    if (execution.status === 'initializing') {
+      return { icon: Loader2, text: "Initializing...", variant: "info" as const, animate: true }
+    }
+    
+    if (isInitialized && mcpToolsCollection[stableTool?.name || ''] && isConnected) {
+      return { icon: CheckCircle, text: "Ready to Execute", variant: "success" as const }
+    }
+    
+    return { icon: AlertCircle, text: "Not Ready", variant: "warning" as const }
+  }
+
+  const renderStatusChip = () => {
+    const status = getStatusIndicator()
+    const Icon = status.icon
+    
+    const variantClasses = {
+      success: "text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20",
+      warning: "text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20", 
+      error: "text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20",
+      info: "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20"
+    }
+    
+    return (
+      <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${variantClasses[status.variant]}`}>
+        <Icon className={`h-3 w-3 ${status.animate ? 'animate-spin' : ''}`} />
+        {status.text}
+      </div>
+    )
+  }
+
+  const resetTool = () => {
+    // Reset form inputs to defaults
+    const inputs: Record<string, unknown> = {}
+    const properties = getToolProperties(stableTool!)
+
+    Object.entries(properties).forEach(([key, prop]) => {
+      if (prop.type === 'array') {
+        inputs[key] = prop.default || []
+      } else {
+        inputs[key] = prop.default || ''
+      }
+    })
+
+    setToolInputs(inputs)
+    setExecution({ status: 'idle' })
+    toast.success("Form reset")
+  }
+
+  const renderErrorWithRetry = () => {
+    if (execution.status !== 'error' || !execution.error) return null
+    
+    return (
+      <div className={`p-3 rounded-lg border ${themeClasses.background.error}`}>
+        <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <p className="text-sm">Initializing MCP connection...</p>
+            <AlertCircle className="h-4 w-4 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium">Error</p>
+              <p className="text-xs mt-1">{execution.error}</p>
+            </div>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setExecution({ status: 'idle' })
+              if (stableTool?.isMonetized && !isOnCorrectNetwork()) {
+                handleNetworkSwitch()
+              } else {
+                executeTool()
+              }
+            }}
+            className="text-xs"
+          >
+            <RefreshCw className="h-3 w-3 mr-1" />
+            Retry
+          </Button>
         </div>
-      )
+      </div>
+    )
+  }
+
+  const renderNetworkSwitchPrompt = () => {
+    if (!stableTool?.isMonetized || !stableTool.pricing.length || !isConnected || isOnCorrectNetwork()) {
+      return null
     }
 
-    if (isInitialized && !mcpToolsCollection[stableTool?.name || '']) {
-      return (
-        <div className={`p-4 rounded-md border ${themeClasses.background.warning}`}>
+    return (
+      <div className={`p-3 rounded-lg border ${themeClasses.background.warning}`}>
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <AlertCircle className="h-4 w-4" />
-            <p className="text-sm">Tool &quot;{stableTool?.name}&quot; not found in MCP server.</p>
+            <RefreshCw className="h-4 w-4" />
+            <div>
+              <p className="text-sm font-medium">Network Switch Required</p>
+              <p className="text-xs">Switch to {getRequiredNetwork()} to execute this tool</p>
+            </div>
           </div>
-          <p className="text-xs mt-1 opacity-80">
-            Available tools: {Object.keys(mcpToolsCollection).join(', ') || 'None'}
-          </p>
+          <Button
+            onClick={handleNetworkSwitch}
+            disabled={isSwitchingNetwork}
+            size="sm"
+            variant="outline"
+          >
+            {isSwitchingNetwork ? (
+              <>
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                Switching...
+              </>
+            ) : (
+              `Switch Network`
+            )}
+          </Button>
         </div>
-      )
-    }
-
-    return null
+      </div>
+    )
   }
 
   const renderExecutionResult = () => {
     if (execution.status === 'success' && execution.result) {
+      const formatResult = () => {
+        if (execution.result === undefined) return 'No result'
+        if (typeof execution.result === 'string') {
+          // Try to parse and reformat if it's JSON string
+          try {
+            const parsed = JSON.parse(execution.result)
+            return showPrettyJson ? JSON.stringify(parsed, null, 2) : execution.result
+          } catch {
+            return execution.result
+          }
+        }
+        try {
+          return showPrettyJson ? JSON.stringify(execution.result, null, 2) : JSON.stringify(execution.result)
+        } catch {
+          return String(execution.result)
+        }
+      }
+
       return (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h4 className="text-sm font-medium flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <CheckCircle className="h-4 w-4 text-green-500" />
-              Result
-            </h4>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => copyResult(execution.result)}
-              className={themeClasses.button}
-            >
-              <Copy className="h-3 w-3 mr-1" />
-              Copy
-            </Button>
+              <h4 className="text-sm font-medium">Result (JSON)</h4>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowPrettyJson(!showPrettyJson)}
+                className="text-xs h-6 px-2"
+              >
+                {showPrettyJson ? 'Raw' : 'Pretty'}
+              </Button>
+            </div>
+            <div className="flex gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => copyResult(execution.result, 'json')}
+                className="text-xs h-7 px-2"
+              >
+                <Copy className="h-3 w-3 mr-1" />
+                Copy JSON
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => downloadResult(execution.result)}
+                className="text-xs h-7 px-2"
+              >
+                Download
+              </Button>
+            </div>
           </div>
-          <div className={`rounded-md border max-h-48 overflow-hidden ${themeClasses.background.code}`}>
-            <pre className={`text-xs p-3 max-h-48 overflow-auto whitespace-pre ${themeClasses.text.error}`}>
-              {(() => {
-                if (execution.result === undefined) return 'No result'
-                if (typeof execution.result === 'string') return execution.result
-                try {
-                  return JSON.stringify(execution.result, null, 2)
-                } catch {
-                  return String(execution.result)
-                }
-              })()}
+          <div className={`rounded-md border max-h-60 overflow-hidden ${themeClasses.background.code}`}>
+            <pre className={`text-xs p-3 max-h-60 overflow-auto whitespace-pre-wrap ${themeClasses.text.primary}`}>
+              {formatResult()}
             </pre>
           </div>
-        </div>
-      )
-    }
-
-    if (execution.status === 'error' && execution.error) {
-      return (
-        <div className="space-y-2">
-          <h4 className="text-sm font-medium flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 text-red-500" />
-            Error
-          </h4>
-          <div className={`text-sm p-3 rounded-md ${themeClasses.background.error}`}>
-            {execution.error}
+          
+          {/* Transaction Info & New Query */}
+          <div className="space-y-3 pt-2">
+            {execution.transactionId && (
+              <div className="text-center text-xs text-gray-500 dark:text-gray-400">
+                Transaction ID: <span className="font-mono">{execution.transactionId}</span>
+              </div>
+            )}
+            
+            <div className="flex justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={resetTool}
+                className="text-xs"
+              >
+                <RefreshCw className="h-3 w-3 mr-1" />
+                New Query
+              </Button>
+            </div>
           </div>
         </div>
       )
@@ -1002,260 +1280,29 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
 
     const properties = getToolProperties(stableTool)
     const hasInputs = hasToolInputs(stableTool)
+    const status = getStatusIndicator()
 
     return (
-      <div className="space-y-6">
-        {/* Wallet Selection */}
-        {hasAccountWallets && (
-          <div className={`p-4 rounded-xl border ${isDark ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
-            <div className="flex items-center gap-3 mb-3">
-              <Wallet className={`h-4 w-4 ${isDark ? 'text-gray-300' : 'text-gray-700'}`} />
-              <h4 className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                Payment Wallet
-              </h4>
-            </div>
+      <div className="space-y-4">
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-green-500" />
-                  <span className={`text-sm font-medium ${isDark ? 'text-green-400' : 'text-green-600'}`}>
-                    {userWallets.length} Wallet{userWallets.length !== 1 ? 's' : ''} Connected
-                  </span>
-                </div>
-                {userWallets.length > 1 && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowWalletSelection(!showWalletSelection)}
-                    className={`text-xs ${isDark ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-gray-900"}`}
-                  >
-                    {showWalletSelection ? "Hide Options" : "Change Wallet"}
-                    <ChevronDown className={`h-3 w-3 ml-1 transition-transform ${showWalletSelection ? 'rotate-180' : ''}`} />
-                  </Button>
-                )}
-              </div>
 
-              {/* Selected Wallet Display */}
-              <div className={`p-3 rounded-lg border ${isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-300 bg-gray-50'}`}>
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {activeWallet?.isPrimary ? 'Primary Wallet' : 'Selected Wallet'}
-                      </span>
-                      {activeWallet?.isPrimary && (
-                        <Badge variant="secondary" className="text-xs">Primary</Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`font-mono text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                        {formatWalletAddress(walletAddress || '')}
-                      </span>
-                      {activeWallet?.provider && (
-                        <Badge variant="outline" className="text-xs">
-                          {activeWallet.provider}
-                        </Badge>
-                      )}
-                      {activeWallet?.walletType === 'external' && (
-                        <Badge variant={needsBrowserConnection ? "destructive" : "default"} className="text-xs">
-                          {needsBrowserConnection ? "Connect Required" : "Connected"}
-                        </Badge>
-                      )}
-                      {activeWallet?.walletType === 'managed' && (
-                        <Badge variant="secondary" className="text-xs">
-                          Managed
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {navigator.clipboard.writeText(walletAddress || '')}}
-                    className={`px-2 ml-2 ${isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-300 hover:bg-gray-50"}`}
-                    title="Copy full address"
-                  >
-                    <Copy className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
+        {/* Pricing Section */}
+        {renderPricingSection()}
 
-              {/* Wallet Selection Dropdown */}
-              {showWalletSelection && userWallets.length > 1 && (
-                <div className={`space-y-2 p-3 rounded-lg border ${isDark ? 'border-gray-700 bg-gray-800/30' : 'border-gray-300 bg-gray-50/50'}`}>
-                  <h5 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>
-                    Select Payment Wallet
-                  </h5>
-                  {/* Sort wallets: primary first, then by creation date */}
-                  {[...userWallets]
-                    .sort((a, b) => {
-                      if (a.isPrimary && !b.isPrimary) return -1
-                      if (!a.isPrimary && b.isPrimary) return 1
-                      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-                    })
-                    .map((wallet) => (
-                      <div
-                        key={wallet.id}
-                        onClick={() => {
-                          setSelectedWallet(wallet)
-                          setShowWalletSelection(false)
-                        }}
-                        className={`p-2 rounded-lg border cursor-pointer transition-all duration-200 ${
-                          selectedWallet?.id === wallet.id
-                            ? isDark 
-                              ? 'border-blue-500 bg-blue-500/10 ring-1 ring-blue-500/20' 
-                              : 'border-blue-500 bg-blue-50 ring-1 ring-blue-500/20'
-                            : isDark 
-                              ? 'border-gray-600 bg-gray-700/50 hover:border-gray-500 hover:bg-gray-700' 
-                              : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3 w-full">
-                          <div className={`w-2 h-2 rounded-full ${
-                            wallet.isActive ? "bg-green-500" : "bg-gray-400"
-                          }`} />
-                          <div className="text-left flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className={`font-mono text-sm font-medium ${
-                                selectedWallet?.id === wallet.id
-                                  ? isDark ? 'text-blue-200' : 'text-blue-700'
-                                  : isDark ? 'text-gray-200' : 'text-gray-800'
-                              }`}>
-                                {formatWalletAddress(wallet.walletAddress)}
-                              </span>
-                              {wallet.isPrimary && (
-                                <Badge variant="secondary" className="text-xs">Primary</Badge>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              {wallet.provider && (
-                                <Badge variant="outline" className={`text-xs ${
-                                  selectedWallet?.id === wallet.id
-                                    ? isDark ? 'border-blue-400/50 text-blue-300' : 'border-blue-400/50 text-blue-600'
-                                    : ''
-                                }`}>
-                                  {wallet.provider}
-                                </Badge>
-                              )}
-                              <Badge variant="secondary" className="text-xs">
-                                {wallet.walletType}
-                              </Badge>
-                              {wallet.walletType === 'external' && (
-                                <Badge 
-                                  variant={
-                                    isBrowserWalletConnected && connectedWalletAddress?.toLowerCase() === wallet.walletAddress.toLowerCase()
-                                      ? "default" 
-                                      : "destructive"
-                                  } 
-                                  className="text-xs"
-                                >
-                                  {isBrowserWalletConnected && connectedWalletAddress?.toLowerCase() === wallet.walletAddress.toLowerCase()
-                                    ? "Connected" 
-                                    : "Needs Connection"
-                                  }
-                                </Badge>
-                              )}
-                              <span className={`text-xs ${
-                                selectedWallet?.id === wallet.id
-                                  ? isDark ? 'text-blue-300' : 'text-blue-600'
-                                  : isDark ? 'text-gray-400' : 'text-gray-500'
-                              }`}>
-                                {wallet.blockchain}
-                              </span>
-                            </div>
-                          </div>
-                          {selectedWallet?.id === wallet.id && (
-                            <div className={`w-4 h-4 rounded-full flex items-center justify-center ${
-                              isDark ? 'bg-blue-500' : 'bg-blue-500'
-                            }`}>
-                              <CheckCircle className="w-3 h-3 text-white" />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              )}
+        {/* Payment Wallet Section */}
+        {renderWalletSection()}
 
-              <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                {userWallets.length > 1 
-                  ? `You can select any of your ${userWallets.length} connected wallets for payments`
-                  : activeWallet?.isPrimary 
-                    ? "Using your primary wallet from account settings"
-                    : "Using your connected wallet for payments"
-                }
-                {activeWallet?.walletType === 'external' && (
-                  <div className="mt-1">
-                    <span className="font-medium">External wallet:</span> Requires browser connection for payments
-                  </div>
-                )}
-                {activeWallet?.walletType === 'managed' && (
-                  <div className="mt-1">
-                    <span className="font-medium">Managed wallet:</span> Payments handled automatically
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Network Switch Prompt */}
+        {renderNetworkSwitchPrompt()}
 
-        {/* Tool Info */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <h3 className="text-lg font-semibold">{stableTool.name}</h3>
-            {stableTool.isMonetized ? (
-              <Badge variant="secondary" className={`text-xs flex items-center gap-1 ${isDark ? "bg-gray-600 text-gray-200" : ""}`}>
-                <Coins className="h-3 w-3" />
-                Paid
-              </Badge>
-            ) : (
-              <Badge variant="outline" className={`text-xs ${isDark ? "border-gray-500 text-gray-300" : ""}`}>
-                Free
-              </Badge>
-            )}
-          </div>
-
-          <p className={`text-sm ${themeClasses.text.secondary}`}>
-            {(isInitialized && (mcpToolsCollection[stableTool.name] as MCPToolFromClient)?.description) || stableTool.description}
-          </p>
-
-          {stableTool.isMonetized && stableTool.pricing.length > 0 && (
-            <div className={`p-3 rounded-md border ${themeClasses.background.success}`}>
-              <div className="flex items-center gap-2 text-sm">
-                <Coins className="h-4 w-4" />
-                <span className="font-medium">Paid Tool</span>
-              </div>
-              <div className="mt-1 text-xs">
-                <div className="flex items-center gap-1">
-                  <span>Price:</span>
-                  <TokenDisplay
-                    currency={stableTool.pricing[0].currency}
-                    network={stableTool.pricing[0].network}
-                    amount={parseFloat(stableTool.pricing[0].priceRaw) / Math.pow(10, stableTool.pricing[0].tokenDecimals)}
-                  />
-                </div>
-                <div>Network: {stableTool.pricing[0].network}</div>
-              </div>
-              <div className="mt-2 text-xs opacity-80">
-                Payment will be automatically handled when you execute this tool.
-              </div>
-            </div>
-          )}
-
-          {/* Network Status Warning */}
-          {renderNetworkSwitchCard()}
-        </div>
-
-        {/* Input Fields */}
+        {/* Parameters Section */}
         {hasInputs && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h4 className="text-md font-medium">Parameters</h4>
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Wrench className="h-4 w-4" />
+              <h4 className="font-medium">Parameters</h4>
             </div>
-            <div className="grid grid-cols-1 gap-4">
+            <div className="ml-6 grid grid-cols-1 gap-4">
               {Object.entries(properties).map(([inputName, inputProp]) =>
                 renderInputField(inputName, inputProp)
               )}
@@ -1263,70 +1310,42 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
           </div>
         )}
 
-        {/* Network Status Success */}
-        {shouldShowNetworkStatus() && (
-          <div className={`p-3 rounded-md border ${themeClasses.background.success}`}>
-            <div className="flex items-center gap-2">
-              <CheckCircle className="h-4 w-4" />
-              <div className="text-sm">
-                <span className="font-medium">Ready to Execute</span>
-                <span className="ml-2 text-xs opacity-80">
-                  Connected to {getCurrentNetwork() || 'unknown'} network
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Error with Retry */}
+        {renderErrorWithRetry()}
 
-        {/* Connection Status */}
-        {renderConnectionStatus()}
+                {/* Payment Preview */}
+        {renderPaymentPreview()}
 
         {/* Execute Button */}
-        <Button
-          onClick={executeTool}
-          disabled={
-            !isConnected ||
-            !isInitialized ||
-            !mcpToolsCollection[stableTool.name] ||
-            execution.status === 'executing' ||
-            execution.status === 'initializing' ||
-            (stableTool.isMonetized && !isOnCorrectNetwork()) ||
-            isSwitchingNetwork
-          }
-          className={`w-full ${isDark ? "bg-blue-600 hover:bg-blue-700" : ""}`}
-        >
-          {execution.status === 'initializing' ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Initializing...
-            </>
-          ) : execution.status === 'executing' ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Executing...
-            </>
-          ) : isSwitchingNetwork ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Switching Network...
-            </>
-          ) : needsBrowserConnection ? (
-            <>
-              <Wallet className="h-4 w-4 mr-2" />
-              Connect Wallet to Execute
-            </>
-          ) : stableTool.isMonetized && !isOnCorrectNetwork() ? (
-            <>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Switch Network to Execute
-            </>
-          ) : (
-            <>
-              <Play className="h-4 w-4 mr-2" />
-              Execute Tool
-            </>
-          )}
-        </Button>
+        <div className="flex justify-center">
+          <Button
+            onClick={executeTool}
+            disabled={
+              !isConnected ||
+              !isInitialized ||
+              !mcpToolsCollection[stableTool.name] ||
+              execution.status === 'executing' ||
+              execution.status === 'initializing' ||
+              (stableTool.isMonetized && !isOnCorrectNetwork()) ||
+              isSwitchingNetwork ||
+              needsBrowserConnection
+            }
+            size="lg"
+            className={`px-8 ${isDark ? "bg-blue-600 hover:bg-blue-700" : ""}`}
+          >
+            {execution.status === 'executing' ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Running...
+              </>
+            ) : (
+              <>
+                <Play className="h-4 w-4 mr-2" />
+                Execute Tool
+              </>
+            )}
+          </Button>
+        </div>
 
         {/* Execution Result */}
         {renderExecutionResult()}
@@ -1342,15 +1361,21 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     return (
       <Drawer open={isOpen} onOpenChange={onClose}>
         <DrawerContent className={`max-h-[85vh] ${themeClasses.modal}`}>
-          <DrawerHeader>
+                  <DrawerHeader>
+          <div className="flex items-center justify-between">
             <DrawerTitle className="flex items-center gap-2">
               <Wrench className="h-5 w-5" />
-              Execute Tool
+              {stableTool?.name || 'Run Tool'}
             </DrawerTitle>
-            <DrawerDescription>
-              Set parameters and run this MCP tool
-            </DrawerDescription>
-          </DrawerHeader>
+            {stableTool && renderStatusChip()}
+          </div>
+          <DrawerDescription>
+            {stableTool 
+              ? (isInitialized && (mcpToolsCollection[stableTool.name] as MCPToolFromClient)?.description) || stableTool.description
+              : 'Configure and execute'
+            }
+          </DrawerDescription>
+        </DrawerHeader>
           <div className="px-4 pb-6 overflow-y-auto">
             {renderContent()}
           </div>
@@ -1363,12 +1388,18 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className={`max-w-2xl max-h-[85vh] overflow-hidden flex flex-col ${themeClasses.modal}`}>
         <DialogHeader className="flex-shrink-0">
-          <DialogTitle className="flex items-center gap-2">
-            <Wrench className="h-5 w-5" />
-            Execute Tool
-          </DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="flex items-center gap-2">
+              <Wrench className="h-5 w-5" />
+              {stableTool?.name || 'Run Tool'}
+            </DialogTitle>
+            {stableTool && renderStatusChip()}
+          </div>
           <DialogDescription>
-            Set parameters and run this MCP tool
+            {stableTool 
+              ? (isInitialized && (mcpToolsCollection[stableTool.name] as MCPToolFromClient)?.description) || stableTool.description
+              : 'Configure and execute'
+            }
           </DialogDescription>
         </DialogHeader>
         <div className="mt-4 flex-1 overflow-y-auto">
