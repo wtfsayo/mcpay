@@ -315,13 +315,27 @@ app.get('/servers/:id', async (c) => {
     const serverId = c.req.param('id')
     
     try {
-        const server = await withTransaction(txOperations.getMcpServerWithStats(serverId))
+        const [server, dailyAnalytics, summaryAnalytics] = await withTransaction(async (tx) => {
+            const server = await txOperations.getMcpServerWithStats(serverId)(tx);
+            if (!server) {
+                return [null, null]
+            }
+
+            const summaryAnalytics = await txOperations.getServerSummaryAnalytics(server.id)(tx);
+            const analytics = await txOperations.getDailyServerAnalytics(server.id)(tx);
+            return [server, analytics, summaryAnalytics];
+        });
 
         if (!server) {
             return c.json({ error: 'Server not found' }, 404)
         }
 
-        return c.json(server)
+
+        return c.json({
+            ...server,
+            dailyAnalytics,
+            summaryAnalytics
+        })
     } catch (error) {
         console.error('Error fetching server:', error)
         return c.json({ error: 'Internal server error' }, 500)

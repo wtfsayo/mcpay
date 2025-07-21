@@ -1888,18 +1888,15 @@ export const txOperations = {
     },
 
     // Analytics (Now computed from views - these are helper functions for compatibility)
-    getDailyServerAnalytics: (serverId: string, date?: Date) => async (tx: TransactionType) => {
-        const targetDate = date ? date.toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
-        
+    getDailyServerAnalytics: (serverId: string) => async (tx: TransactionType) => {
         const result = await tx.select()
             .from(dailyServerAnalyticsView)
             .where(and(
                 eq(dailyServerAnalyticsView.serverId, serverId),
-                eq(dailyServerAnalyticsView.date, targetDate)
             ))
-            .limit(1);
+            .limit(100);
 
-        return result[0] || null;
+        return result || null;
     },
 
     getServerSummaryAnalytics: (serverId: string) => async (tx: TransactionType) => {

@@ -8,7 +8,11 @@ export type McpServerWithActivity = Awaited<ReturnType<ReturnType<typeof txOpera
 
 export type McpServerWithStats = Awaited<ReturnType<ReturnType<typeof txOperations.getMcpServerWithStats>>>
 
+export type DailyServerAnalytics = Awaited<ReturnType<ReturnType<typeof txOperations.getDailyServerAnalytics>>>;
+
 export type ToolFromMcpServerWithStats = NonNullable<McpServerWithStats>['tools'][number];
+
+export type ServerSummaryAnalytics = Awaited<ReturnType<ReturnType<typeof txOperations.getServerSummaryAnalytics>>>;
 
 export type MCPClient = Awaited<ReturnType<typeof experimental_createMCPClient>>
 export type MCPToolsCollection = Record<string, unknown>

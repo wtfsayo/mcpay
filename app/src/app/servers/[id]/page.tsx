@@ -15,11 +15,17 @@ import {
   fromBaseUnits,
   getTokenInfo,
 } from "@/lib/commons"
+// Add missing imports from amounts utilities
+import {
+  formatDbAmount,
+  fromDbAmount
+} from "@/lib/commons/amounts"
 import { type Network } from "@/types/blockchain"
-import { type McpServerWithStats, type MCPTool, type ToolFromMcpServerWithStats } from "@/types/mcp"
+import { DailyServerAnalytics, type McpServerWithStats, type ServerSummaryAnalytics, type ToolFromMcpServerWithStats } from "@/types/mcp"
 import {
   Activity,
   AlertCircle,
+  BarChart3,
   CheckCircle,
   Clock,
   Coins,
@@ -44,7 +50,7 @@ import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/pris
 export default function ServerDashboard() {
   const params = useParams()
   const serverId = params.id as string
-  const [serverData, setServerData] = useState<McpServerWithStats | null>(null)
+  const [serverData, setServerData] = useState<McpServerWithStats & { dailyAnalytics: DailyServerAnalytics, summaryAnalytics: ServerSummaryAnalytics } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedTool, setSelectedTool] = useState<ToolFromMcpServerWithStats | null>(null)
@@ -199,7 +205,7 @@ await client.connect(transport)
         setError(null)
 
         const data = await api.getServer(serverId)
-        setServerData(data as McpServerWithStats)
+        setServerData(data as McpServerWithStats & { dailyAnalytics: DailyServerAnalytics, summaryAnalytics: ServerSummaryAnalytics })
       } catch (err) {
         console.error('Error fetching server data:', err)
         setError(err instanceof Error ? err.message : 'Failed to fetch server data')
@@ -220,6 +226,61 @@ await client.connect(transport)
   const handleToolExecution = (tool: ToolFromMcpServerWithStats) => {
     setSelectedTool(tool)
     setShowToolModal(true)
+  }
+
+  // Helper function to safely convert to number
+  const safeNumber = (value: any): number => {
+    const num = Number(value)
+    return isNaN(num) ? 0 : num
+  }
+
+  // Helper function to calculate total revenue from revenueDetails array
+  const calculateTotalRevenue = (revenueDetails: any[] | null): number => {
+    if (!revenueDetails || !Array.isArray(revenueDetails)) {
+      return 0
+    }
+    
+    return revenueDetails.reduce((total, detail) => {
+      if (detail && detail.amount_raw && detail.decimals !== undefined && 
+          typeof detail.amount_raw === 'string' && detail.amount_raw.trim() !== '') {
+        try {
+          const humanAmount = safeNumber(fromBaseUnits(detail.amount_raw, detail.decimals))
+          return total + humanAmount
+        } catch (error) {
+          console.error('Error converting revenue amount:', error)
+          return total
+        }
+      }
+      return total
+    }, 0)
+  }
+
+  // Helper function to format the primary revenue amount for display
+  const formatPrimaryRevenue = (revenueDetails: any[] | null): string => {
+    if (!revenueDetails || !Array.isArray(revenueDetails) || revenueDetails.length === 0) {
+      return "0.00"
+    }
+    
+    // Get the first revenue detail for primary display
+    const primaryDetail = revenueDetails[0]
+    if (primaryDetail && primaryDetail.amount_raw && primaryDetail.decimals !== undefined &&
+        typeof primaryDetail.amount_raw === 'string' && primaryDetail.amount_raw.trim() !== '') {
+      try {
+        const humanAmount = fromBaseUnits(primaryDetail.amount_raw, primaryDetail.decimals)
+        return safeNumber(humanAmount).toFixed(2)
+      } catch (error) {
+        console.error('Error formatting primary revenue:', error)
+        return "0.00"
+      }
+    }
+    
+    return "0.00"
+  }
+
+  // Helper function to format daily analytics revenue
+  const formatDailyRevenue = (revenueDetails: any[] | null): string => {
+    const total = calculateTotalRevenue(revenueDetails)
+    return total.toFixed(2)
   }
 
   // Enhanced formatCurrency function using token registry
@@ -376,7 +437,7 @@ await client.connect(transport)
               Created: {formatDate(serverData?.createdAt ? (typeof serverData.createdAt === 'string' ? serverData.createdAt : serverData.createdAt.toISOString()) : '')}
             </span>
             <span className={isDark ? "text-gray-400" : "text-gray-500"}>
-              Last Activity: {formatDate(serverData.stats.lastActivity ? (typeof serverData.stats.lastActivity === 'string' ? serverData.stats.lastActivity : serverData.stats.lastActivity.toISOString()) : '')}
+              Last Activity: {formatDate(serverData.summaryAnalytics.lastActivity || '')}
             </span>
           </div>
         </div>
@@ -401,9 +462,9 @@ await client.connect(transport)
                       <p className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                         Total Revenue
                       </p>
-                      <div className="text-base font-bold mt-0.5">${serverData.stats.totalRevenue.toFixed(2)}</div>
+                      <div className="text-base font-bold mt-0.5">${formatPrimaryRevenue(serverData.summaryAnalytics.revenueDetails)}</div>
                       <p className={`text-xs mt-0.5 ${isDark ? "text-gray-500" : "text-gray-500"}`}>
-                        {serverData.stats.totalPayments} payments
+                        {serverData.summaryAnalytics.totalPayments || 0} payments
                       </p>
                     </div>
                     <div className={`p-1.5 rounded-full ${isDark ? "bg-gray-700" : "bg-gray-100"}`}>
@@ -420,9 +481,9 @@ await client.connect(transport)
                       <p className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                         Total Usage
                       </p>
-                      <div className="text-base font-bold mt-0.5">{serverData.stats.totalUsage.toLocaleString()}</div>
+                      <div className="text-base font-bold mt-0.5">{(serverData.summaryAnalytics.totalRequests || 0).toLocaleString()}</div>
                       <p className={`text-xs mt-0.5 ${isDark ? "text-gray-500" : "text-gray-500"}`}>
-                        {serverData.stats.avgResponseTime.toFixed(0)}ms avg
+                        {safeNumber(serverData.summaryAnalytics.avgResponseTime).toFixed(0)}ms avg
                       </p>
                     </div>
                     <div className={`p-1.5 rounded-full ${isDark ? "bg-gray-700" : "bg-gray-100"}`}>
@@ -439,7 +500,7 @@ await client.connect(transport)
                       <p className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                         Unique Users
                       </p>
-                      <div className="text-base font-bold mt-0.5">{serverData.stats.uniqueUsers}</div>
+                      <div className="text-base font-bold mt-0.5">{serverData.summaryAnalytics.uniqueUsers || 0}</div>
                       <p className={`text-xs mt-0.5 ${isDark ? "text-gray-500" : "text-gray-500"}`}>
                         Active users
                       </p>
@@ -458,9 +519,9 @@ await client.connect(transport)
                       <p className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                         Tools
                       </p>
-                      <div className="text-base font-bold mt-0.5">{serverData.stats.totalTools}</div>
+                      <div className="text-base font-bold mt-0.5">{serverData.summaryAnalytics.totalTools || 0}</div>
                       <p className={`text-xs mt-0.5 ${isDark ? "text-gray-500" : "text-gray-500"}`}>
-                        {serverData.stats.monetizedTools} monetized
+                        {serverData.summaryAnalytics.monetizedTools || 0} monetized
                       </p>
                     </div>
                     <div className={`p-1.5 rounded-full ${isDark ? "bg-gray-700" : "bg-gray-100"}`}>
@@ -935,10 +996,10 @@ await client.connect(transport)`}
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Wrench className="h-5 w-5" />
-              Tools ({serverData.stats.totalTools})
+              Tools ({serverData.summaryAnalytics.totalTools})
             </CardTitle>
             <CardDescription>
-              {serverData.stats.monetizedTools} monetized • {serverData.stats.totalTools - serverData.stats.monetizedTools} free
+              {serverData.summaryAnalytics.monetizedTools || 0} monetized • {(serverData.summaryAnalytics.totalTools || 0) - (serverData.summaryAnalytics.monetizedTools || 0)} free
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -981,7 +1042,9 @@ await client.connect(transport)`}
                           <TokenDisplay
                             currency={tool.pricing[0].currency}
                             network={tool.pricing[0].network}
-                            amount={fromBaseUnits(tool.pricing[0].priceRaw, tool.pricing[0].tokenDecimals)}
+                            amount={tool.pricing[0].priceRaw && typeof tool.pricing[0].priceRaw === 'string' && tool.pricing[0].priceRaw.trim() !== '' 
+                              ? fromBaseUnits(tool.pricing[0].priceRaw, tool.pricing[0].tokenDecimals) 
+                              : '0'}
                           />
                         ) : (
                           <span className={isDark ? "text-gray-400" : "text-gray-500"}>Free</span>
@@ -1038,7 +1101,7 @@ await client.connect(transport)`}
 
           {/* Analytics & Payments Tab */}
           <TabsContent value="analytics" className="space-y-6">
-            {/* <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card className={isDark ? "bg-gray-800 border-gray-700" : ""}>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -1048,15 +1111,15 @@ await client.connect(transport)`}
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {(serverData.stats. || []).map((day) => (
-                      <div key={day.id} className="flex items-center justify-between">
+                    {(serverData.dailyAnalytics || []).map((item) => (
+                      <div key={item.date} className="flex items-center justify-between">
                         <span className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                          {new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          {new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                         </span>
                         <div className="flex items-center gap-4 text-sm">
-                          <span>{day.totalRequests} requests</span>
-                          <span className="text-green-500">${parseFloat(day.totalRevenueRaw).toFixed(2)}</span>
-                          <span>{day.uniqueUsers} users</span>
+                          <span>{item.totalRequests || 0} requests</span>
+                          <span className="text-green-500">${formatDailyRevenue(item.revenueDetails)}</span>
+                          <span>{item.uniqueUsers || 0} users</span>
                         </div>
                       </div>
                     ))}
@@ -1108,7 +1171,7 @@ await client.connect(transport)`}
                           </div>
                           <div className="text-right">
                             <p className="text-sm font-medium">
-                              {(parseFloat(proof.confidenceScore) * 100).toFixed(1)}%
+                              {(safeNumber(proof.confidenceScore) * 100).toFixed(1)}%
                             </p>
                             {proof.webProofPresentation && (
                               <Badge variant="outline" className={`text-xs ${isDark ? "border-gray-500 text-gray-300" : ""}`}>
@@ -1128,7 +1191,7 @@ await client.connect(transport)`}
                   </div>
                 </CardContent>
               </Card>
-            </div> */}
+            </div>
 
             {/* Recent Payments */}
             <Card className={isDark ? "bg-gray-800 border-gray-700" : ""}>
@@ -1178,7 +1241,9 @@ await client.connect(transport)`}
                             <TokenDisplay
                               currency={payment.currency}
                               network={payment.network}
-                              amount={fromBaseUnits(payment.amountRaw, payment.tokenDecimals)}
+                              amount={payment.amountRaw && typeof payment.amountRaw === 'string' && payment.amountRaw.trim() !== '' 
+                                ? fromBaseUnits(payment.amountRaw, payment.tokenDecimals) 
+                                : '0'}
                             />
                           </TableCell>
                           <TableCell>
