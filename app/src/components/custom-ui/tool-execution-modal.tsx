@@ -1,6 +1,8 @@
 "use client"
 
+import { ConnectButton } from "@/components/custom-ui/connect-button"
 import { useTheme } from "@/components/providers/theme-context"
+import { usePrimaryWallet, useUser, useUserWallets } from "@/components/providers/user"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -16,15 +18,18 @@ import {
 } from "@/lib/commons"
 import { type Network } from "@/types/blockchain"
 import { InputProperty, MCPClient, MCPToolFromClient, MCPToolsCollection, ToolExecutionModalProps, ToolInputSchema, type ToolFromMcpServerWithStats } from "@/types/mcp"
+import { type UserWallet } from "@/types/wallet"
 import { experimental_createMCPClient } from "ai"
 import {
   AlertCircle,
   CheckCircle,
+  ChevronDown,
   Coins,
   Copy,
   Loader2,
   Play,
   RefreshCw,
+  Wallet,
   Wrench
 } from "lucide-react"
 import { createPaymentTransport } from "mcpay/client"
@@ -32,6 +37,14 @@ import Image from "next/image"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAccount, useChainId, useWalletClient } from "wagmi"
 import { getNetworkConfig, getNetworkInfo } from "@/lib/commons/tokens"
+import { privateKeyToAccount } from "viem/accounts"
+
+// Helper function to format wallet address for display
+const formatWalletAddress = (address: string): string => {
+  if (!address) return ''
+  return `${address.slice(0, 6)}...${address.slice(-4)}`
+}
+
 // =============================================================================
 // TYPE DEFINITIONS
 // =============================================================================
@@ -75,16 +88,47 @@ const getThemeClasses = (isDark: boolean) => ({
 
 export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExecutionModalProps) {
   const { isDark } = useTheme()
-  const { address, isConnected } = useAccount()
+  const { hasWallets } = useUser()
+  const primaryWallet = usePrimaryWallet()
+  const userWallets = useUserWallets()
   const { data: walletClient } = useWalletClient()
+  const { address: connectedWalletAddress, isConnected: isBrowserWalletConnected } = useAccount()
   const chainId = useChainId()
   const themeClasses = getThemeClasses(isDark)
   
+  // State for selected wallet (defaults to primary wallet)
+  const [selectedWallet, setSelectedWallet] = useState<UserWallet | null>(null)
+  const [showWalletSelection, setShowWalletSelection] = useState(false)
+
+  // Set selected wallet to primary when primary wallet changes
+  useEffect(() => {
+    if (primaryWallet && !selectedWallet) {
+      setSelectedWallet(primaryWallet)
+    }
+  }, [primaryWallet, selectedWallet])
+
+  // Get wallet connection status
+  const activeWallet = selectedWallet || primaryWallet
+  const walletAddress = activeWallet?.walletAddress
+  const hasAccountWallets = hasWallets() && !!walletAddress
+  
+  // Check if selected wallet requires browser connection
+  const requiresBrowserConnection = activeWallet?.walletType === 'external'
+  const hasWalletClient = !!walletClient
+  const needsBrowserConnection = requiresBrowserConnection && (!isBrowserWalletConnected || connectedWalletAddress?.toLowerCase() !== walletAddress?.toLowerCase())
+  const needsWalletClient = requiresBrowserConnection // Only external wallets need wagmi wallet client
+  
+  // Overall connection status
+  const isConnected = hasAccountWallets && (!needsWalletClient || hasWalletClient) && !needsBrowserConnection
+  
   // Create stable tool reference to avoid infinite loops
+  const toolInputSchemaString = useMemo(() => JSON.stringify(tool?.inputSchema), [tool?.inputSchema])
+  const toolPricingString = useMemo(() => JSON.stringify(tool?.pricing), [tool?.pricing])
+  
   const stableTool = useMemo(() => {
     if (!tool) return null
     return tool
-  }, [tool?.id, tool?.name, JSON.stringify(tool?.inputSchema), tool?.description, tool?.isMonetized, JSON.stringify(tool?.pricing)])
+  }, [tool, tool?.id, tool?.name, toolInputSchemaString, tool?.description, tool?.isMonetized, toolPricingString])
 
   // State management
   const [toolInputs, setToolInputs] = useState<Record<string, unknown>>({})
@@ -307,8 +351,9 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
   // TOOL INPUT MANAGEMENT
   // =============================================================================
 
-  // Track previous tool ID to avoid unnecessary resets
+  // Track previous tool ID and wallet ID to avoid unnecessary resets
   const [previousToolId, setPreviousToolId] = useState<string | null>(null)
+  const [previousWalletId, setPreviousWalletId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!stableTool) {
@@ -316,9 +361,16 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
       return
     }
 
-    // Only reset MCP initialization if the tool actually changed
-    if (previousToolId !== stableTool.id) {
-      setPreviousToolId(stableTool.id)
+    const currentWalletId = activeWallet?.id || null
+
+    // Reset MCP initialization if the tool or active wallet changed
+    const toolChanged = previousToolId !== stableTool.id
+    const walletChanged = previousWalletId !== currentWalletId
+
+    if (toolChanged || walletChanged) {
+      if (toolChanged) setPreviousToolId(stableTool.id)
+      if (walletChanged) setPreviousWalletId(currentWalletId)
+      
       setIsInitialized(false)
       setIsSwitchingNetwork(false)
     }
@@ -337,7 +389,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
 
     setToolInputs(inputs)
     setExecution({ status: 'idle' })
-  }, [stableTool, previousToolId, getToolProperties])
+  }, [stableTool, activeWallet?.id, previousToolId, previousWalletId, getToolProperties])
 
   // Update inputs when MCP data becomes available (enhances the initial inputs)
   useEffect(() => {
@@ -362,7 +414,9 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
   // =============================================================================
 
   useEffect(() => {
-    if (!isOpen || !isConnected || !address || !stableTool || !walletClient || isInitialized) return
+    if (!isOpen || !isConnected || !walletAddress || !stableTool || isInitialized) return
+    // Only check for walletClient if it's an external wallet that needs it
+    if (needsWalletClient && !walletClient) return
 
     const initializeMcpClient = async () => {
       try {
@@ -372,15 +426,45 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
         const mcpUrl = new URL(urlUtils.getMcpUrl(serverId))
 
         // Create a viem-compatible Account object that x402 can use
-        const account = walletClient
-
-        console.log("Creating payment transport with viem account:", account);
-        console.log("Wallet client chain info:", walletClient.chain);
+        let account
+        
+        if (activeWallet?.walletType === 'external') {
+          // For external wallets, use the wagmi wallet client
+          if (!walletClient) {
+            throw new Error("Wallet client required for external wallets")
+          }
+          account = walletClient
+          console.log("Using external wallet client:", walletClient);
+          console.log("Wallet client chain info:", walletClient.chain);
+        } else {
+          // For managed wallets, create a dummy account for transport initialization
+          // The actual payment signing will be intercepted and handled server-side via CDP
+          // We use a dummy private key just to create a valid viem account structure
+          const dummyPrivateKey = '0x0000000000000000000000000000000000000000000000000000000000000001'
+          const dummyAccount = privateKeyToAccount(dummyPrivateKey)
+          
+          // Override the address to match the managed wallet address
+          account = {
+            ...dummyAccount,
+            address: walletAddress as `0x${string}`,
+          }
+          
+          console.log("Using managed wallet with dummy account (server-side payment):", {
+            address: account.address,
+            type: 'managed',
+            walletType: activeWallet?.walletType
+          });
+        }
 
         const transport = createPaymentTransport(new URL(mcpUrl), account, {
           maxPaymentValue: BigInt(0.1 * 10 ** 6), // 0.1 USDC max
           requestInit: {
-            credentials: "include",
+            // Add headers to help server identify managed wallet requests
+            headers: {
+              'X-Wallet-Type': activeWallet?.walletType || 'unknown',
+              'X-Wallet-Address': walletAddress || '',
+              'X-Wallet-Provider': activeWallet?.provider || 'unknown',
+            }
           }
         });
 
@@ -422,7 +506,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     }
 
     initializeMcpClient()
-  }, [isOpen, isConnected, address, stableTool, serverId, walletClient, isInitialized])
+  }, [isOpen, isConnected, walletAddress, stableTool, serverId, walletClient, isInitialized, needsWalletClient, activeWallet])
 
   // Cleanup when modal closes
   useEffect(() => {
@@ -432,6 +516,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
       setMcpToolsCollection({})
       setExecution({ status: 'idle' })
       setIsSwitchingNetwork(false)
+      setShowWalletSelection(false)
     }
   }, [isOpen])
 
@@ -447,7 +532,9 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
   }
 
   const executeTool = async () => {
-    if (!stableTool || !mcpClient || !isInitialized || !walletClient) return
+    if (!stableTool || !mcpClient || !isInitialized) return
+    // For external wallets, ensure wallet client is available
+    if (needsWalletClient && !walletClient) return
 
     setExecution({ status: 'executing' })
 
@@ -459,27 +546,46 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
         throw new Error(`Tool "${stableTool.name}" not found in MCP server`)
       }
 
-      console.log(`Executing MCP tool: ${stableTool.name}`, toolInputs)
-      console.log(`MCP tool schema:`, mcpTool.parameters?.jsonSchema || mcpTool.inputSchema?.jsonSchema)
+      console.log(`[Tool Execution] Starting execution for: ${stableTool.name}`)
+      console.log(`[Tool Execution] Wallet type: ${activeWallet?.walletType}`)
+      console.log(`[Tool Execution] Wallet address: ${walletAddress}`)
+      console.log(`[Tool Execution] Tool inputs:`, toolInputs)
+      console.log(`[Tool Execution] MCP tool schema:`, mcpTool.parameters?.jsonSchema || mcpTool.inputSchema?.jsonSchema)
 
       // Execute the tool using the MCP client's callTool method
       const result = await mcpTool.execute?.(toolInputs, {
-        toolCallId: "123",
+        toolCallId: Date.now().toString(),
         messages: []
       })
 
-      console.log(`Tool execution result:`, result)
+      console.log(`[Tool Execution] Execution successful:`, result)
 
       setExecution({
         status: 'success',
         result
       })
     } catch (error) {
-      console.error("Tool execution error:", error)
-      setExecution({
-        status: 'error',
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
-      })
+      console.error("[Tool Execution] Execution failed:", error)
+      
+      // Enhanced error handling for managed wallets
+      if (activeWallet?.walletType === 'managed' && error instanceof Error) {
+        if (error.message.includes('CDP') || error.message.includes('managed')) {
+          setExecution({
+            status: 'error',
+            error: `Managed wallet error: ${error.message}. Please try again or contact support if the issue persists.`
+          })
+        } else {
+          setExecution({
+            status: 'error',
+            error: `Tool execution failed: ${error.message}`
+          })
+        }
+      } else {
+        setExecution({
+          status: 'error',
+          error: error instanceof Error ? error.message : 'Unknown error occurred'
+        })
+      }
     }
   }
 
@@ -763,14 +869,49 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
   }
 
   const renderConnectionStatus = () => {
-    if (!isConnected || !walletClient) {
+    if (!hasAccountWallets) {
       return (
         <div className={`p-4 rounded-md border ${themeClasses.background.warning}`}>
-          <p className="text-sm">
-            {!isConnected
-              ? "Please connect your wallet to execute this tool."
-              : "Waiting for wallet client to be ready..."}
-          </p>
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" />
+            <p className="text-sm">Please connect a wallet to your account to execute this tool.</p>
+          </div>
+        </div>
+      )
+    }
+
+    if (needsBrowserConnection) {
+      return (
+        <div className={`p-4 rounded-md border ${themeClasses.background.warning}`}>
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4" />
+              <div>
+                <p className="text-sm font-medium">Browser wallet connection required</p>
+                <p className="text-xs">
+                  {!isBrowserWalletConnected 
+                    ? `Connect your ${activeWallet?.provider || 'browser'} wallet to execute this tool.`
+                    : `Please connect to the wallet address: ${formatWalletAddress(walletAddress || '')}`
+                  }
+                </p>
+              </div>
+            </div>
+            <ConnectButton />
+          </div>
+        </div>
+      )
+    }
+
+    if (needsWalletClient && !hasWalletClient) {
+      return (
+        <div className={`p-4 rounded-md border ${themeClasses.background.warning}`}>
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" />
+            <div>
+              <p className="text-sm font-medium mb-1">Wallet client not ready</p>
+              <p className="text-xs">Waiting for wallet client to be ready...</p>
+            </div>
+          </div>
         </div>
       )
     }
@@ -864,6 +1005,203 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
 
     return (
       <div className="space-y-6">
+        {/* Wallet Selection */}
+        {hasAccountWallets && (
+          <div className={`p-4 rounded-xl border ${isDark ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
+            <div className="flex items-center gap-3 mb-3">
+              <Wallet className={`h-4 w-4 ${isDark ? 'text-gray-300' : 'text-gray-700'}`} />
+              <h4 className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Payment Wallet
+              </h4>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-green-500" />
+                  <span className={`text-sm font-medium ${isDark ? 'text-green-400' : 'text-green-600'}`}>
+                    {userWallets.length} Wallet{userWallets.length !== 1 ? 's' : ''} Connected
+                  </span>
+                </div>
+                {userWallets.length > 1 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowWalletSelection(!showWalletSelection)}
+                    className={`text-xs ${isDark ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-gray-900"}`}
+                  >
+                    {showWalletSelection ? "Hide Options" : "Change Wallet"}
+                    <ChevronDown className={`h-3 w-3 ml-1 transition-transform ${showWalletSelection ? 'rotate-180' : ''}`} />
+                  </Button>
+                )}
+              </div>
+
+              {/* Selected Wallet Display */}
+              <div className={`p-3 rounded-lg border ${isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-300 bg-gray-50'}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        {activeWallet?.isPrimary ? 'Primary Wallet' : 'Selected Wallet'}
+                      </span>
+                      {activeWallet?.isPrimary && (
+                        <Badge variant="secondary" className="text-xs">Primary</Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`font-mono text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                        {formatWalletAddress(walletAddress || '')}
+                      </span>
+                      {activeWallet?.provider && (
+                        <Badge variant="outline" className="text-xs">
+                          {activeWallet.provider}
+                        </Badge>
+                      )}
+                      {activeWallet?.walletType === 'external' && (
+                        <Badge variant={needsBrowserConnection ? "destructive" : "default"} className="text-xs">
+                          {needsBrowserConnection ? "Connect Required" : "Connected"}
+                        </Badge>
+                      )}
+                      {activeWallet?.walletType === 'managed' && (
+                        <Badge variant="secondary" className="text-xs">
+                          Managed
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {navigator.clipboard.writeText(walletAddress || '')}}
+                    className={`px-2 ml-2 ${isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-300 hover:bg-gray-50"}`}
+                    title="Copy full address"
+                  >
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Wallet Selection Dropdown */}
+              {showWalletSelection && userWallets.length > 1 && (
+                <div className={`space-y-2 p-3 rounded-lg border ${isDark ? 'border-gray-700 bg-gray-800/30' : 'border-gray-300 bg-gray-50/50'}`}>
+                  <h5 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>
+                    Select Payment Wallet
+                  </h5>
+                  {/* Sort wallets: primary first, then by creation date */}
+                  {[...userWallets]
+                    .sort((a, b) => {
+                      if (a.isPrimary && !b.isPrimary) return -1
+                      if (!a.isPrimary && b.isPrimary) return 1
+                      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                    })
+                    .map((wallet) => (
+                      <div
+                        key={wallet.id}
+                        onClick={() => {
+                          setSelectedWallet(wallet)
+                          setShowWalletSelection(false)
+                        }}
+                        className={`p-2 rounded-lg border cursor-pointer transition-all duration-200 ${
+                          selectedWallet?.id === wallet.id
+                            ? isDark 
+                              ? 'border-blue-500 bg-blue-500/10 ring-1 ring-blue-500/20' 
+                              : 'border-blue-500 bg-blue-50 ring-1 ring-blue-500/20'
+                            : isDark 
+                              ? 'border-gray-600 bg-gray-700/50 hover:border-gray-500 hover:bg-gray-700' 
+                              : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 w-full">
+                          <div className={`w-2 h-2 rounded-full ${
+                            wallet.isActive ? "bg-green-500" : "bg-gray-400"
+                          }`} />
+                          <div className="text-left flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={`font-mono text-sm font-medium ${
+                                selectedWallet?.id === wallet.id
+                                  ? isDark ? 'text-blue-200' : 'text-blue-700'
+                                  : isDark ? 'text-gray-200' : 'text-gray-800'
+                              }`}>
+                                {formatWalletAddress(wallet.walletAddress)}
+                              </span>
+                              {wallet.isPrimary && (
+                                <Badge variant="secondary" className="text-xs">Primary</Badge>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {wallet.provider && (
+                                <Badge variant="outline" className={`text-xs ${
+                                  selectedWallet?.id === wallet.id
+                                    ? isDark ? 'border-blue-400/50 text-blue-300' : 'border-blue-400/50 text-blue-600'
+                                    : ''
+                                }`}>
+                                  {wallet.provider}
+                                </Badge>
+                              )}
+                              <Badge variant="secondary" className="text-xs">
+                                {wallet.walletType}
+                              </Badge>
+                              {wallet.walletType === 'external' && (
+                                <Badge 
+                                  variant={
+                                    isBrowserWalletConnected && connectedWalletAddress?.toLowerCase() === wallet.walletAddress.toLowerCase()
+                                      ? "default" 
+                                      : "destructive"
+                                  } 
+                                  className="text-xs"
+                                >
+                                  {isBrowserWalletConnected && connectedWalletAddress?.toLowerCase() === wallet.walletAddress.toLowerCase()
+                                    ? "Connected" 
+                                    : "Needs Connection"
+                                  }
+                                </Badge>
+                              )}
+                              <span className={`text-xs ${
+                                selectedWallet?.id === wallet.id
+                                  ? isDark ? 'text-blue-300' : 'text-blue-600'
+                                  : isDark ? 'text-gray-400' : 'text-gray-500'
+                              }`}>
+                                {wallet.blockchain}
+                              </span>
+                            </div>
+                          </div>
+                          {selectedWallet?.id === wallet.id && (
+                            <div className={`w-4 h-4 rounded-full flex items-center justify-center ${
+                              isDark ? 'bg-blue-500' : 'bg-blue-500'
+                            }`}>
+                              <CheckCircle className="w-3 h-3 text-white" />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+
+              <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                {userWallets.length > 1 
+                  ? `You can select any of your ${userWallets.length} connected wallets for payments`
+                  : activeWallet?.isPrimary 
+                    ? "Using your primary wallet from account settings"
+                    : "Using your connected wallet for payments"
+                }
+                {activeWallet?.walletType === 'external' && (
+                  <div className="mt-1">
+                    <span className="font-medium">External wallet:</span> Requires browser connection for payments
+                  </div>
+                )}
+                {activeWallet?.walletType === 'managed' && (
+                  <div className="mt-1">
+                    <span className="font-medium">Managed wallet:</span> Payments handled automatically
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Tool Info */}
         <div className="space-y-3">
           <div className="flex items-center gap-2">
@@ -948,7 +1286,6 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
           onClick={executeTool}
           disabled={
             !isConnected ||
-            !walletClient ||
             !isInitialized ||
             !mcpToolsCollection[stableTool.name] ||
             execution.status === 'executing' ||
@@ -972,6 +1309,11 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               Switching Network...
+            </>
+          ) : needsBrowserConnection ? (
+            <>
+              <Wallet className="h-4 w-4 mr-2" />
+              Connect Wallet to Execute
             </>
           ) : stableTool.isMonetized && !isOnCorrectNetwork() ? (
             <>

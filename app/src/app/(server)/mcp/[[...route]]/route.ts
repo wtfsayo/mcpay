@@ -14,7 +14,7 @@ import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
 import { attemptAutoSign } from "@/lib/gateway/payment-strategies";
 import { createExactPaymentRequirements, decodePayment, settle, verifyPayment, x402Version } from "@/lib/gateway/payments";
 import { settleResponseHeader, SupportedNetwork } from "@/types/x402";
-import { type AuthType, type MCPTool, type PaymentInfo, type ToolCall, type UserWithWallet } from "@/types";
+import { WalletProvider, WalletType, type AuthType, type MCPTool, type PaymentInfo, type ToolCall, type UserWithWallet } from "@/types";
 import { type Context, Hono } from "hono";
 import { handle } from "hono/vercel";
 
@@ -467,20 +467,30 @@ async function processPayment(params: {
     let extractedUser = user;
 
     // Attempt auto-signing if no payment header exists and payment details are available
-    if (!paymentHeader && toolCall.payment) {
-        console.log(`[${new Date().toISOString()}] No X-PAYMENT header found, attempting auto-signing`);
+    // OR if specific managed wallet headers are present
+    const managedWalletHeaders = c.req.header('x-wallet-provider') === 'coinbase-cdp' && c.req.header('x-wallet-type') === 'managed';
+    const shouldAutoSign = toolCall.payment && (
+        (!paymentHeader) &&
+        managedWalletHeaders
+    );
+
+    console.log(`[${new Date().toISOString()}] Managed wallet headers: ${managedWalletHeaders}`);
+    console.log(`[${new Date().toISOString()}] Should auto-sign: ${shouldAutoSign}`);
+
+    if (shouldAutoSign) {
+        console.log(`[${new Date().toISOString()}] ${!paymentHeader ? 'No X-PAYMENT header found' : 'Managed wallet headers detected'}, attempting auto-signing`);
 
         try {
             // Create a properly typed tool call for auto-signing
             const autoSignToolCall = {
                 isPaid: toolCall.isPaid,
                 payment: {
-                    maxAmountRequired: toolCall.payment.maxAmountRequired,
-                    network: toolCall.payment.network,
-                    asset: toolCall.payment.asset,
-                    payTo: toolCall.payment.payTo,
-                    resource: toolCall.payment.resource,
-                    description: toolCall.payment.description
+                    maxAmountRequired: toolCall.payment!.maxAmountRequired,
+                    network: toolCall.payment!.network,
+                    asset: toolCall.payment!.asset,
+                    payTo: toolCall.payment!.payTo,
+                    resource: toolCall.payment!.resource,
+                    description: toolCall.payment!.description
                 }
             };
 
@@ -514,7 +524,15 @@ async function processPayment(params: {
     }
 
     // Ensure payTo field exists, default to asset address if missing
-    const payTo = toolCall.payment.payTo || toolCall.payment.asset;
+    const payTo = toolCall.payment.payTo;
+
+    if (!payTo) {
+        return {
+            success: false,
+            error: "No payTo address available for paid tool",
+            user: user || undefined
+        };
+    }
 
     const paymentRequirements = [
         createExactPaymentRequirements(

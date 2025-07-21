@@ -181,6 +181,7 @@ export const api = {
         network: string
         resource?: string
         description?: string
+        payTo?: string;
       }
     }>
     metadata?: Record<string, unknown>

@@ -3,6 +3,9 @@ import type { UnifiedNetwork, EVMNetwork } from "@/lib/commons/networks";
 
 export type Wallet = typeof userWallets.$inferSelect
 
+export type WalletProvider = 'coinbase-cdp' | 'privy' | 'metamask' | 'unknown';
+export type WalletType = 'external' | 'managed' | 'custodial';
+
 // Interface for CDP wallet metadata
 export interface CDPWalletMetadata {
     isSmartAccount?: boolean;
@@ -27,6 +30,7 @@ export interface ToolPaymentInfo {
     network: string;
     resource?: string;
     description?: string;
+    payTo?: string;
 }
 
 // Interface for execution headers stored in database
@@ -102,8 +106,9 @@ export interface EnhancedServerRegistration {
             maxAmountRequired: string; // Base units as string for precision
             asset: string;
             network: string;
-            resource?: string;
             description?: string;
+            payTo: string;
+            resource: string;
         };
     }>;
     walletInfo?: WalletRegistrationInfo;

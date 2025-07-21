@@ -5,13 +5,12 @@
  * It provides endpoints for user management, server configuration, and other core functionality.
  */
 
-import { COMMON_DECIMALS, getBlockchainArchitecture, getBlockchainsForArchitecture, getMainnetStablecoinBalances, getStablecoinBalances, getTestnetStablecoinBalances, isSupportedBlockchain } from "@/lib/commons";
+import { getBlockchainArchitecture, getBlockchainsForArchitecture, getMainnetStablecoinBalances, getStablecoinBalances, getTestnetStablecoinBalances, isSupportedBlockchain } from "@/lib/commons";
 import { CDP, createCDPAccount } from "@/lib/gateway/3rd-parties/cdp";
 import { createOneClickBuyUrl, getSupportedAssets, getSupportedNetworks } from "@/lib/gateway/3rd-parties/onramp";
 import { VLayer, type ExecutionContext } from "@/lib/gateway/3rd-parties/vlayer";
 import { auth } from "@/lib/gateway/auth";
 import { generateApiKey } from "@/lib/gateway/auth-utils";
-import db from "@/lib/gateway/db";
 import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
 import { getMcpTools } from "@/lib/gateway/inspect-mcp";
 import { ensureUserHasCDPWallet } from "@/lib/gateway/server-wallets/cdp";
@@ -470,7 +469,9 @@ app.post('/servers', authMiddleware, async (c) => {
                             payment: monetizedTool?.payment ? {
                                 maxAmountRequired: parseFloat(monetizedTool.payment.maxAmountRequired),
                                 asset: monetizedTool.payment.asset,
-                                network: monetizedTool.payment.network
+                                network: monetizedTool.payment.network,
+                                payTo: monetizedTool.payment.payTo,
+                                resource: monetizedTool.payment.resource,
                             } : undefined
                         }
                     })

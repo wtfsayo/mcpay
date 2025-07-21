@@ -2609,7 +2609,9 @@ export const txOperations = {
                         id: true,
                         walletAddress: true,
                         displayName: true,
-                        avatarUrl: true
+                        name: true,
+                        avatarUrl: true,
+                        image: true
                     },
                     with: {
                         wallets: {
@@ -2665,7 +2667,10 @@ export const txOperations = {
                                     columns: {
                                         id: true,
                                         walletAddress: true,
-                                        displayName: true
+                                        displayName: true,
+                                        name: true,
+                                        avatarUrl: true,
+                                        image: true
                                     }
                                 }
                             },
@@ -2685,7 +2690,10 @@ export const txOperations = {
                                     columns: {
                                         id: true,
                                         walletAddress: true,
-                                        displayName: true
+                                        displayName: true,
+                                        name: true,
+                                        avatarUrl: true,
+                                        image: true
                                     }
                                 }
                             },
