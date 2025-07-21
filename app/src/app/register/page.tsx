@@ -957,7 +957,7 @@ X-API-Key: your-api-key`}
                               type="number"
                               step="0.01"
                               min="0"
-                              value={tool.price || "0.10"}
+                              value={tool.price || "0.01"}
                               onChange={(e) => updateToolPrice(tool.name, e.target.value)}
                               className={`w-20 text-sm h-8 ${isDark ? "bg-gray-700 border-gray-600 text-white" : "bg-white border-gray-300 text-gray-900"}`}
                             />
