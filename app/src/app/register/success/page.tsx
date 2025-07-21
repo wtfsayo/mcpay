@@ -11,7 +11,7 @@ import { openBlockscout } from "@/lib/client/blockscout"
 import { api } from "@/lib/client/utils"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { ServerRegistrationData } from "@/types/mcp"
+import { ServerRegistrationData, ServerRegistrationMetadata, ToolPaymentInfo } from "@/types/mcp"
 import { 
   formatTokenAmount,
   fromBaseUnits,
@@ -241,7 +241,7 @@ function RegisterSuccessContent() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8 max-w-lg mx-auto">
               <div className={`p-4 rounded-xl border ${isDark ? "bg-gray-800/50 border-gray-700" : "bg-white border-gray-200"} backdrop-blur-sm`}>
                 <div className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>
-                  {(registrationData.metadata as any)?.toolsCount || 0}
+                  {(registrationData.metadata as ServerRegistrationMetadata)?.toolsCount || 0}
                 </div>
                 <div className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                   Total Tools
@@ -249,7 +249,7 @@ function RegisterSuccessContent() {
               </div>
               <div className={`p-4 rounded-xl border ${isDark ? "bg-gray-800/50 border-gray-700" : "bg-white border-gray-200"} backdrop-blur-sm`}>
                 <div className="text-2xl font-bold text-green-600">
-                  {(registrationData.metadata as any)?.monetizedToolsCount || 0}
+                  {(registrationData.metadata as ServerRegistrationMetadata)?.monetizedToolsCount || 0}
                 </div>
                 <div className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                   Monetized
@@ -416,7 +416,7 @@ function RegisterSuccessContent() {
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary" className="flex items-center gap-1">
                     <DollarSign className="h-3 w-3" />
-                    {(registrationData.metadata as any)?.monetizedToolsCount || 0} monetized
+                    {(registrationData.metadata as ServerRegistrationMetadata)?.monetizedToolsCount || 0} monetized
                   </Badge>
                 </div>
               </div>
@@ -452,12 +452,13 @@ function RegisterSuccessContent() {
                               Price per use
                             </span>
                             <TokenDisplay
-                              currency={(tool.payment as any)?.asset || '0x0000000000000000000000000000000000000000'}
-                              network={(tool.payment as any)?.network || 'base-sepolia'}
+                              currency={(tool.payment as ToolPaymentInfo)?.asset || '0x0000000000000000000000000000000000000000'}
+                              network={(tool.payment as ToolPaymentInfo)?.network || 'base-sepolia'}
                               amount={(() => {
-                                const rawAmount = (tool.payment as any)?.maxAmountRequired;
-                                const network = (tool.payment as any)?.network || 'base-sepolia';
-                                const currency = (tool.payment as any)?.asset || '0x0000000000000000000000000000000000000000';
+                                const paymentInfo = tool.payment as ToolPaymentInfo | undefined;
+                                const rawAmount = paymentInfo?.maxAmountRequired;
+                                const network = paymentInfo?.network || 'base-sepolia';
+                                const currency = paymentInfo?.asset || '0x0000000000000000000000000000000000000000';
                                 
                                 // Debug logging
                                 console.log('Payment data debug:', {
@@ -481,8 +482,8 @@ function RegisterSuccessContent() {
                                 // Convert from base units to human-readable amount
                                 if (rawAmount !== null && rawAmount !== undefined) {
                                   try {
-                                    // Convert to string if it's a number
-                                    const rawAmountStr = typeof rawAmount === 'number' ? rawAmount.toString() : rawAmount;
+                                    // Raw amount should be a string
+                                    const rawAmountStr = String(rawAmount);
                                     const converted = fromBaseUnits(rawAmountStr, decimals);
                                     console.log('Conversion debug:', {
                                       rawAmount,
@@ -509,7 +510,7 @@ function RegisterSuccessContent() {
                                 Network
                               </span>
                               <Badge variant="outline" className="text-xs py-0 px-2">
-                                {(tool.payment as any)?.network || 'base-sepolia'}
+                                {(tool.payment as ToolPaymentInfo)?.network || 'base-sepolia'}
                               </Badge>
                             </div>
                           </div>
@@ -547,7 +548,7 @@ function RegisterSuccessContent() {
                 </h3>
               </div>
               <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                This server doesn't have any tools registered yet. Tools will appear here once they are added to your MCP server.
+                This server doesn&apos;t have any tools registered yet. Tools will appear here once they are added to your MCP server.
               </p>
             </div>
           )}
@@ -643,7 +644,7 @@ function RegisterSuccessContent() {
                         Metadata Timestamp
                       </label>
                       <div className={`p-3 rounded-lg ${isDark ? "bg-gray-800" : "bg-gray-50"} text-sm ${isDark ? "text-gray-300" : "text-gray-600"}`}>
-                        {formatDate((registrationData.metadata as any)?.timestamp || registrationData.createdAt)}
+                        {formatDate((registrationData.metadata as ServerRegistrationMetadata)?.timestamp || registrationData.createdAt)}
                       </div>
                     </div>
 

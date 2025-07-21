@@ -24,6 +24,7 @@ import { signIn, signOut, useSession } from "@/lib/client/auth"
 import { openExplorer } from "@/lib/client/blockscout"
 import { api } from "@/lib/client/utils"
 import { AccountModalProps, BalancesByChain, ChainBalance } from "@/types/ui"
+import { ApiKey } from "@/types/mcp"
 import {
   AlertCircle,
   CheckCircle,
@@ -79,7 +80,7 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'funds' }: AccountM
   const [showDetails, setShowDetails] = useState(false)
 
   // State for Developer tab
-  const [apiKeys, setApiKeys] = useState<any[]>([])
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([])
   const [isLoadingApiKeys, setIsLoadingApiKeys] = useState(false)
   const [newApiKeyPermissions, setNewApiKeyPermissions] = useState<string[]>(['read', 'write', 'execute'])
   const [showNewApiKeyForm, setShowNewApiKeyForm] = useState(false)
@@ -230,7 +231,7 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'funds' }: AccountM
     setIsLoadingApiKeys(true)
     try {
       const keys = await api.getUserApiKeys(session.user.id)
-      setApiKeys(keys as any[])
+      setApiKeys(keys as ApiKey[])
     } catch (error) {
       setError(error instanceof Error ? error.message : "Failed to load API keys")
     } finally {

@@ -14,6 +14,62 @@ export type ToolFromMcpServerWithStats = NonNullable<McpServerWithStats>['tools'
 
 export type ServerSummaryAnalytics = Awaited<ReturnType<ReturnType<typeof txOperations.getServerSummaryAnalytics>>>;
 
+// Enhanced metadata type for server registration
+export interface ServerRegistrationMetadata {
+  timestamp: string;
+  toolsCount: number;
+  monetizedToolsCount: number;
+  registeredFromUI: boolean;
+  [key: string]: unknown; // Allow additional metadata fields
+}
+
+// Tool payment information
+export interface ToolPaymentInfo {
+  asset: string;
+  network: string;
+  maxAmountRequired: string;
+  description?: string;
+  payTo?: string;
+  resource?: string;
+}
+
+// Tool with payment information
+export interface ToolWithPayment {
+  name: string;
+  description: string;
+  inputSchema?: unknown;
+  payment?: ToolPaymentInfo;
+}
+
+// API Key interface
+export interface ApiKey {
+  id: string;
+  name: string;
+  permissions: string[];
+  createdAt: string;
+  lastUsedAt?: string;
+  expiresAt?: string;
+  isActive: boolean;
+}
+
+// Enhanced ServerRegistrationData with proper typing
+export interface EnhancedServerRegistrationData {
+  id: string;
+  serverId: string;
+  mcpOrigin: string;
+  creatorId?: string;
+  receiverAddress: string;
+  requireAuth: boolean;
+  authHeaders?: unknown;
+  createdAt: string;
+  updatedAt: string;
+  status: string;
+  name: string;
+  description: string;
+  tools: ToolWithPayment[];
+  metadata: ServerRegistrationMetadata;
+}
+
 export type ServerRegistrationData = Awaited<ReturnType<ReturnType<typeof txOperations.getServerRegistrationData>>>;
 export type ServerCreateData = Awaited<ReturnType<ReturnType<typeof txOperations.createServer>>>;
 

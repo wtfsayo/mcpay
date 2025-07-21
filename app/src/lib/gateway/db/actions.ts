@@ -2627,7 +2627,7 @@ export const txOperations = {
             timestamp: server.createdAt.toISOString(),
             toolsCount: server.tools.length,
             monetizedToolsCount: server.tools.filter(tool => tool.isMonetized).length,
-            registeredFromUI: (server.metadata as any)?.registeredFromUI || false
+            registeredFromUI: (server.metadata as Record<string, unknown>)?.registeredFromUI || false
         };
 
         // Safely merge additional metadata if it exists and is an object

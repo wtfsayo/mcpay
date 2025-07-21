@@ -1037,7 +1037,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
 
     return (
       <div className="text-center text-sm text-gray-600 dark:text-gray-400 py-2">
-        You'll be charged <span className="font-medium">{formatCurrency(amount, selectedPricing.currency, selectedPricing.network)}</span> via{" "}
+        You&apos;ll be charged <span className="font-medium">{formatCurrency(amount, selectedPricing.currency, selectedPricing.network)}</span> via{" "}
         <span className="font-medium">{activeWallet?.provider || 'your wallet'}</span>
       </div>
     )
