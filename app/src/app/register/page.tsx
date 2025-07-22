@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+import { Suspense } from "react"
 
 import { AccountModal } from "@/components/custom-ui/account-modal"
 import { useAccountModal } from "@/components/hooks/use-account-modal"
@@ -63,7 +64,8 @@ const generateDisplayNameFromUrl = (urlStr: string): string => {
   }
 }
 
-export default function RegisterPage() {
+// Component that uses searchParams - needs to be wrapped in Suspense
+function RegisterPageContent() {
   const { isDark } = useTheme()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -1021,5 +1023,47 @@ X-API-Key: your-api-key`}
         defaultTab="wallets"
       />
     </div>
+  )
+}
+
+// Loading fallback component
+function RegisterPageLoading() {
+  const { isDark } = useTheme()
+  
+  return (
+    <div className={`min-h-screen ${isDark ? 'bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950' : 'bg-gradient-to-br from-gray-50 via-white to-gray-50'}`}>
+      <div className={`border-b ${isDark ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white/50'} backdrop-blur-sm sticky top-0 z-10`}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex items-center gap-4">
+            <div className={`p-3 rounded-xl ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
+              <Server className={`h-8 w-8 ${isDark ? 'text-gray-300' : 'text-gray-700'}`} />
+            </div>
+            <div>
+              <h1 className={`text-2xl sm:text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Register MCP Server
+              </h1>
+              <p className={`text-base ${isDark ? 'text-gray-400' : 'text-gray-600'} mt-1`}>
+                Loading...
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className={`h-8 w-8 animate-spin ${isDark ? 'text-gray-400' : 'text-gray-500'}`} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Main export with Suspense boundary
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<RegisterPageLoading />}>
+      <RegisterPageContent />
+    </Suspense>
   )
 }
