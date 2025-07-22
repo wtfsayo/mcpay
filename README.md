@@ -144,7 +144,7 @@ Contributions are welcome! If you'd like to contribute, please feel free to fork
 
 This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
 
----
+
 
 
 [1]: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/402?utm_source=chatgpt.com "402 Payment Required - HTTP - MDN Web Docs - Mozilla"
