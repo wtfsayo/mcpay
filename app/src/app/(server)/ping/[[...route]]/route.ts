@@ -7,7 +7,10 @@ export const runtime = 'nodejs'
 
 const app = new Hono().basePath('/ping')
 
-app.get('/', (c) => {
+app.post('/', async (c) => {
+    console.log('Ping received');
+    const body = await c.req.json();
+    console.log(body);
     return c.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
@@ -15,4 +18,4 @@ app.get('/', (c) => {
     });
 });
 
-export const GET = handle(app);
+export const POST = handle(app);
