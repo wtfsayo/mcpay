@@ -153,8 +153,12 @@ export async function createCDPAccount(options: CreateCDPWalletOptions = {}): Pr
         if (options.createSmartAccount && supportsSmartAccounts(network)) {
             console.log("[CDP] Creating smart account...");
             try {
+                // Ensure smart account name doesn't exceed 36 characters
+                const smartAccountName = accountName.length > 30 
+                    ? `${accountName.slice(0, 30)}-smart`
+                    : `${accountName}-smart`;
                 const smartAccount = await cdp.evm.getOrCreateSmartAccount({
-                    name: `${accountName}-smart`,
+                    name: smartAccountName,
                     owner: account,
                 });
                 console.log("[CDP] Smart account created successfully");
@@ -212,10 +216,14 @@ export async function createCDPSmartAccount(
             name: ownerAccountName,
         });
         
-        // Create smart account
+        // Create smart account with proper name length validation
         const smartAccountNameToUse = smartAccountName || `smart-${ownerAccountName}-${randomUUID()}`;
+        // Ensure smart account name doesn't exceed 36 characters
+        const truncatedName = smartAccountNameToUse.length > 36 
+            ? smartAccountNameToUse.slice(0, 36)
+            : smartAccountNameToUse;
         const smartAccount = await cdp.evm.getOrCreateSmartAccount({
-            name: smartAccountNameToUse,
+            name: truncatedName,
             owner: ownerAccount,
         });
         

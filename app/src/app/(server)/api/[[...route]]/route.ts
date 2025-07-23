@@ -13,7 +13,6 @@ import { auth } from "@/lib/gateway/auth";
 import { generateApiKey } from "@/lib/gateway/auth-utils";
 import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
 import { getMcpTools } from "@/lib/gateway/inspect-mcp";
-import { ensureUserHasCDPWallet } from "@/lib/gateway/server-wallets/cdp";
 import { AppContext, CDPNetwork, CDPWalletMetadata, ExecutionHeaders, McpServerWithActivity, McpServerWithRelations, ToolPaymentInfo, type CreateCDPWalletOptions } from "@/types";
 import { type AuthType } from "@/types/auth";
 import { type BlockchainArchitecture } from "@/types/blockchain";
@@ -45,15 +44,15 @@ function serializeBigInts<T>(obj: T): SerializeBigInts<T> {
     if (obj === null || obj === undefined) {
         return obj as SerializeBigInts<T>;
     }
-    
+
     if (typeof obj === 'bigint') {
         return obj.toString() as SerializeBigInts<T>;
     }
-    
+
     if (Array.isArray(obj)) {
         return obj.map(serializeBigInts) as SerializeBigInts<T>;
     }
-    
+
     if (typeof obj === 'object') {
         const serialized = {} as Record<string, unknown>;
         for (const [key, value] of Object.entries(obj)) {
@@ -61,7 +60,7 @@ function serializeBigInts<T>(obj: T): SerializeBigInts<T> {
         }
         return serialized as SerializeBigInts<T>;
     }
-    
+
     return obj as SerializeBigInts<T>;
 }
 
@@ -99,7 +98,7 @@ function serializeBigInts<T>(obj: T): SerializeBigInts<T> {
 const authMiddleware = async (c: Context<AppContext>, next: Next) => {
     try {
         const authResult = await auth.api.getSession({ headers: c.req.raw.headers });
-        
+
         if (!authResult?.session || !authResult?.user) {
             return c.json({ error: 'Unauthorized - No valid session found' }, 401);
         }
@@ -107,7 +106,7 @@ const authMiddleware = async (c: Context<AppContext>, next: Next) => {
         // Add session and user to context
         c.set('session', authResult.session);
         c.set('user', authResult.user);
-        
+
         // Add helper method to get authenticated user
         c.set('requireUser', () => {
             const user = c.get('user');
@@ -117,14 +116,9 @@ const authMiddleware = async (c: Context<AppContext>, next: Next) => {
             return user;
         });
 
-        // Auto-create CDP wallet for user if they don't have one
-        // This runs in background and won't block the request
-        await ensureUserHasCDPWallet(authResult.user.id, {
-            email: authResult.user.email,
-            name: authResult.user.name,
-            displayName: authResult.user.displayName,
-        });
-        
+        // Note: CDP wallet auto-creation is now handled by better-auth hooks
+        // in auth.ts to prevent race conditions and multiple simultaneous creations
+
         await next();
     } catch (error) {
         console.error('Auth middleware error:', error);
@@ -136,11 +130,11 @@ const authMiddleware = async (c: Context<AppContext>, next: Next) => {
 const optionalAuthMiddleware = async (c: Context<AppContext>, next: Next) => {
     try {
         const authResult = await auth.api.getSession({ headers: c.req.raw.headers });
-        
+
         if (authResult?.session && authResult?.user) {
             c.set('session', authResult.session);
             c.set('user', authResult.user);
-            
+
             // Add helper method
             c.set('requireUser', () => {
                 const user = c.get('user');
@@ -150,15 +144,10 @@ const optionalAuthMiddleware = async (c: Context<AppContext>, next: Next) => {
                 return user;
             });
 
-            // Auto-create CDP wallet for authenticated user if they don't have one
-            // This runs in background and won't block the request
-            await ensureUserHasCDPWallet(authResult.user.id, {
-                email: authResult.user.email,
-                name: authResult.user.name,
-                displayName: authResult.user.displayName,
-            });
+            // Note: CDP wallet auto-creation is now handled by better-auth hooks
+            // in auth.ts to prevent race conditions and multiple simultaneous creations
         }
-        
+
         await next();
     } catch (error) {
         // Silently continue without session for optional auth
@@ -280,7 +269,7 @@ app.get('/servers/search', async (c) => {
     // Basic rate limiting check (could be enhanced with Redis or similar)
     const userAgent = c.req.header('User-Agent') || 'unknown'
     const clientIP = c.req.header('X-Forwarded-For') || c.req.header('CF-Connecting-IP') || 'unknown'
-    
+
     // Log the search for monitoring (in production, you might want to implement proper rate limiting)
     console.log(`Search request: "${trimmedSearchTerm}" from IP: ${clientIP}, UA: ${userAgent}`)
 
@@ -295,24 +284,24 @@ app.get('/servers/search', async (c) => {
         return c.json(safeServers)
     } catch (error) {
         console.error('Error searching servers:', error)
-        
+
         // Don't expose internal error details to client
         if (error instanceof Error) {
             // Only expose validation errors
-            if (error.message.includes('Invalid search term') || 
-                error.message.includes('Search term too short') || 
+            if (error.message.includes('Invalid search term') ||
+                error.message.includes('Search term too short') ||
                 error.message.includes('Search term too long')) {
                 return c.json({ error: error.message }, 400)
             }
         }
-        
+
         return c.json({ error: 'Search failed. Please try again.' }, 500)
     }
 })
 
 app.get('/servers/:id', async (c) => {
     const serverId = c.req.param('id')
-    
+
     try {
         const [server, dailyAnalytics, summaryAnalytics] = await withTransaction(async (tx) => {
             const server = await txOperations.getMcpServerWithStats(serverId)(tx);
@@ -344,11 +333,11 @@ app.get('/servers/:id', async (c) => {
 app.get('/servers/:id/registration', authMiddleware, async (c) => {
     const serverId = c.req.param('id')
     const user = c.get('requireUser')()
-    
+
     try {
         const registrationData = await withTransaction(async (tx) => {
             const data = await txOperations.getServerRegistrationData(serverId)(tx);
-            
+
             if (!data) {
                 return null;
             }
@@ -368,11 +357,11 @@ app.get('/servers/:id/registration', authMiddleware, async (c) => {
         return c.json(registrationData);
     } catch (error) {
         console.error('Error fetching server registration:', error);
-        
+
         if (error instanceof Error && error.message.includes('Forbidden')) {
             return c.json({ error: 'Forbidden - You can only view registration details for servers you created' }, 403);
         }
-        
+
         return c.json({ error: 'Internal server error' }, 500);
     }
 })
@@ -592,12 +581,12 @@ app.post('/proofs', async (c) => {
                 inconsistencies: verificationResult.inconsistencies,
                 webProofPresentation: verificationResult.proof?.webProof?.presentation,
                 notaryUrl: data.executionUrl ? 'https://test-notary.vlayer.xyz' : undefined,
-                proofMetadata: verificationResult.proof?.webProof ? { 
+                proofMetadata: verificationResult.proof?.webProof ? {
                     hasWebProof: true,
-                    toolMetadata: data.toolMetadata 
-                } : { 
+                    toolMetadata: data.toolMetadata
+                } : {
                     hasWebProof: false,
-                    toolMetadata: data.toolMetadata 
+                    toolMetadata: data.toolMetadata
                 },
                 verificationType: 'execution'
             })(tx);
@@ -637,8 +626,8 @@ app.get('/proofs', async (c) => {
     try {
         const limit = c.req.query('limit') ? parseInt(c.req.query('limit') as string) : 10;
         const offset = c.req.query('offset') ? parseInt(c.req.query('offset') as string) : 0;
-        const isConsistent = c.req.query('isConsistent') === 'true' ? true : 
-                             c.req.query('isConsistent') === 'false' ? false : undefined;
+        const isConsistent = c.req.query('isConsistent') === 'true' ? true :
+            c.req.query('isConsistent') === 'false' ? false : undefined;
         const verificationType = c.req.query('verificationType') as string;
         const status = c.req.query('status') as string;
 
@@ -736,10 +725,10 @@ app.get('/proofs/stats', async (c) => {
 app.post('/proofs/:id/verify', async (c) => {
     try {
         const id = c.req.param('id');
-        
+
         // Get the proof from database
         const proof = await withTransaction(txOperations.getProofById(id));
-        
+
         if (!proof) {
             return c.json({ error: 'Proof not found' }, 404);
         }
@@ -766,7 +755,7 @@ app.post('/proofs/:id/verify', async (c) => {
         if (verificationResult.isConsistent !== proof.isConsistent) {
             await withTransaction(async (tx) => {
                 return await txOperations.updateProofStatus(
-                    id, 
+                    id,
                     verificationResult.isConsistent ? 'verified' : 'invalid'
                 )(tx);
             });
@@ -790,7 +779,7 @@ app.post('/proofs/:id/verify', async (c) => {
 app.get('/servers/:serverId/reputation', async (c) => {
     try {
         const serverId = c.req.param('serverId');
-        
+
         // Get recent proofs for the server
         const recentProofs = await withTransaction(async (tx) => {
             return await txOperations.getRecentServerProofs(serverId, 30)(tx);
@@ -828,15 +817,15 @@ app.get('/users/:userId/wallets', authMiddleware, async (c) => {
     try {
         const userId = c.req.param('userId');
         const user = c.get('requireUser')();
-        
+
         // Check if user is accessing their own wallets
         if (user.id !== userId) {
             return c.json({ error: 'Forbidden - Cannot access other user\'s wallets' }, 403);
         }
-        
+
         const includeInactive = c.req.query('includeInactive') === 'true';
         const includeTestnet = c.req.query('includeTestnet') === 'true';
-        
+
         const wallets = await withTransaction(async (tx) => {
             return await txOperations.getUserWallets(userId, !includeInactive)(tx);
         });
@@ -851,7 +840,7 @@ app.get('/users/:userId/wallets', authMiddleware, async (c) => {
             mainnetBalances: stablecoinBalances.mainnetBalances,
             mainnetBalancesByChain: stablecoinBalances.mainnetBalancesByChain,
             mainnetBalancesByStablecoin: stablecoinBalances.mainnetBalancesByStablecoin,
-            
+
             // Include testnet balances if requested
             ...(includeTestnet && {
                 testnetTotalFiatValue: stablecoinBalances.testnetTotalFiatValue?.toString(),
@@ -859,7 +848,7 @@ app.get('/users/:userId/wallets', authMiddleware, async (c) => {
                 testnetBalancesByChain: stablecoinBalances.testnetBalancesByChain,
                 testnetBalancesByStablecoin: stablecoinBalances.testnetBalancesByStablecoin,
             }),
-            
+
             // Summary information
             summary: {
                 ...stablecoinBalances.summary,
@@ -891,12 +880,12 @@ app.post('/users/:userId/wallets', authMiddleware, async (c) => {
     try {
         const userId = c.req.param('userId');
         const user = c.get('requireUser')();
-        
+
         // Check if user is adding wallet to their own account
         if (user.id !== userId) {
             return c.json({ error: 'Forbidden - Cannot add wallet to another user\'s account' }, 403);
         }
-        
+
         const data = await c.req.json() as {
             walletAddress: string;
             walletType: 'external' | 'managed' | 'custodial';
@@ -930,7 +919,7 @@ app.put('/users/:userId/wallets/:walletId/primary', authMiddleware, async (c) =>
         const userId = c.req.param('userId');
         const walletId = c.req.param('walletId');
         const user = c.get('requireUser')();
-        
+
         // Check if user is modifying their own wallet
         if (user.id !== userId) {
             return c.json({ error: 'Forbidden - Cannot modify another user\'s wallet' }, 403);
@@ -952,7 +941,7 @@ app.delete('/users/:userId/wallets/:walletId', authMiddleware, async (c) => {
         const userId = c.req.param('userId');
         const walletId = c.req.param('walletId');
         const user = c.get('requireUser')();
-        
+
         // Check if user is deleting their own wallet
         if (user.id !== userId) {
             return c.json({ error: 'Forbidden - Cannot delete another user\'s wallet' }, 403);
@@ -973,12 +962,12 @@ app.post('/users/:userId/wallets/managed', authMiddleware, async (c) => {
     try {
         const userId = c.req.param('userId');
         const user = c.get('requireUser')();
-        
+
         // Check if user is creating managed wallet for their own account
         if (user.id !== userId) {
             return c.json({ error: 'Forbidden - Cannot create managed wallet for another user' }, 403);
         }
-        
+
         const data = await c.req.json() as {
             walletAddress: string;
             provider: string; // 'coinbase-cdp', 'privy', 'magic', etc.
@@ -992,8 +981,8 @@ app.post('/users/:userId/wallets/managed', authMiddleware, async (c) => {
 
         // Validate required fields
         if (!data.walletAddress || !data.provider || !data.externalWalletId) {
-            return c.json({ 
-                error: 'Missing required fields: walletAddress, provider, and externalWalletId are required' 
+            return c.json({
+                error: 'Missing required fields: walletAddress, provider, and externalWalletId are required'
             }, 400);
         }
 
@@ -1017,7 +1006,7 @@ app.post('/users/:userId/wallets/managed', authMiddleware, async (c) => {
 app.get('/wallets/:walletAddress/user', async (c) => {
     try {
         const walletAddress = c.req.param('walletAddress');
-        
+
         const walletRecord = await withTransaction(async (tx) => {
             return await txOperations.getWalletByAddress(walletAddress)(tx);
         });
@@ -1040,7 +1029,7 @@ app.post('/users/:userId/migrate-legacy-wallet', authMiddleware, async (c) => {
     try {
         const userId = c.req.param('userId');
         const user = c.get('requireUser')();
-        
+
         // Check if user is migrating their own wallet
         if (user.id !== userId) {
             return c.json({ error: 'Forbidden - Cannot migrate another user\'s wallet' }, 403);
@@ -1067,12 +1056,12 @@ app.post('/users/:userId/wallets/cdp', authMiddleware, async (c) => {
     try {
         const userId = c.req.param('userId');
         const user = c.get('requireUser')();
-        
+
         // Check if user is creating CDP wallet for their own account
         if (user.id !== userId) {
             return c.json({ error: 'Forbidden - Cannot create CDP wallet for another user' }, 403);
         }
-        
+
         const data = await c.req.json() as {
             accountName?: string;
             network?: CDPNetwork;
@@ -1146,7 +1135,7 @@ app.get('/users/:userId/wallets/cdp', authMiddleware, async (c) => {
     try {
         const userId = c.req.param('userId');
         const user = c.get('requireUser')();
-        
+
         // Check if user is accessing their own CDP wallets
         if (user.id !== userId) {
             return c.json({ error: 'Forbidden - Cannot access other user\'s CDP wallets' }, 403);
@@ -1168,7 +1157,7 @@ app.post('/users/:userId/wallets/cdp/:accountId/faucet', authMiddleware, async (
         const userId = c.req.param('userId');
         const accountId = c.req.param('accountId');
         const user = c.get('requireUser')();
-        
+
         // Check if user owns the CDP wallet
         if (user.id !== userId) {
             return c.json({ error: 'Forbidden - Cannot request faucet for another user\'s wallet' }, 403);
@@ -1194,7 +1183,7 @@ app.post('/users/:userId/wallets/cdp/:accountId/faucet', authMiddleware, async (
         // Request faucet funds
         try {
             await CDP.requestFaucet(accountId, network, token);
-            
+
             // Update wallet metadata with faucet request
             await withTransaction(async (tx) => {
                 return await txOperations.updateCDPWalletMetadata(wallet.id, {
@@ -1209,8 +1198,8 @@ app.post('/users/:userId/wallets/cdp/:accountId/faucet', authMiddleware, async (
                 network
             });
         } catch (faucetError) {
-            return c.json({ 
-                error: `Faucet request failed: ${faucetError instanceof Error ? faucetError.message : 'Unknown error'}` 
+            return c.json({
+                error: `Faucet request failed: ${faucetError instanceof Error ? faucetError.message : 'Unknown error'}`
             }, 400);
         }
     } catch (error) {
@@ -1224,7 +1213,7 @@ app.get('/users/:userId/wallets/cdp/:accountId/balances', authMiddleware, async 
         const userId = c.req.param('userId');
         const accountId = c.req.param('accountId');
         const user = c.get('requireUser')();
-        
+
         // Check if user owns the CDP wallet
         if (user.id !== userId) {
             return c.json({ error: 'Forbidden - Cannot access another user\'s wallet balances' }, 403);
@@ -1247,9 +1236,9 @@ app.get('/users/:userId/wallets/cdp/:accountId/balances', authMiddleware, async 
             const ownerAccountId = metadata?.ownerAccountId;
 
             const balances = await CDP.getBalances(
-                accountId, 
-                network, 
-                isSmartAccount, 
+                accountId,
+                network,
+                isSmartAccount,
                 ownerAccountId
             );
 
@@ -1269,8 +1258,8 @@ app.get('/users/:userId/wallets/cdp/:accountId/balances', authMiddleware, async 
                 walletAddress: wallet.walletAddress
             });
         } catch (balanceError) {
-            return c.json({ 
-                error: `Failed to get balances: ${balanceError instanceof Error ? balanceError.message : 'Unknown error'}` 
+            return c.json({
+                error: `Failed to get balances: ${balanceError instanceof Error ? balanceError.message : 'Unknown error'}`
             }, 400);
         }
     } catch (error) {
@@ -1298,7 +1287,7 @@ app.post('/users/:userId/wallets/cdp/ensure', authMiddleware, async (c) => {
     try {
         const userId = c.req.param('userId');
         const user = c.get('requireUser')();
-        
+
         // Check if user is creating CDP wallet for their own account
         if (user.id !== userId) {
             return c.json({ error: 'Forbidden - Cannot ensure CDP wallet for another user' }, 403);
@@ -1312,7 +1301,7 @@ app.post('/users/:userId/wallets/cdp/ensure', authMiddleware, async (c) => {
                 email: user.email || undefined,
                 name: user.name || undefined,
                 displayName: user.displayName || undefined,
-            })(tx);
+            }, { createSmartAccount: false })(tx);
         });
 
         if (result) {
@@ -1346,7 +1335,7 @@ app.post('/users/:userId/onramp/buy-url', authMiddleware, async (c) => {
     try {
         const userId = c.req.param('userId');
         const user = c.get('requireUser')();
-        
+
         // Check if user is generating URL for their own account
         if (user.id !== userId) {
             return c.json({ error: 'Forbidden - Cannot generate onramp URL for another user' }, 403);
@@ -1395,8 +1384,8 @@ app.post('/users/:userId/onramp/buy-url', authMiddleware, async (c) => {
             });
         } catch (onrampError) {
             console.error('Error creating onramp URL:', onrampError);
-            return c.json({ 
-                error: `Failed to create onramp URL: ${onrampError instanceof Error ? onrampError.message : 'Unknown error'}` 
+            return c.json({
+                error: `Failed to create onramp URL: ${onrampError instanceof Error ? onrampError.message : 'Unknown error'}`
             }, 500);
         }
     } catch (error) {
@@ -1442,14 +1431,14 @@ app.get('/users/:userId/wallets/mainnet-balances', authMiddleware, async (c) => 
     try {
         const userId = c.req.param('userId');
         const user = c.get('requireUser')();
-        
+
         // Check if user is accessing their own wallets
         if (user.id !== userId) {
             return c.json({ error: 'Forbidden - Cannot access other user\'s mainnet balances' }, 403);
         }
-        
+
         const includeInactive = c.req.query('includeInactive') === 'true';
-        
+
         const wallets = await withTransaction(async (tx) => {
             return await txOperations.getUserWallets(userId, !includeInactive)(tx);
         });
@@ -1484,14 +1473,14 @@ app.get('/users/:userId/wallets/testnet-balances', authMiddleware, async (c) => 
     try {
         const userId = c.req.param('userId');
         const user = c.get('requireUser')();
-        
+
         // Check if user is accessing their own wallets
         if (user.id !== userId) {
             return c.json({ error: 'Forbidden - Cannot access other user\'s testnet balances' }, 403);
         }
-        
+
         const includeInactive = c.req.query('includeInactive') === 'true';
-        
+
         const wallets = await withTransaction(async (tx) => {
             return await txOperations.getUserWallets(userId, !includeInactive)(tx);
         });
@@ -1526,12 +1515,12 @@ app.get('/users/:userId/api-keys', authMiddleware, async (c) => {
     try {
         const userId = c.req.param('userId');
         const user = c.get('requireUser')();
-        
+
         // Check if user is accessing their own API keys
         if (user.id !== userId) {
             return c.json({ error: 'Forbidden - Cannot access other user\'s API keys' }, 403);
         }
-        
+
         const apiKeys = await withTransaction(async (tx) => {
             return await txOperations.getUserApiKeys(userId)(tx);
         });
@@ -1547,12 +1536,12 @@ app.post('/users/:userId/api-keys', authMiddleware, async (c) => {
     try {
         const userId = c.req.param('userId');
         const user = c.get('requireUser')();
-        
+
         // Check if user is creating API key for their own account
         if (user.id !== userId) {
             return c.json({ error: 'Forbidden - Cannot create API key for another user' }, 403);
         }
-        
+
         const data = await c.req.json() as {
             name: string;
             permissions: string[];
@@ -1570,7 +1559,7 @@ app.post('/users/:userId/api-keys', authMiddleware, async (c) => {
 
         // Generate API key
         const { apiKey, keyHash } = generateApiKey();
-        
+
         // Calculate expiration date if provided
         let expiresAt: Date | undefined;
         if (data.expiresInDays && data.expiresInDays > 0) {
@@ -1610,7 +1599,7 @@ app.delete('/users/:userId/api-keys/:keyId', authMiddleware, async (c) => {
         const userId = c.req.param('userId');
         const keyId = c.req.param('keyId');
         const user = c.get('requireUser')();
-        
+
         // Check if user is deleting their own API key
         if (user.id !== userId) {
             return c.json({ error: 'Forbidden - Cannot delete another user\'s API key' }, 403);
@@ -1639,19 +1628,19 @@ app.get('/users/:userId/tool-usage', authMiddleware, async (c) => {
     try {
         const userId = c.req.param('userId');
         const user = c.get('requireUser')();
-        
+
         // Check if user is accessing their own history
         if (user.id !== userId) {
             return c.json({ error: 'Forbidden - Cannot access other user\'s history' }, 403);
         }
-        
+
         const limit = c.req.query('limit') ? parseInt(c.req.query('limit') as string) : 50;
         const offset = c.req.query('offset') ? parseInt(c.req.query('offset') as string) : 0;
-        
+
         if (limit > 100) {
             return c.json({ error: 'Limit cannot exceed 100' }, 400);
         }
-        
+
         const toolUsage = await withTransaction(async (tx) => {
             return await txOperations.getUserToolUsageHistory(userId, limit, offset)(tx);
         });
@@ -1667,19 +1656,19 @@ app.get('/users/:userId/payments', authMiddleware, async (c) => {
     try {
         const userId = c.req.param('userId');
         const user = c.get('requireUser')();
-        
+
         // Check if user is accessing their own payment history
         if (user.id !== userId) {
             return c.json({ error: 'Forbidden - Cannot access other user\'s payment history' }, 403);
         }
-        
+
         const limit = c.req.query('limit') ? parseInt(c.req.query('limit') as string) : 50;
         const offset = c.req.query('offset') ? parseInt(c.req.query('offset') as string) : 0;
-        
+
         if (limit > 100) {
             return c.json({ error: 'Limit cannot exceed 100' }, 400);
         }
-        
+
         const payments = await withTransaction(async (tx) => {
             return await txOperations.getUserPaymentHistory(userId, limit, offset)(tx);
         });
@@ -1699,7 +1688,7 @@ app.get('/auto-signing/config', optionalAuthMiddleware, async (c) => {
         // Import config dynamically to avoid issues
         const { getConfig } = await import('@/lib/gateway/payment-strategies/config');
         const config = getConfig();
-        
+
         // Return a safe subset of config for client information
         return c.json({
             enabled: config.enabled,

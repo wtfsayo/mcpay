@@ -55,6 +55,7 @@ import {
 } from "@/lib/gateway/db/schema";
 import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import { ToolPaymentInfo } from '@/types/mcp';
+import { type CDPNetwork } from '@/types/wallet';
 
 // Define proper transaction type
 export type TransactionType = Parameters<Parameters<typeof db['transaction']>[0]>[0];
@@ -1551,8 +1552,17 @@ export const txOperations = {
         email?: string;
         name?: string;
         displayName?: string;
+    }, options?: {
+        createSmartAccount?: boolean;
+        network?: CDPNetwork;
     }) => async (tx: TransactionType) => {
         console.log(`[DEBUG] Starting CDP wallet auto-creation for user ${userId}`);
+        
+        // Extract options with defaults
+        const createSmartAccount = options?.createSmartAccount ?? false; // Default to true for backward compatibility
+        const network = options?.network ?? 'base-sepolia';
+        
+        console.log(`[DEBUG] Options - createSmartAccount: ${createSmartAccount}, network: ${network}`);
         
         try {
             // Check if user already has CDP wallets
@@ -1565,19 +1575,28 @@ export const txOperations = {
                 return null;
             }
 
-            // Generate account name based on user info
+            // Generate account name based on user info (max 28 chars to allow for "-smart" suffix)
+            // CDP requires names to be 2-36 characters, alphanumeric + hyphens only
+            const timestamp = Date.now().toString().slice(-8); // Last 8 digits of timestamp
             const accountName = userInfo.displayName 
-                ? `mcpay-${userInfo.displayName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now()}`
-                : `mcpay-user-${userId.slice(0, 8)}-${Date.now()}`;
+                ? `mcpay-${userInfo.displayName.toLowerCase().replace(/[^a-z0-9]/g, '-').slice(0, 10)}-${timestamp}`
+                : `mcpay-${userId.slice(0, 8)}-${timestamp}`;
 
             console.log(`[DEBUG] Auto-creating CDP wallet for user ${userId} with account name: ${accountName}`);
 
-            // Create CDP account with smart account for better UX
+            // Double-check if user already has CDP wallets (race condition protection)
+            const hasCDPWalletsAgain = await txOperations.userHasCDPWallets(userId)(tx);
+            if (hasCDPWalletsAgain) {
+                console.log(`User ${userId} already has CDP wallets (race condition detected), skipping auto-creation`);
+                return null;
+            }
+
+            // Create CDP account with optional smart account
             console.log(`[DEBUG] Calling createCDPAccount...`);
             const cdpResult = await createCDPAccount({
                 accountName,
-                network: 'base-sepolia', // Start with testnet
-                createSmartAccount: true, // Enable gas sponsorship
+                network, // Use configured network
+                createSmartAccount, // Use configured smart account option
             });
             console.log(`[DEBUG] CDP account creation result:`, cdpResult);
 
@@ -1585,13 +1604,23 @@ export const txOperations = {
 
             // Store main account
             console.log(`[DEBUG] Storing main account in database...`);
+            
+            // Check if user already has a primary wallet to avoid constraint violations
+            const existingPrimaryWallet = await tx.query.userWallets.findFirst({
+                where: and(
+                    eq(userWallets.userId, userId),
+                    eq(userWallets.isPrimary, true),
+                    eq(userWallets.isActive, true)
+                )
+            });
+            
             const mainWallet = await txOperations.createCDPManagedWallet(userId, {
                 walletAddress: cdpResult.account.walletAddress,
                 accountId: cdpResult.account.accountId,
                 accountName: cdpResult.account.accountName || cdpResult.account.accountId,
                 network: cdpResult.account.network,
                 isSmartAccount: false,
-                isPrimary: true, // Make the first CDP wallet primary
+                isPrimary: !existingPrimaryWallet, // Only set as primary if no existing primary wallet
             })(tx);
             
             if (mainWallet) {
