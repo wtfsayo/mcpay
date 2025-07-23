@@ -54,6 +54,7 @@ import {
     type RevenueDetails
 } from "@/lib/gateway/db/schema";
 import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
+import { ToolPaymentInfo } from '@/types/mcp';
 
 // Define proper transaction type
 export type TransactionType = Parameters<Parameters<typeof db['transaction']>[0]>[0];
@@ -130,6 +131,102 @@ export const txOperations = {
         return server[0];
     },
 
+    updateServer: (serverId: string, data: {
+        name?: string;
+        description?: string;
+        requireAuth?: boolean;
+        authHeaders?: Record<string, unknown>;
+        metadata?: Record<string, unknown>;
+        status?: string;
+    }) => async (tx: TransactionType) => {
+        const server = await tx.update(mcpServers)
+            .set({
+                ...data,
+                updatedAt: new Date()
+            })
+            .where(eq(mcpServers.id, serverId))
+            .returning();
+
+        if (!server[0]) throw new Error(`Server with ID ${serverId} not found`);
+        return server[0];
+    },
+
+    updateServerFromPing: (serverId: string, data: {
+        name?: string;
+        description?: string;
+        metadata?: Record<string, unknown>;
+        toolsData: Array<{
+            name: string;
+            description: string;
+            inputSchema: Record<string, unknown>;
+            payment?: ToolPaymentInfo;
+        }>;
+    }) => async (tx: TransactionType) => {
+        // Update server metadata
+        const server = await tx.update(mcpServers)
+            .set({
+                name: data.name,
+                description: data.description,
+                metadata: {
+                    ...data.metadata,
+                    lastPing: new Date().toISOString(),
+                    toolsCount: data.toolsData.length,
+                    monetizedToolsCount: data.toolsData.filter(t => t.payment).length
+                },
+                updatedAt: new Date()
+            })
+            .where(eq(mcpServers.id, serverId))
+            .returning();
+
+        if (!server[0]) throw new Error(`Server with ID ${serverId} not found`);
+
+        // Get existing tools for this server
+        const existingTools = await tx.query.mcpTools.findMany({
+            where: eq(mcpTools.serverId, serverId),
+        });
+
+        // Update or create tools
+        const toolResults = [];
+        for (const toolData of data.toolsData) {
+            const existingTool = existingTools.find(t => t.name === toolData.name);
+            
+            if (existingTool) {
+                // Update existing tool
+                const updatedTool = await tx.update(mcpTools)
+                    .set({
+                        description: toolData.description,
+                        inputSchema: toolData.inputSchema,
+                        isMonetized: !!toolData.payment,
+                        payment: toolData.payment,
+                        updatedAt: new Date()
+                    })
+                    .where(eq(mcpTools.id, existingTool.id))
+                    .returning();
+                
+                toolResults.push(updatedTool[0]);
+            } else {
+                // Create new tool
+                const newTool = await tx.insert(mcpTools).values({
+                    serverId: serverId,
+                    name: toolData.name,
+                    description: toolData.description,
+                    inputSchema: toolData.inputSchema,
+                    isMonetized: !!toolData.payment,
+                    payment: toolData.payment,
+                    createdAt: new Date(),
+                    updatedAt: new Date()
+                }).returning();
+                
+                toolResults.push(newTool[0]);
+            }
+        }
+
+        return {
+            server: server[0],
+            tools: toolResults
+        };
+    },
+
     getMcpServer: (id: string) => async (tx: TransactionType) => {
         return await tx.query.mcpServers.findFirst({
             where: eq(mcpServers.id, id),
@@ -164,6 +261,51 @@ export const txOperations = {
                 status: true,
                 createdAt: true,
                 updatedAt: true
+            }
+        });
+    },
+
+    getMcpServerByOrigin: (mcpOrigin: string) => async (tx: TransactionType) => {
+        return await tx.query.mcpServers.findFirst({
+            where: eq(mcpServers.mcpOrigin, mcpOrigin),
+            columns: {
+                id: true,
+                serverId: true,
+                mcpOrigin: true,
+                creatorId: true,
+                receiverAddress: true,
+                requireAuth: true,
+                authHeaders: true,
+                description: true,
+                name: true,
+                metadata: true,
+                status: true,
+                createdAt: true,
+                updatedAt: true
+            },
+            with: {
+                creator: {
+                    columns: {
+                        id: true,
+                        walletAddress: true,
+                        displayName: true,
+                        avatarUrl: true
+                    }
+                },
+                tools: {
+                    columns: {
+                        id: true,
+                        name: true,
+                        description: true,
+                        inputSchema: true,
+                        isMonetized: true,
+                        payment: true,
+                        status: true,
+                        metadata: true,
+                        createdAt: true,
+                        updatedAt: true
+                    }
+                }
             }
         });
     },

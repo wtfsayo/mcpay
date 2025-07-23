@@ -292,15 +292,20 @@ await client.connect(transport)
 
     // If we have network info, try to get token info from registry
     if (network) {
-      const tokenInfo = getTokenInfo(currency, network as Network)
-      if (tokenInfo) {
-        // Use formatTokenAmount for precise formatting
-        // Since we already have human-readable amounts, pass them directly
-        return formatTokenAmount(num, currency, network as Network, {
-          showSymbol: true,
-          precision: tokenInfo.isStablecoin ? 2 : 4,
-          compact: num >= 1000
-        });
+      try {
+        const tokenInfo = getTokenInfo(currency, network as Network)
+        if (tokenInfo) {
+          // Use formatTokenAmount for precise formatting
+          // Since we already have human-readable amounts, pass them directly
+          return formatTokenAmount(num, currency, network as Network, {
+            showSymbol: true,
+            precision: tokenInfo.isStablecoin ? 2 : 4,
+            compact: num >= 1000
+          });
+        }
+      } catch (error) {
+        console.error('Error getting token info:', error)
+        // Fall through to fallback
       }
     }
 
@@ -319,11 +324,25 @@ await client.connect(transport)
     network,
     amount
   }: {
-    currency: string
-    network: string
+    currency?: string
+    network?: string
     amount?: string | number
   }) => {
-    const tokenInfo = getTokenInfo(currency, network as Network)
+    // Safety checks for required parameters
+    if (!currency || !network) {
+      return (
+        <span className={isDark ? "text-gray-400" : "text-gray-500"}>
+          {amount ? `${amount} Unknown` : 'Unknown'}
+        </span>
+      )
+    }
+
+    let tokenInfo = null
+    try {
+      tokenInfo = getTokenInfo(currency, network as Network)
+    } catch (error) {
+      console.error('Error getting token info in TokenDisplay:', error)
+    }
 
     return (
       <div className="flex items-center gap-2">
@@ -1026,7 +1045,7 @@ await client.connect(transport)`}
                             )}
                           </TableCell>
                           <TableCell>
-                            {(tool.pricing || []).length > 0 ? (
+                            {(tool.pricing || []).length > 0 && tool.pricing[0] ? (
                               <TokenDisplay
                                 currency={tool.pricing[0].currency}
                                 network={tool.pricing[0].network}
@@ -1040,9 +1059,13 @@ await client.connect(transport)`}
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col gap-1">
-                              <Badge variant="outline" className={`text-xs ${isDark ? "border-gray-500 text-gray-300" : ""}`}>
-                                {tool.pricing[0].network}
-                              </Badge>
+                              {(tool.pricing || []).length > 0 && tool.pricing[0]?.network ? (
+                                <Badge variant="outline" className={`text-xs ${isDark ? "border-gray-500 text-gray-300" : ""}`}>
+                                  {tool.pricing[0].network}
+                                </Badge>
+                              ) : (
+                                <span className={isDark ? "text-gray-400" : "text-gray-500"}>-</span>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -1234,10 +1257,10 @@ await client.connect(transport)`}
                             </TableCell>
                             <TableCell className="font-medium">
                               <TokenDisplay
-                                currency={payment.currency}
-                                network={payment.network}
-                                amount={payment.amountRaw && typeof payment.amountRaw === 'string' && payment.amountRaw.trim() !== ''
-                                  ? fromBaseUnits(payment.amountRaw, payment.tokenDecimals)
+                                currency={payment?.currency}
+                                network={payment?.network}
+                                amount={payment?.amountRaw && typeof payment.amountRaw === 'string' && payment.amountRaw.trim() !== ''
+                                  ? fromBaseUnits(payment.amountRaw, payment.tokenDecimals || 0)
                                   : '0'}
                               />
                             </TableCell>
@@ -1270,16 +1293,24 @@ await client.connect(transport)`}
                             </TableCell>
                             <TableCell>
                               <div className="flex flex-col gap-1">
-                                <Badge variant="outline" className="text-xs w-fit">
-                                  {payment.network}
-                                </Badge>
-                                <span className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                                  {getExplorerName(payment.network as Network)}
-                                </span>
+                                {payment?.network ? (
+                                  <>
+                                    <Badge variant="outline" className="text-xs w-fit">
+                                      {payment.network}
+                                    </Badge>
+                                    <span className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                                      {getExplorerName(payment.network as Network)}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                                    Unknown network
+                                  </span>
+                                )}
                               </div>
                             </TableCell>
                             <TableCell className="text-right">
-                              {payment.transactionHash ? (
+                              {payment?.transactionHash && payment?.network ? (
                                 <div className="flex items-center justify-end">
                                   <TransactionLink
                                     txHash={payment.transactionHash}
@@ -1291,7 +1322,7 @@ await client.connect(transport)`}
                                 </div>
                               ) : (
                                 <span className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                                  Pending
+                                  {payment?.transactionHash ? 'Unknown network' : 'Pending'}
                                 </span>
                               )}
                             </TableCell>

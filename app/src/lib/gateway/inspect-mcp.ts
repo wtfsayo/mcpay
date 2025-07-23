@@ -1,5 +1,39 @@
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { experimental_createMCPClient as createMCPClient } from "ai"
+import { Client } from "@modelcontextprotocol/sdk/client/index.js"
+import { ToolPaymentInfo } from "@/types"
+import { toBaseUnits, AmountConversionError } from "@/lib/commons"
+import { STABLECOIN_CONFIGS, getNetworkTokens, type UnifiedNetwork } from "@/lib/commons/networks"
+
+// Payment annotation type definitions
+interface SimplePaymentOption {
+  type?: 'simple'
+  price: number
+  currency?: string
+  network?: string
+  recipient?: string
+}
+
+interface AdvancedPaymentOption {
+  type?: 'advanced'
+  rawAmount: string | number
+  tokenDecimals?: number
+  tokenSymbol?: string
+  currency?: string
+  network?: string
+  recipient?: string
+  description?: string
+}
+
+interface LegacyPaymentOption {
+  asset?: string
+  network?: string
+  maxAmountRequired?: string | number
+  payTo?: string
+  recipient?: string
+  resource?: string
+  description?: string
+}
 
 export async function getMcpTools(url: string) {
     try {
@@ -27,3 +61,269 @@ export async function getMcpTools(url: string) {
       throw new Error("Failed to fetch tools from MCP server")
     }
   }
+
+/**
+ * Enhanced version that extracts payment information from tool annotations
+ */
+export async function getMcpToolsWithPayments(url: string, userWalletAddress: string) {
+  try {
+    const transport = new StreamableHTTPClientTransport(new URL(url))
+    const client = new Client({ name: "mcpay-inspect", version: "1.0.0" })
+    
+    await client.connect(transport)
+    const toolsResult = await client.listTools()
+    
+    return toolsResult.tools.map((tool) => {
+      // Extract payment information from annotations
+      const paymentInfo = extractPaymentFromAnnotations(tool.annotations, userWalletAddress)
+      
+      return {
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        annotations: tool.annotations,
+        payment: paymentInfo
+      }
+    })
+  } catch (error) {
+    console.error("Error fetching MCP tools with payments:", error)
+    throw new Error("Failed to fetch tools from MCP server")
+  }
+}
+
+/**
+ * Extracts payment information from tool annotations using proper amount conversion
+ */
+export function extractPaymentFromAnnotations(annotations: unknown, userWalletAddress: string): ToolPaymentInfo | undefined {
+  // Type guard to check if annotations has the expected structure
+  if (!annotations || typeof annotations !== 'object') return undefined
+  
+  const annotationsObj = annotations as Record<string, unknown>
+  if (!annotationsObj.payment) return undefined
+  
+  const payment = annotationsObj.payment
+  console.log('Extracting payment from annotations:', payment)
+  
+  // Handle array of payment options (take the first one)
+  const paymentOption = Array.isArray(payment) ? payment[0] : payment
+  
+  if (!paymentOption || typeof paymentOption !== 'object') return undefined
+  
+  try {
+    // Handle simple payment format (USD price that needs conversion)
+    if (isSimplePaymentOption(paymentOption)) {
+      const price = paymentOption.price
+      const currency = paymentOption.currency || 'USD'
+      const network = (paymentOption.network || 'base-sepolia') as UnifiedNetwork
+      const recipient = paymentOption.recipient || userWalletAddress
+      
+      // For USD prices, convert to USDC base units
+      if (currency === 'USD' || currency === 'usd') {
+        const targetToken = resolveTokenForCurrency('USDC', network)
+        if (!targetToken) {
+          console.warn(`USDC not available on network ${network}, falling back to base-sepolia`)
+          const fallbackToken = resolveTokenForCurrency('USDC', 'base-sepolia')
+          if (!fallbackToken) {
+            throw new Error('USDC not available on fallback network')
+          }
+          
+          return {
+            asset: fallbackToken.address || '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+            network: 'base-sepolia',
+            maxAmountRequired: toBaseUnits(String(price || 0), fallbackToken.decimals),
+            description: `Payment of $${price} (converted to USDC)`,
+            payTo: recipient,
+            resource: 'tool-execution'
+          }
+        }
+        
+        return {
+          asset: targetToken.address || getDefaultUSDCAddress(network),
+          network,
+          maxAmountRequired: toBaseUnits(String(price || 0), targetToken.decimals),
+          description: `Payment of $${price} (converted to USDC)`,
+          payTo: recipient,
+          resource: 'tool-execution'
+        }
+      }
+      
+      // For other currencies, try to resolve the token
+      const token = resolveTokenForCurrency(currency, network)
+      if (!token) {
+        console.warn(`Token ${currency} not found on network ${network}`)
+        return undefined
+      }
+      
+      return {
+        asset: token.address || getDefaultTokenAddress(currency, network),
+        network,
+        maxAmountRequired: toBaseUnits(String(price || 0), token.decimals),
+        description: `Payment of ${price} ${currency}`,
+        payTo: recipient,
+        resource: 'tool-execution'
+      }
+    }
+    
+    // Handle advanced payment format (rawAmount already in base units)
+    if (isAdvancedPaymentOption(paymentOption)) {
+      const tokenSymbol = paymentOption.tokenSymbol || paymentOption.currency || 'USDC'
+      const network = (paymentOption.network || 'base-sepolia') as UnifiedNetwork
+      const rawAmount = String(paymentOption.rawAmount || 0)
+      const recipient = paymentOption.recipient || userWalletAddress
+      
+      // Validate the rawAmount is a valid base unit amount
+      if (!/^\d+$/.test(rawAmount)) {
+        throw new AmountConversionError(`Invalid rawAmount format: ${rawAmount}`)
+      }
+      
+      const token = resolveTokenForCurrency(tokenSymbol, network)
+      if (!token) {
+        console.warn(`Token ${tokenSymbol} not found on network ${network}`)
+        return undefined
+      }
+      
+      return {
+        asset: token.address || getDefaultTokenAddress(tokenSymbol, network),
+        network,
+        maxAmountRequired: rawAmount,
+        description: paymentOption.description || `Payment required (${tokenSymbol})`,
+        payTo: recipient,
+        resource: 'tool-execution'
+      }
+    }
+    
+    // Handle legacy format where payment info is at root level
+    if (isLegacyPaymentOption(paymentOption)) {
+      const asset = paymentOption.asset || 'USDC'
+      const network = (paymentOption.network || 'base-sepolia') as UnifiedNetwork
+      const amount = String(paymentOption.maxAmountRequired || 0)
+      
+      // If asset looks like a token address, use it directly
+      if (asset.startsWith('0x') && asset.length === 42) {
+        return {
+          asset,
+          network,
+          maxAmountRequired: amount,
+          description: paymentOption.description || 'Payment required',
+          payTo: paymentOption.payTo || paymentOption.recipient || userWalletAddress,
+          resource: paymentOption.resource || 'tool-execution'
+        }
+      }
+      
+      // Otherwise, resolve token symbol to address
+      const token = resolveTokenForCurrency(asset, network)
+      if (!token) {
+        console.warn(`Token ${asset} not found on network ${network}`)
+        return undefined
+      }
+      
+      return {
+        asset: token.address || getDefaultTokenAddress(asset, network),
+        network,
+        maxAmountRequired: amount,
+        description: paymentOption.description || 'Payment required',
+        payTo: paymentOption.payTo || paymentOption.recipient,
+        resource: paymentOption.resource || 'tool-execution'
+      }
+    }
+    
+  } catch (error) {
+    console.error('Error extracting payment from annotations:', error)
+    if (error instanceof AmountConversionError) {
+      console.error('Amount conversion error:', error.message)
+    }
+    return undefined
+  }
+  
+  console.log('Could not extract payment info from:', paymentOption)
+  return undefined
+}
+
+// Type guard functions
+function isSimplePaymentOption(option: unknown): option is SimplePaymentOption {
+  return typeof option === 'object' && option !== null && 'price' in option && typeof (option as Record<string, unknown>).price === 'number'
+}
+
+function isAdvancedPaymentOption(option: unknown): option is AdvancedPaymentOption {
+  return typeof option === 'object' && option !== null && 'rawAmount' in option && (option as Record<string, unknown>).rawAmount !== undefined
+}
+
+function isLegacyPaymentOption(option: unknown): option is LegacyPaymentOption {
+  if (typeof option !== 'object' || option === null) return false
+  const obj = option as Record<string, unknown>
+  return ('asset' in obj || 'maxAmountRequired' in obj) && !('price' in obj) && !('rawAmount' in obj)
+}
+
+/**
+ * Helper function to resolve token information for a currency symbol on a specific network
+ */
+function resolveTokenForCurrency(currencySymbol: string, network: UnifiedNetwork) {
+  // First, check stablecoin configs for known decimals
+  const upperSymbol = currencySymbol.toUpperCase()
+  if (upperSymbol in STABLECOIN_CONFIGS) {
+    const stablecoinConfig = STABLECOIN_CONFIGS[upperSymbol as keyof typeof STABLECOIN_CONFIGS]
+    
+    // Get the actual token from the network
+    const tokens = getNetworkTokens(network)
+    const token = tokens.find(t => t.symbol === upperSymbol && t.isStablecoin)
+    
+    if (token) {
+      return token
+    }
+    
+    // Fallback to stablecoin config if not found in network
+    return {
+      symbol: stablecoinConfig.symbol,
+      name: stablecoinConfig.name,
+      decimals: stablecoinConfig.decimals,
+      isStablecoin: true,
+      verified: true
+    }
+  }
+  
+  // For non-stablecoins, look in network token registry
+  const tokens = getNetworkTokens(network)
+  return tokens.find(t => t.symbol === upperSymbol)
+}
+
+/**
+ * Helper function to get default token addresses when token lookup fails
+ */
+function getDefaultTokenAddress(tokenSymbol: string, network: UnifiedNetwork): string {
+  // Known token addresses for common networks
+  const tokenAddresses: Record<string, Record<string, string>> = {
+    'base-sepolia': {
+      'USDC': '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+      'ETH': '0x0000000000000000000000000000000000000000',
+    },
+    'base': {
+      'USDC': '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+      'ETH': '0x0000000000000000000000000000000000000000',
+    },
+    'sei-testnet': {
+      'USDC': '0x4fCF1784B31630811181f670Aea7A7bEF803eaED',
+      'SEI': '0x0000000000000000000000000000000000000000',
+    }
+  }
+  
+  return tokenAddresses[network]?.[tokenSymbol.toUpperCase()] || '0x0000000000000000000000000000000000000000'
+}
+
+/**
+ * Helper function to get default USDC address for a network
+ */
+function getDefaultUSDCAddress(network: UnifiedNetwork): string {
+  return getDefaultTokenAddress('USDC', network)
+}
+
+/**
+ * Validates that a payment info object has required fields
+ */
+export function validatePaymentInfo(payment: ToolPaymentInfo): boolean {
+  return !!(
+    payment.asset &&
+    payment.network &&
+    payment.maxAmountRequired &&
+    !isNaN(parseFloat(payment.maxAmountRequired))
+  )
+}
