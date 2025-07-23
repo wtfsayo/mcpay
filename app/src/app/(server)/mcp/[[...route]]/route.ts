@@ -10,12 +10,14 @@
  */
 
 import { fromBaseUnits } from "@/lib/commons";
+import { extractApiKeyFromHeaders, hashApiKey } from "@/lib/gateway/auth-utils";
+import { auth } from "@/lib/gateway/auth";
 import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
 import { attemptAutoSign } from "@/lib/gateway/payment-strategies";
 import { createExactPaymentRequirements, decodePayment, settle, verifyPayment, x402Version } from "@/lib/gateway/payments";
+import { type AuthType, type MCPTool, type PaymentInfo, type ToolCall, type UserWithWallet } from "@/types";
 import { settleResponseHeader, SupportedNetwork } from "@/types/x402";
-import { WalletProvider, WalletType, type AuthType, type MCPTool, type PaymentInfo, type ToolCall, type UserWithWallet } from "@/types";
-import { type Context, Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { handle } from "hono/vercel";
 
 export const runtime = 'nodejs'
@@ -38,6 +40,31 @@ const verbs = ["post", "get", "delete"] as const;
  */
 function ensureString(value: string | undefined, fallback: string = 'unknown'): string {
     return value !== undefined ? value : fallback;
+}
+
+/**
+ * Helper function to determine authentication method consistently
+ */
+async function getAuthMethod(c: Context, user: UserWithWallet | null): Promise<string> {
+    if (!user) return 'none';
+    
+    // Check API key first
+    if (extractApiKeyFromHeaders(c.req.raw.headers)) {
+        return 'api_key';
+    }
+    
+    // Check session authentication
+    try {
+        const authResult = await auth.api.getSession({ headers: c.req.raw.headers });
+        if (authResult?.session && authResult?.user) {
+            return 'session';
+        }
+    } catch {
+        // Session check failed, continue to wallet header
+    }
+    
+    // Default to wallet header if user exists but no API key or session
+    return 'wallet_header';
 }
 
 /**
@@ -290,6 +317,123 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: ToolCall, body?:
 }
 
 /**
+ * Enhanced user resolution with priority: API key → Session → Wallet headers
+ */
+async function resolveUserFromRequest(c: Context): Promise<UserWithWallet | null> {
+    // 1. First priority: API key authentication
+    const apiKey = extractApiKeyFromHeaders(c.req.raw.headers);
+    if (apiKey) {
+        console.log(`[${new Date().toISOString()}] API key found, validating...`);
+        try {
+            const keyHash = hashApiKey(apiKey);
+            const apiKeyResult = await withTransaction(async (tx) => {
+                return await txOperations.validateApiKey(keyHash)(tx);
+            });
+            
+            if (apiKeyResult?.user) {
+                console.log(`[${new Date().toISOString()}] User authenticated via API key: ${apiKeyResult.user.id}`);
+                
+                // Get user's primary/managed wallet for auto-signing
+                const userWallets = await withTransaction(async (tx) => {
+                    return await txOperations.getUserWallets(apiKeyResult.user.id, true)(tx);
+                });
+                
+                const primaryWallet = userWallets.find(w => w.isPrimary) || userWallets[0];
+                
+                if (primaryWallet) {
+                    console.log(`[${new Date().toISOString()}] Found wallet for API key user: ${primaryWallet.walletAddress} (${primaryWallet.walletType})`);
+                    
+                    // Get full user record to ensure all required fields are present
+                    const fullUser = await withTransaction(async (tx) => {
+                        return await txOperations.getUserById(apiKeyResult.user.id)(tx);
+                    });
+                    
+                    if (fullUser) {
+                        return {
+                            ...fullUser,
+                            walletAddress: primaryWallet.walletAddress
+                        } as UserWithWallet;
+                    }
+                } else {
+                    console.log(`[${new Date().toISOString()}] API key user has no wallets, will need auto-creation for managed payments`);
+                    
+                    // Get full user record for consistency
+                    const fullUser = await withTransaction(async (tx) => {
+                        return await txOperations.getUserById(apiKeyResult.user.id)(tx);
+                    });
+                    
+                    if (fullUser) {
+                        return {
+                            ...fullUser,
+                            walletAddress: null
+                        } as UserWithWallet;
+                    }
+                }
+            }
+        } catch (error) {
+            console.warn(`[${new Date().toISOString()}] API key validation failed:`, error);
+        }
+    }
+    
+    // 2. Second priority: Session-based authentication (better-auth)
+    try {
+        const authResult = await auth.api.getSession({ headers: c.req.raw.headers });
+        
+        if (authResult?.session && authResult?.user) {
+            console.log(`[${new Date().toISOString()}] User authenticated via session: ${authResult.user.id}`);
+            
+            // Get user's primary/managed wallet for auto-signing
+            const userWallets = await withTransaction(async (tx) => {
+                return await txOperations.getUserWallets(authResult.user.id, true)(tx);
+            });
+            
+            const primaryWallet = userWallets.find(w => w.isPrimary) || userWallets[0];
+            
+            if (primaryWallet) {
+                console.log(`[${new Date().toISOString()}] Found wallet for session user: ${primaryWallet.walletAddress} (${primaryWallet.walletType})`);
+                
+                // Get full user record to ensure all required fields are present
+                const fullUser = await withTransaction(async (tx) => {
+                    return await txOperations.getUserById(authResult.user.id)(tx);
+                });
+                
+                if (fullUser) {
+                    return {
+                        ...fullUser,
+                        walletAddress: primaryWallet.walletAddress
+                    } as UserWithWallet;
+                }
+            } else {
+                console.log(`[${new Date().toISOString()}] Session user has no wallets, will need auto-creation for managed payments`);
+                
+                // Get full user record for consistency
+                const fullUser = await withTransaction(async (tx) => {
+                    return await txOperations.getUserById(authResult.user.id)(tx);
+                });
+                
+                if (fullUser) {
+                    return {
+                        ...fullUser,
+                        walletAddress: null
+                    } as UserWithWallet;
+                }
+            }
+        }
+    } catch (error) {
+        console.warn(`[${new Date().toISOString()}] Session authentication failed:`, error);
+    }
+    
+    // 3. Third priority: Existing wallet address header method
+    const walletAddress = c.req.header('X-Wallet-Address');
+    if (walletAddress) {
+        console.log(`[${new Date().toISOString()}] Using wallet address header: ${walletAddress}`);
+        return await getOrCreateUser(walletAddress);
+    }
+    
+    return null;
+}
+
+/**
  * Helper function to get or create user from wallet address (using new multi-wallet system)
  */
 async function getOrCreateUser(walletAddress: string, provider = 'unknown'): Promise<UserWithWallet | null> {
@@ -379,8 +523,9 @@ async function recordAnalytics(params: {
     responseData?: Record<string, unknown>;
     paymentAmount?: string;
     pricingId?: string; // Optional pricing ID to associate with usage
+    authMethod?: string; // Authentication method used
 }) {
-    const { toolCall, user, startTime, upstream, c, responseData, paymentAmount, pricingId } = params;
+    const { toolCall, user, startTime, upstream, c, responseData, paymentAmount, pricingId, authMethod } = params;
 
     if (!toolCall.toolId || !toolCall.serverId) {
         return;
@@ -388,20 +533,22 @@ async function recordAnalytics(params: {
 
     await withTransaction(async (tx) => {
         // Record tool usage
-        await txOperations.recordToolUsage({
-            toolId: ensureString(toolCall.toolId),
-            userId: user?.id,
-            pricingId, // Include pricing reference if available
-            responseStatus: upstream.status.toString(),
-            executionTimeMs: Date.now() - startTime,
-            ipAddress: c.req.header('x-forwarded-for') || c.req.header('x-real-ip'),
-            userAgent: c.req.header('user-agent'),
-            requestData: {
-                toolName: toolCall.name,
-                args: toolCall.args
-            },
-            result: responseData
-        })(tx);
+                        await txOperations.recordToolUsage({
+                    toolId: ensureString(toolCall.toolId),
+                    userId: user?.id,
+                    pricingId, // Include pricing reference if available
+                    responseStatus: upstream.status.toString(),
+                    executionTimeMs: Date.now() - startTime,
+                    ipAddress: c.req.header('x-forwarded-for') || c.req.header('x-real-ip'),
+                    userAgent: c.req.header('user-agent'),
+                    requestData: {
+                        toolName: toolCall.name,
+                        args: toolCall.args,
+                        // Add authentication method tracking
+                        authMethod: authMethod
+                    },
+                    result: responseData
+                })(tx);
 
         // Update daily analytics using internal server ID
         const today = new Date();
@@ -468,13 +615,17 @@ async function processPayment(params: {
 
     // Attempt auto-signing if no payment header exists and payment details are available
     // OR if specific managed wallet headers are present
+    // OR if API key authentication is present (indicates programmatic access)
     const managedWalletHeaders = c.req.header('x-wallet-provider') === 'coinbase-cdp' && c.req.header('x-wallet-type') === 'managed';
+    const hasApiKey = !!extractApiKeyFromHeaders(c.req.raw.headers);
     const shouldAutoSign = toolCall.payment && (
-        (!paymentHeader) &&
-        managedWalletHeaders
+        (!paymentHeader) && (
+            managedWalletHeaders || hasApiKey
+        )
     );
 
     console.log(`[${new Date().toISOString()}] Managed wallet headers: ${managedWalletHeaders}`);
+    console.log(`[${new Date().toISOString()}] Has API key: ${hasApiKey}`);
     console.log(`[${new Date().toISOString()}] Should auto-sign: ${shouldAutoSign}`);
 
     if (shouldAutoSign) {
@@ -494,7 +645,12 @@ async function processPayment(params: {
                 }
             };
 
-            const autoSignResult = await attemptAutoSign(c, autoSignToolCall);
+            const autoSignResult = await attemptAutoSign(c, autoSignToolCall, extractedUser ? {
+                id: extractedUser.id,
+                email: extractedUser.email || undefined,
+                name: extractedUser.name || undefined,
+                displayName: extractedUser.displayName || undefined
+            } : undefined);
 
             if (autoSignResult.success && autoSignResult.signedPaymentHeader) {
                 console.log(`[${new Date().toISOString()}] Auto-signing successful with strategy: ${autoSignResult.strategy}`);
@@ -590,7 +746,9 @@ async function processPayment(params: {
                     userAgent: c.req.header('user-agent'),
                     requestData: {
                         toolName: toolCall.name,
-                        args: toolCall.args
+                        args: toolCall.args,
+                        // Add authentication method tracking for failed payments too
+                        authMethod: await getAuthMethod(c, extractedUser)
                     },
                     result: {
                         error: "Payment verification failed",
@@ -729,8 +887,12 @@ verbs.forEach(verb => {
         const { toolCall, body } = await inspectRequest(c);
         console.log(`[${new Date().toISOString()}] Request payload logged, toolCall: ${toolCall ? 'present' : 'not present'}`);
 
-        // Initialize user - will be populated during payment processing or from headers
-        let user: UserWithWallet | null = null;
+        // Enhanced user resolution - prioritizes API key authentication
+        let user: UserWithWallet | null = await resolveUserFromRequest(c);
+        // Determine authentication method for logging and analytics
+        const authMethod = await getAuthMethod(c, user);
+        
+        console.log(`[${new Date().toISOString()}] User resolved: ${user ? user.id : 'none'} via ${authMethod}`);
 
         // Process payment if this is a paid tool call
         if (toolCall?.isPaid) {
@@ -774,13 +936,8 @@ verbs.forEach(verb => {
             user = paymentResultObj.user || null;
         }
 
-        // For non-paid requests, try to get wallet address from header as fallback
-        if (!user) {
-            const walletAddress = c.req.header('X-Wallet-Address');
-            if (walletAddress) {
-                user = await getOrCreateUser(walletAddress);
-            }
-        }
+        // User resolution is now handled upfront by resolveUserFromRequest
+        // No need for fallback logic here since it's already covered
 
         console.log(`[${new Date().toISOString()}] Forwarding request to upstream with ID: ${id}`);
         const upstream = await forwardRequest(c, id, body, { user: user || undefined });
@@ -802,7 +959,9 @@ verbs.forEach(verb => {
                     (toolCall.payment?._pricingInfo?.priceRaw || toolCall.payment?.maxAmountRequired) :
                     undefined,
                 // Pass pricing ID for usage tracking
-                pricingId: toolCall.pricingId
+                pricingId: toolCall.pricingId,
+                // Pass authentication method
+                authMethod: authMethod
             });
         }
 

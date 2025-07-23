@@ -18,8 +18,6 @@
 
 import type { Context } from "hono";
 import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
-import { extractApiKeyFromHeaders, hashApiKey, isValidApiKeyFormat } from "@/lib/gateway/auth-utils";
-import { auth } from "@/lib/gateway/auth";
 import { createExactPaymentRequirements } from "@/lib/gateway/payments";
 import type { ExtendedPaymentRequirements, SupportedNetwork } from "@/types/x402";
 import { CDPSigningStrategy } from "@/lib/gateway/payment-strategies/cdp-strategy";
@@ -39,7 +37,7 @@ export interface PaymentSigningContext {
             description: string;
         };
     };
-    user?: {
+    user: {
         id: string;
         email?: string;
         name?: string;
@@ -63,71 +61,8 @@ export interface PaymentSigningStrategy {
     signPayment(context: PaymentSigningContext): Promise<PaymentSigningResult>;
 }
 
-// Authentication detection utilities
-export async function detectAuthentication(c: Context): Promise<{
-    isAuthenticated: boolean;
-    user?: {
-        id: string;
-        email?: string;
-        name?: string;
-        displayName?: string;
-    };
-    method?: 'session' | 'api_key';
-}> {
-    try {
-        // Try session-based authentication first
-        const authResult = await auth.api.getSession({ headers: c.req.raw.headers });
-        
-        if (authResult?.session && authResult?.user) {
-            return {
-                isAuthenticated: true,
-                user: {
-                    id: authResult.user.id,
-                    email: authResult.user.email || undefined,
-                    name: authResult.user.name || undefined,
-                    displayName: authResult.user.displayName || undefined,
-                },
-                method: 'session'
-            };
-        }
-        
-        // Try API key authentication
-        const apiKey = extractApiKeyFromHeaders(c.req.raw.headers);
-        if (apiKey && isValidApiKeyFormat(apiKey)) {
-            console.log('[PaymentSigning] API key found, validating...');
-            
-            try {
-                const keyHash = hashApiKey(apiKey);
-                const apiKeyResult = await withTransaction(async (tx) => {
-                    return await txOperations.validateApiKey(keyHash)(tx);
-                });
-                
-                if (apiKeyResult?.user) {
-                    console.log(`[PaymentSigning] API key validated for user: ${apiKeyResult.user.id}`);
-                    return {
-                        isAuthenticated: true,
-                        user: {
-                            id: apiKeyResult.user.id,
-                            email: apiKeyResult.user.email || undefined,
-                            name: apiKeyResult.user.name || undefined,
-                            displayName: apiKeyResult.user.displayName || undefined,
-                        },
-                        method: 'api_key'
-                    };
-                } else {
-                    console.log('[PaymentSigning] API key validation failed');
-                }
-            } catch (apiError) {
-                console.warn('[PaymentSigning] API key validation error:', apiError);
-            }
-        }
-        
-        return { isAuthenticated: false };
-    } catch (error) {
-        console.warn('[PaymentSigning] Authentication detection failed:', error);
-        return { isAuthenticated: false };
-    }
-}
+// NOTE: Authentication detection has been moved to the MCP route handler
+// to avoid duplication and ensure consistent user resolution across the system
 
 // Enhanced logging function that respects configuration
 function logWithLevel(level: 'debug' | 'info' | 'warn' | 'error', message: string, data?: unknown) {
@@ -148,7 +83,8 @@ function logWithLevel(level: 'debug' | 'info' | 'warn' | 'error', message: strin
 // Main auto-signing function with enhanced error handling and configuration
 export async function attemptAutoSign(
     c: Context,
-    toolCall: PaymentSigningContext['toolCall']
+    toolCall: PaymentSigningContext['toolCall'],
+    user?: PaymentSigningContext['user']
 ): Promise<PaymentSigningResult> {
     const config = getConfig();
     
@@ -174,7 +110,7 @@ export async function attemptAutoSign(
     });
     
     try {
-        const signingPromise = performAutoSigning(c, toolCall, config);
+        const signingPromise = performAutoSigning(c, toolCall, user, config);
         return await Promise.race([signingPromise, timeoutPromise]);
     } catch (error) {
         logWithLevel('error', 'Auto-signing failed with error', error);
@@ -207,25 +143,24 @@ export async function attemptAutoSign(
 async function performAutoSigning(
     c: Context,
     toolCall: PaymentSigningContext['toolCall'],
+    user: PaymentSigningContext['user'] | undefined,
     config: PaymentStrategyConfig
 ): Promise<PaymentSigningResult> {
-    // Detect authentication
-    const authInfo = await detectAuthentication(c);
-    if (!authInfo.isAuthenticated || !authInfo.user) {
-        logWithLevel('info', 'User not authenticated, skipping auto-sign');
+    // Check if user is provided
+    if (!user) {
+        logWithLevel('info', 'User not provided, skipping auto-sign');
         return {
             success: false,
-            error: 'User not authenticated'
+            error: 'User not provided'
         };
     }
     
     if (config.logging.logAuthenticationDetails) {
-        logWithLevel('debug', `User authenticated via ${authInfo.method}`, {
-            userId: authInfo.user.id,
-            method: authInfo.method
+        logWithLevel('debug', `User provided for auto-signing`, {
+            userId: user.id
         });
     } else {
-        logWithLevel('info', `User authenticated via ${authInfo.method}`);
+        logWithLevel('info', `User provided for auto-signing`);
     }
     
     // Create payment requirements
@@ -246,7 +181,7 @@ async function performAutoSigning(
     
     const context: PaymentSigningContext = {
         toolCall,
-        user: authInfo.user,
+        user: user,
         paymentRequirements
     };
     
@@ -348,8 +283,7 @@ async function getSigningStrategies(): Promise<PaymentSigningStrategy[]> {
 }
 
 const paymentStrategies = {
-    attemptAutoSign,
-    detectAuthentication
+    attemptAutoSign
 };
 
 export default paymentStrategies; 
