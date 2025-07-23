@@ -12,7 +12,6 @@ config();
 interface ServerOptions {
   urls: string;
   privateKey?: string;
-  transport: string;
   apiKey?: string;
 }
 
@@ -63,7 +62,6 @@ program
   .description('Start an MCP stdio server with payment transport')
   .requiredOption('-u, --urls <urls>', 'Comma-separated list of server URLs')
   .option('-k, --private-key <key>', 'Private key for wallet (or set PRIVATE_KEY env var)')
-  .option('-t, --transport <type>', 'Transport type (payment, http, sse)', 'payment')
   .option('-a, --api-key <key>', 'API key for authentication (or set API_KEY env var). Get yours at https://mcpay.tech')
   .action(async (options: ServerOptions) => {
     try {
@@ -76,6 +74,8 @@ program
       }
 
       let account;
+      let serverType: ServerType;
+      
       if (privateKeyString) {
         // Validate and cast to Hex type
         if (!privateKeyString.startsWith('0x') || privateKeyString.length !== 66) {
@@ -85,6 +85,11 @@ program
 
         const privateKey = privateKeyString as Hex;
         account = privateKeyToAccount(privateKey);
+        serverType = ServerType.Payment;
+        console.log('Using payment transport (private key provided)');
+      } else {
+        serverType = ServerType.HTTPStream;
+        console.log('Using HTTP transport (no private key provided)');
       }
 
       const serverUrls = options.urls.split(',').map((url: string) => url.trim());
@@ -94,19 +99,7 @@ program
         process.exit(1);
       }
       
-      // Map transport type to ServerType enum
-      let serverType: ServerType;
-      switch (options.transport.toLowerCase()) {
-        case 'payment':
-          serverType = ServerType.Payment;
-          break;
-        case 'http':
-        default:
-          serverType = ServerType.HTTPStream;
-          break;
-      }
-
-      console.log(`Starting MCP server with ${options.transport} transport...`);
+      console.log(`Starting MCP server...`);
       console.log(`Connecting to ${serverUrls.length} server(s): ${serverUrls.join(', ')}`);
 
       // Prepare transport options with API key if provided
