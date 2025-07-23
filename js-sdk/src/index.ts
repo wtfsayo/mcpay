@@ -12,6 +12,8 @@ export {
     type ServerConnection 
 } from './server/stdio/start-stdio-server.js';
 
+export { createPaidMcpHandler } from './handler/paid-mcp-server.js';
+
 export { proxyServer } from './server/stdio/proxy-server.js';
 
 // Re-export commonly used types from dependencies

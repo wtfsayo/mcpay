@@ -4,8 +4,8 @@ import { config } from "dotenv";
 import { Command } from "commander";
 import type { Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { createServerConnections, ServerType, startStdioServer } from '../server/stdio/start-stdio-server.js';
-import { scaffoldServer, listTemplates } from './scaffold.js';
+import { createServerConnections, ServerType, startStdioServer } from '../server/stdio/start-stdio-server';
+import { scaffoldServer, listTemplates } from './scaffold';
 
 config();
 
@@ -13,6 +13,7 @@ interface ServerOptions {
   urls: string;
   privateKey?: string;
   transport: string;
+  apiKey?: string;
 }
 
 interface ScaffoldOptions {
@@ -63,39 +64,41 @@ program
   .requiredOption('-u, --urls <urls>', 'Comma-separated list of server URLs')
   .option('-k, --private-key <key>', 'Private key for wallet (or set PRIVATE_KEY env var)')
   .option('-t, --transport <type>', 'Transport type (payment, http, sse)', 'payment')
+  .option('-a, --api-key <key>', 'API key for authentication (or set API_KEY env var). Get yours at https://mcpay.tech')
   .action(async (options: ServerOptions) => {
     try {
       const privateKeyString = options.privateKey || process.env.PRIVATE_KEY;
+      const apiKey = options.apiKey || process.env.API_KEY;
       
-      if (!privateKeyString) {
-        console.error('Error: Private key is required. Use --private-key or set PRIVATE_KEY environment variable.');
+      if (!privateKeyString && !apiKey) {
+        console.error('Error: Either a private key or API key is required. Use --private-key/--api-key or set PRIVATE_KEY/API_KEY environment variables.');
         process.exit(1);
       }
 
-      // Validate and cast to Hex type
-      if (!privateKeyString.startsWith('0x') || privateKeyString.length !== 66) {
-        console.error('Error: Private key must be a valid hex string starting with 0x and 64 characters long.');
-        process.exit(1);
+      let account;
+      if (privateKeyString) {
+        // Validate and cast to Hex type
+        if (!privateKeyString.startsWith('0x') || privateKeyString.length !== 66) {
+          console.error('Error: Private key must be a valid hex string starting with 0x and 64 characters long.');
+          process.exit(1);
+        }
+
+        const privateKey = privateKeyString as Hex;
+        account = privateKeyToAccount(privateKey);
       }
 
-      const privateKey = privateKeyString as Hex;
       const serverUrls = options.urls.split(',').map((url: string) => url.trim());
       
       if (serverUrls.length === 0) {
         console.error('Error: At least one server URL is required.');
         process.exit(1);
       }
-
-      const account = privateKeyToAccount(privateKey);
       
       // Map transport type to ServerType enum
       let serverType: ServerType;
       switch (options.transport.toLowerCase()) {
         case 'payment':
           serverType = ServerType.Payment;
-          break;
-        case 'sse':
-          serverType = ServerType.SSE;
           break;
         case 'http':
         default:
@@ -106,7 +109,16 @@ program
       console.log(`Starting MCP server with ${options.transport} transport...`);
       console.log(`Connecting to ${serverUrls.length} server(s): ${serverUrls.join(', ')}`);
 
-      const serverConnections = createServerConnections(serverUrls, serverType);
+      // Prepare transport options with API key if provided
+      const transportOptions = apiKey ? { 
+        requestInit: {
+          headers: { 
+            'Authorization': `Bearer ${apiKey}` 
+          }
+        }
+      } : undefined;
+      
+      const serverConnections = createServerConnections(serverUrls, serverType, transportOptions);
       
       await startStdioServer({
         serverConnections,
@@ -116,70 +128,6 @@ program
       console.log(`Successfully connected to ${serverUrls.length} servers`);
     } catch (error) {
       console.error('Failed to start server:', error);
-      process.exit(1);
-    }
-  });
-
-program
-  .command('proxy')
-  .description('Start a proxy server (alias for server command)')
-  .requiredOption('-u, --urls <urls>', 'Comma-separated list of server URLs')
-  .option('-k, --private-key <key>', 'Private key for wallet (or set PRIVATE_KEY env var)')
-  .option('-t, --transport <type>', 'Transport type (payment, http, sse)', 'payment')
-  .action(async (options: ServerOptions) => {
-    // Duplicate server logic (since it's an alias)
-    try {
-      const privateKeyString = options.privateKey || process.env.PRIVATE_KEY;
-      
-      if (!privateKeyString) {
-        console.error('Error: Private key is required. Use --private-key or set PRIVATE_KEY environment variable.');
-        process.exit(1);
-      }
-
-      // Validate and cast to Hex type
-      if (!privateKeyString.startsWith('0x') || privateKeyString.length !== 66) {
-        console.error('Error: Private key must be a valid hex string starting with 0x and 64 characters long.');
-        process.exit(1);
-      }
-
-      const privateKey = privateKeyString as Hex;
-      const serverUrls = options.urls.split(',').map((url: string) => url.trim());
-      
-      if (serverUrls.length === 0) {
-        console.error('Error: At least one server URL is required.');
-        process.exit(1);
-      }
-
-      const account = privateKeyToAccount(privateKey);
-      
-      // Map transport type to ServerType enum
-      let serverType: ServerType;
-      switch (options.transport.toLowerCase()) {
-        case 'payment':
-          serverType = ServerType.Payment;
-          break;
-        case 'sse':
-          serverType = ServerType.SSE;
-          break;
-        case 'http':
-        default:
-          serverType = ServerType.HTTPStream;
-          break;
-      }
-
-      console.log(`Starting MCP proxy server with ${options.transport} transport...`);
-      console.log(`Connecting to ${serverUrls.length} server(s): ${serverUrls.join(', ')}`);
-
-      const serverConnections = createServerConnections(serverUrls, serverType);
-      
-      await startStdioServer({
-        serverConnections,
-        account,
-      });
-
-      console.log(`Successfully connected to ${serverUrls.length} servers via proxy`);
-    } catch (error) {
-      console.error('Failed to start proxy server:', error);
       process.exit(1);
     }
   });

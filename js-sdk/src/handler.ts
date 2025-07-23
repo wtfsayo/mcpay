@@ -1,0 +1,1 @@
+export { createPaidMcpHandler } from "./handler/paid-mcp-server";

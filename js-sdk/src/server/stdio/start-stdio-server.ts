@@ -11,7 +11,6 @@ import { proxyServer } from "./proxy-server";
 
 export enum ServerType {
     HTTPStream = "HTTPStream",
-    SSE = "SSE",
     Payment = "Payment",
 }
 
@@ -47,9 +46,6 @@ export const startStdioServer = async ({
         let transport: SSEClientTransport | StreamableHTTPClientTransport | PaymentTransport;
 
         switch (connection.serverType) {
-            case ServerType.SSE:
-                transport = new SSEClientTransport(new URL(connection.url), connection.transportOptions);
-                break;
             case ServerType.Payment:
                 if (!account) {
                     throw new Error("Account is required for Payment transport");
@@ -134,7 +130,7 @@ export const startStdioServer = async ({
 export const createServerConnections = (
     urls: string[],
     serverType: ServerType = ServerType.HTTPStream,
-    transportOptions: SSEClientTransportOptions | StreamableHTTPClientTransportOptions = {}
+    transportOptions: StreamableHTTPClientTransportOptions = {}
 ): ServerConnection[] => {
     return urls.map(url => ({
         url,
