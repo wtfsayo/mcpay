@@ -11,6 +11,60 @@ import { randomUUID } from "node:crypto";
 
 export const runtime = 'nodejs'
 
+// List of blocked URL origins that are not allowed to be registered
+const BLOCKED_ORIGINS = [
+    'localhost',
+    '127.0.0.1',
+    '0.0.0.0',
+    '::1',
+    // Add more blocked origins as needed
+    // maybe the vercel sandbox
+];
+
+/**
+ * Check if a URL origin is blocked
+ * @param url - The URL to check
+ * @returns true if the origin is blocked, false otherwise
+ */
+function isOriginBlocked(url: string): boolean {
+    // Only apply blocked origins in actual production environment
+    // On Vercel: VERCEL_ENV can be 'production', 'preview', or 'development'
+    // We only want to block origins in actual production, not preview deployments
+    const isVercelProduction = process.env.VERCEL_ENV === 'production';
+    const isNodeProduction = process.env.NODE_ENV === 'production';
+    const isActualProduction = isVercelProduction || (isNodeProduction && !process.env.VERCEL_ENV);
+    
+    if (!isActualProduction) {
+        return false;
+    }
+
+    try {
+        const urlObj = new URL(url);
+        const hostname = urlObj.hostname.toLowerCase();
+        
+        // Check against blocked origins list
+        return BLOCKED_ORIGINS.some(blockedOrigin => {
+            const normalizedBlocked = blockedOrigin.toLowerCase();
+            
+            // Exact match
+            if (hostname === normalizedBlocked) {
+                return true;
+            }
+            
+            // Subdomain match (e.g. blocked: example.com, url: sub.example.com)
+            if (hostname.endsWith(`.${normalizedBlocked}`)) {
+                return true;
+            }
+            
+            return false;
+        });
+    } catch (error) {
+        // If URL parsing fails, consider it blocked for security (only in production)
+        console.warn('Failed to parse URL for origin check:', url, error);
+        return true;
+    }
+}
+
 // Define user type that matches what we get from API key validation
 type ApiKeyUser = {
     id: string;
@@ -143,6 +197,19 @@ app.post('/', pingAuthMiddleware, async (c) => {
                 timestamp: new Date().toISOString(),
                 service: 'mcpay-ping'
             }, 400);
+        }
+
+        // Check if any of the detected URLs have blocked origins
+        const blockedUrls = detectedUrls.filter(url => isOriginBlocked(url));
+        if (blockedUrls.length > 0) {
+            console.warn('Blocked origin detected:', blockedUrls[0]);
+            return c.json({
+                status: 'error',
+                message: 'Origin is blocked and cannot be registered',
+                blockedOrigin: blockedUrls[0],
+                timestamp: new Date().toISOString(),
+                service: 'mcpay-ping'
+            }, 403);
         }
 
         // Set proper headers to prevent caching and ensure fresh responses
@@ -327,15 +394,29 @@ app.get('/', async (c) => {
     c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
     c.header('Content-Type', 'application/json');
 
+    const isVercelProduction = process.env.VERCEL_ENV === 'production';
+    const isNodeProduction = process.env.NODE_ENV === 'production';
+    const isActualProduction = isVercelProduction || (isNodeProduction && !process.env.VERCEL_ENV);
+
     return c.json({
         status: 'ok',
         message: 'Enhanced ping service is running',
+        environment: {
+            NODE_ENV: process.env.NODE_ENV || 'development',
+            VERCEL_ENV: process.env.VERCEL_ENV || 'not-vercel',
+            isProduction: isActualProduction
+        },
         features: [
             'Auto server registration',
             'Payment extraction from tool annotations',
             'Tool synchronization',
-            'API key authentication'
+            'API key authentication',
+            isActualProduction ? 'Blocked origins protection (active)' : 'Blocked origins protection (inactive)'
         ],
+        blockedOrigins: isActualProduction ? BLOCKED_ORIGINS : [],
+        blockedOriginsNote: isActualProduction 
+            ? 'Active in production environment' 
+            : `Disabled in ${process.env.VERCEL_ENV || 'development'} environment`,
         authentication: 'Requires valid API key in X-API-KEY header or Authorization: Bearer header',
         timestamp: new Date().toISOString(),
         service: 'mcpay-ping'
