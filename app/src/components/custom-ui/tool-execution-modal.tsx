@@ -361,6 +361,10 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
         inputs[key] = prop.default || []
       } else if (prop.type === 'object') {
         inputs[key] = prop.default || {}
+      } else if (prop.type === 'boolean') {
+        inputs[key] = prop.default !== undefined ? prop.default : false
+      } else if (prop.type === 'number' || prop.type === 'integer') {
+        inputs[key] = prop.default !== undefined ? prop.default : 0
       } else {
         inputs[key] = prop.default || ''
       }
@@ -382,6 +386,10 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
         inputs[key] = prop.default || []
       } else if (prop.type === 'object') {
         inputs[key] = prop.default || {}
+      } else if (prop.type === 'boolean') {
+        inputs[key] = prop.default !== undefined ? prop.default : false
+      } else if (prop.type === 'number' || prop.type === 'integer') {
+        inputs[key] = prop.default !== undefined ? prop.default : 0
       } else {
         inputs[key] = prop.default || ''
       }
@@ -1425,6 +1433,10 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
         inputs[key] = prop.default || []
       } else if (prop.type === 'object') {
         inputs[key] = prop.default || {}
+      } else if (prop.type === 'boolean') {
+        inputs[key] = prop.default !== undefined ? prop.default : false
+      } else if (prop.type === 'number' || prop.type === 'integer') {
+        inputs[key] = prop.default !== undefined ? prop.default : 0
       } else {
         inputs[key] = prop.default || ''
       }
