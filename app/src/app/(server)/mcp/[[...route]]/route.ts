@@ -451,7 +451,7 @@ const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer, metad
     }
     
     // Add more realistic browser headers
-    headers.set('accept', 'application/json, text/plain, */*');
+    headers.set('accept', 'application/json, text/event-stream, text/plain, */*');
     headers.set('accept-language', 'en-US,en;q=0.9');
     headers.set('accept-encoding', 'gzip, deflate, br');
     headers.set('sec-fetch-dest', 'empty');
