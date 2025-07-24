@@ -11,7 +11,7 @@
 
 import { fromBaseUnits } from "@/lib/commons";
 import { auth } from "@/lib/gateway/auth";
-import { extractApiKey, extractApiKeyFromHeaders, extractApiKeyFromParams, hashApiKey } from "@/lib/gateway/auth-utils";
+import { extractApiKey, hashApiKey } from "@/lib/gateway/auth-utils";
 import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
 import { attemptAutoSign } from "@/lib/gateway/payment-strategies";
 import { createExactPaymentRequirements, decodePayment, settle, verifyPayment, x402Version } from "@/lib/gateway/payments";
@@ -27,11 +27,53 @@ const app = new Hono<{ Bindings: AuthType }>({
 }).basePath("/mcp")
 
 
-// Headers that must NOT be forwarded (RFC‑7230 §6.1)
+// Headers that must NOT be forwarded (RFC‑7230 §6.1 + platform-specific)
 const HOP_BY_HOP = new Set([
+    // Standard hop-by-hop headers (RFC 7230)
     'proxy-authenticate', 'proxy-authorization',
     'te', 'trailer', 'transfer-encoding', 'upgrade', 'cookie',
+
+    // Authentication headers. We don't want to forward these to the upstream server.
+    'authorization',
+    
+    // Infrastructure/proxy headers that could leak internal information
+    'forwarded',
+    'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-port', 'x-forwarded-proto',
+    'x-real-ip',
+    'x-matched-path',
+    
+    // Vercel-specific headers (comprehensive list)
+    'x-vercel-deployment-url', 'x-vercel-forwarded-for', 'x-vercel-id',
+    'x-vercel-internal-bot-check', 'x-vercel-internal-ingress-bucket', 'x-vercel-internal-ingress-port',
+    'x-vercel-ip-as-number', 'x-vercel-ip-city', 'x-vercel-ip-continent', 'x-vercel-ip-country',
+    'x-vercel-ip-country-region', 'x-vercel-ip-latitude', 'x-vercel-ip-longitude', 
+    'x-vercel-ip-postal-code', 'x-vercel-ip-timezone',
+    'x-vercel-ja4-digest', 'x-vercel-oidc-token', 'x-vercel-proxied-for',
+    'x-vercel-proxy-signature', 'x-vercel-proxy-signature-ts',
+    'x-vercel-sc-basepath', 'x-vercel-sc-headers', 'x-vercel-sc-host',
 ])
+
+// Header prefixes that should not be forwarded
+const BLOCKED_HEADER_PREFIXES = [
+    'x-vercel-',  // Catch any future Vercel headers
+    'cf-',        // Cloudflare headers if you ever use it
+    'x-forwarded-', // Additional forwarded headers
+]
+
+/**
+ * Checks if a header should be blocked from forwarding
+ */
+function shouldBlockHeader(headerName: string): boolean {
+    const lowerName = headerName.toLowerCase();
+    
+    // Check explicit blocked headers
+    if (HOP_BY_HOP.has(lowerName)) {
+        return true;
+    }
+    
+    // Check blocked prefixes
+    return BLOCKED_HEADER_PREFIXES.some(prefix => lowerName.startsWith(prefix));
+}
 
 const verbs = ["post", "get", "delete"] as const;
 
@@ -144,7 +186,7 @@ const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer, metad
     const headers = new Headers();
 
     c.req.raw.headers.forEach((v, k) => {
-        if (!HOP_BY_HOP.has(k.toLowerCase())) {
+        if (!shouldBlockHeader(k)) {
             headers.set(k, v);
         }
     });
