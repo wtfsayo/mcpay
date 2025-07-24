@@ -284,7 +284,7 @@ app.post('/', pingAuthMiddleware, async (c) => {
                     receiverAddress: receiverAddress || userWalletAddress || '0x0000000000000000000000000000000000000000',
                     requireAuth,
                     authHeaders,
-                    name: 'Auto-registered Server',
+                    name: serverInfo.metadata.name || 'Auto-registered Server',
                     description: 'Server registered via ping',
                     metadata: {
                         registeredFromPing: true,
@@ -324,8 +324,8 @@ app.post('/', pingAuthMiddleware, async (c) => {
                     
                     // Update existing server with tools
                     const updateResult = await txOperations.updateServerFromPing(upsertResult.server.id, {
-                        name: upsertResult.server.name || 'Auto-registered Server',
-                        description: upsertResult.server.description || 'Server registered via ping',
+                        name: serverInfo.metadata.name || upsertResult.server.name || 'Auto-registered Server',
+                        description: serverInfo.metadata.description || upsertResult.server.description || 'Server registered via ping',
                         metadata: {
                             ...(upsertResult.server.metadata && typeof upsertResult.server.metadata === 'object' ? upsertResult.server.metadata : {}),
                             registeredFromPing: true,
