@@ -262,12 +262,19 @@ export const txOperations = {
             where: eq(mcpTools.serverId, serverId),
         });
 
+        // Track which tools are still present on the server
+        const currentToolNames = new Set(data.toolsData.map(tool => tool.name));
+        const processedToolIds = new Set<string>();
+
         // Update or create tools
         const toolResults = [];
         for (const toolData of data.toolsData) {
             const existingTool = existingTools.find(t => t.name === toolData.name);
             
             if (existingTool) {
+                // Mark this tool as processed
+                processedToolIds.add(existingTool.id);
+                
                 const existingPricing = (existingTool.pricing as PricingEntry[]) || [];
                 
                 // Smart pricing merge: remove duplicate entries and keep only unique combinations
@@ -315,6 +322,17 @@ export const txOperations = {
                     updatedAt: new Date()
                 }).returning();
                 toolResults.push(newTool[0]);
+            }
+        }
+
+        // Remove tools that no longer exist on the server
+        const toolsToRemove = existingTools.filter(tool => !currentToolNames.has(tool.name));
+        if (toolsToRemove.length > 0) {
+            console.log(`Removing ${toolsToRemove.length} tools that no longer exist on server:`, toolsToRemove.map(t => t.name));
+            
+            for (const toolToRemove of toolsToRemove) {
+                await tx.delete(mcpTools)
+                    .where(eq(mcpTools.id, toolToRemove.id));
             }
         }
 
