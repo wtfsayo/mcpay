@@ -50,6 +50,12 @@ export async function validatePaymentWithMcpay(
   
   try {
     log('Validating payment with mcpay API:', config.mcpayApiUrl);
+    log('Payment header:', paymentHeader);
+    log('Config:', JSON.stringify({
+      apiKey: config.apiKey,
+      mcpayApiUrl: config.mcpayApiUrl,
+      mcpayApiValidationPath: config.mcpayApiValidationPath
+    }, null, 2));
     
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
@@ -61,17 +67,35 @@ export async function validatePaymentWithMcpay(
       'Content-Type': 'application/json',
     };
     
-    if (config.mcpayApiValidationPath) {
+    if (config.apiKey) {
       headers['Authorization'] = `Bearer ${config.apiKey}`;
     }
 
-    const response = await fetch(config.mcpayApiUrl + config.mcpayApiValidationPath, {
+    // Construct URL properly, using /validate as default if path is undefined
+    const validationPath = config.mcpayApiValidationPath || '/validate';
+    const baseUrl = config.mcpayApiUrl?.replace(/\/$/, '') || ''; // Remove trailing slash
+    const url = baseUrl + validationPath;
+    
+    log('Making request to:', url);
+    
+    // Validate URL before making request
+    try {
+      new URL(url);
+    } catch (urlError) {
+      throw new Error(`Invalid URL constructed: ${url}. Check mcpayApiUrl (${config.mcpayApiUrl}) and mcpayApiValidationPath (${config.mcpayApiValidationPath})`);
+    }
+    log('Request headers:', JSON.stringify(headers, null, 2));
+    
+    const requestBody = {
+      payment: paymentHeader,
+      timestamp: new Date().toISOString(),
+    };
+    log('Request body:', JSON.stringify(requestBody, null, 2));
+
+    const response = await fetch(url, {
       method: 'POST',
       headers,
-      body: JSON.stringify({
-        payment: paymentHeader,
-        timestamp: new Date().toISOString(),
-      }),
+      body: JSON.stringify(requestBody),
       signal: controller.signal,
     });
 
@@ -126,7 +150,19 @@ async function createPaymentRequirementsWithMcpay(
     }
 
     const requirementsPath = config.mcpayApiRequirementsPath || '/requirements';
-    const response = await fetch(config.mcpayApiUrl + requirementsPath, {
+    const baseUrl = config.mcpayApiUrl?.replace(/\/$/, '') || ''; // Remove trailing slash
+    const url = baseUrl + requirementsPath;
+    
+    log('Making requirements request to:', url);
+    
+    // Validate URL before making request
+    try {
+      new URL(url);
+    } catch (urlError) {
+      throw new Error(`Invalid URL constructed: ${url}. Check mcpayApiUrl (${config.mcpayApiUrl}) and mcpayApiRequirementsPath (${config.mcpayApiRequirementsPath})`);
+    }
+    
+    const response = await fetch(url, {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -226,7 +262,7 @@ class PaymentProcessor {
       resourceMetadataPath: '/.well-known/oauth-protected-resource',
     };
 
-    // Merge user options with defaults
+    // Merge user options with defaults (preserving defaults for undefined values)
     this.options = {
       ping: {
         ...defaultPingOptions,
@@ -235,6 +271,10 @@ class PaymentProcessor {
       mcpay: {
         ...defaultMcpayOptions,
         ...(options?.mcpay || {}),
+        // Ensure critical paths have defaults if undefined
+        mcpayApiValidationPath: options?.mcpay?.mcpayApiValidationPath ?? defaultMcpayOptions.mcpayApiValidationPath,
+        mcpayApiRequirementsPath: options?.mcpay?.mcpayApiRequirementsPath ?? defaultMcpayOptions.mcpayApiRequirementsPath,
+        mcpayApiPingPath: options?.mcpay?.mcpayApiPingPath ?? defaultMcpayOptions.mcpayApiPingPath,
       },
     };
 
@@ -320,8 +360,17 @@ class PaymentProcessor {
       return;
     }
 
-    const pingUrl = mcpayApiUrl + mcpayApiPingPath;
+    const baseUrl = mcpayApiUrl?.replace(/\/$/, '') || ''; // Remove trailing slash
+    const pingPath = mcpayApiPingPath || '/ping';
+    const pingUrl = baseUrl + pingPath;
     const timeout = this.options.ping?.timeout || 3000;
+
+    // Validate URL before making request
+    try {
+      new URL(pingUrl);
+    } catch (urlError) {
+      throw new Error(`Invalid ping URL constructed: ${pingUrl}. Check mcpayApiUrl (${mcpayApiUrl}) and mcpayApiPingPath (${mcpayApiPingPath})`);
+    }
 
     this.log('Attempting to ping server at:', pingUrl, 'with timeout:', timeout);
 

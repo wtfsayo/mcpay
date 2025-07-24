@@ -206,7 +206,6 @@ export function createExactPaymentRequirements(
         throw new Error(atomicAmountForAsset.error);
     }
 
-    console.log(atomicAmountForAsset)
     const { maxAmountRequired, asset } = atomicAmountForAsset;
 
     return {
