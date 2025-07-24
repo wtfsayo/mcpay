@@ -1346,7 +1346,10 @@ verbs.forEach(verb => {
         const upstream = await forwardRequest(c, id, body, { user: user || undefined });
         console.log(`[${new Date().toISOString()}] Received upstream response, mirroring back to client`);
 
-        // Capture response data and record analytics if we have tool information
+        // Clone the response before any operations to avoid body locking issues
+        const responseForMirroring = upstream.clone();
+
+        // Capture response data for analytics if we have tool information
         if (toolCall) {
             const responseData = await captureResponseData(upstream);
 
@@ -1366,7 +1369,7 @@ verbs.forEach(verb => {
             });
         }
 
-        return mirrorRequest(upstream);
+        return mirrorRequest(responseForMirroring);
     });
 });
 
