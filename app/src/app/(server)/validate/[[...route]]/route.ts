@@ -185,6 +185,8 @@ app.post('/', validationAuthMiddleware, async (c) => {
             });
         });
 
+        console.log("[mcpay-validate] paymentHeader", paymentHeader);
+
         if (!existingPayment) {
             console.log(`[${new Date().toISOString()}] Payment not found in database`);
             const response: PaymentValidationResponse = {
