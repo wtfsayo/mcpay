@@ -23,9 +23,9 @@
  */
 
 import {
-    addRevenueToCurrency, formatRevenueByCurrency,
-    formatAmount,
-    fromBaseUnits, getBlockchainArchitecture, COMMON_DECIMALS
+    addRevenueToCurrency,
+    formatRevenueByCurrency,
+    fromBaseUnits, getBlockchainArchitecture
 } from '@/lib/commons';
 import { type BlockchainArchitecture, type RevenueByCurrency } from '@/types/blockchain';
 
@@ -45,7 +45,7 @@ import {
     serverSummaryAnalyticsView,
     session,
     toolAnalyticsView,
-    toolPricing,
+    // toolPricing table removed - using enhanced pricing operations instead
     toolUsage,
     users,
     userWallets,
@@ -53,9 +53,9 @@ import {
     webhooks,
     type RevenueDetails
 } from "@/lib/gateway/db/schema";
-import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
-import { ToolPaymentInfo } from '@/types/mcp';
+import { PricingEntry } from '@/types/payments';
 import { type CDPNetwork } from '@/types/wallet';
+import { and, desc, eq, isNull } from "drizzle-orm";
 
 // Define proper transaction type
 export type TransactionType = Parameters<Parameters<typeof db['transaction']>[0]>[0];
@@ -86,6 +86,7 @@ function processRevenueDetails(revenueDetails: RevenueDetails): { revenueByCurre
             } catch (error) {
                 // If conversion fails, add raw amount (not ideal but prevents errors)
                 totalRevenue += parseFloat(detail.amount_raw) || 0;
+                console.error('Error converting revenue amount:', error);
             }
         }
     });
@@ -160,7 +161,7 @@ export const txOperations = {
             name: string;
             description: string;
             inputSchema: Record<string, unknown>;
-            payment?: ToolPaymentInfo;
+            pricing?: PricingEntry[];
         }>;
     }) => async (tx: TransactionType) => {
         // Update server metadata
@@ -172,7 +173,7 @@ export const txOperations = {
                     ...data.metadata,
                     lastPing: new Date().toISOString(),
                     toolsCount: data.toolsData.length,
-                    monetizedToolsCount: data.toolsData.filter(t => t.payment).length
+                    monetizedToolsCount: data.toolsData.filter(t => t.pricing).length
                 },
                 updatedAt: new Date()
             })
@@ -192,13 +193,38 @@ export const txOperations = {
             const existingTool = existingTools.find(t => t.name === toolData.name);
             
             if (existingTool) {
-                // Update existing tool
+                const existingPricing = (existingTool.pricing as PricingEntry[]) || [];
+                
+                // Smart pricing merge: invalidate older entries with same network + assetAddress
+                let mergedPricing = [...existingPricing];
+                
+                if (toolData.pricing && toolData.pricing.length > 0) {
+                    // For each new pricing entry, invalidate older entries with same network + assetAddress
+                    for (const newPricing of toolData.pricing) {                        
+                        // Deactivate conflicting entries (older ones)
+                        mergedPricing = mergedPricing.map(existing => {
+                            if (existing.network === newPricing.network && 
+                                existing.assetAddress === newPricing.assetAddress) {
+                                return {
+                                    ...existing,
+                                    active: false,
+                                    updatedAt: new Date().toISOString()
+                                };
+                            }
+                            return existing;
+                        });
+                    }
+                    
+                    // Add new pricing entries (they should be active by default)
+                    mergedPricing = [...mergedPricing, ...toolData.pricing];
+                }
+                
                 const updatedTool = await tx.update(mcpTools)
                     .set({
                         description: toolData.description,
                         inputSchema: toolData.inputSchema,
-                        isMonetized: !!toolData.payment,
-                        payment: toolData.payment,
+                        isMonetized: !!(mergedPricing && mergedPricing.some((p: PricingEntry) => p.active === true)),
+                        pricing: mergedPricing,
                         updatedAt: new Date()
                     })
                     .where(eq(mcpTools.id, existingTool.id))
@@ -212,12 +238,11 @@ export const txOperations = {
                     name: toolData.name,
                     description: toolData.description,
                     inputSchema: toolData.inputSchema,
-                    isMonetized: !!toolData.payment,
-                    payment: toolData.payment,
+                    isMonetized: !!toolData.pricing && toolData.pricing.some((p: PricingEntry) => p.active === true),
+                    pricing: toolData.pricing,
                     createdAt: new Date(),
                     updatedAt: new Date()
                 }).returning();
-                
                 toolResults.push(newTool[0]);
             }
         }
@@ -300,7 +325,7 @@ export const txOperations = {
                         description: true,
                         inputSchema: true,
                         isMonetized: true,
-                        payment: true,
+                        pricing: true,
                         status: true,
                         metadata: true,
                         createdAt: true,
@@ -342,26 +367,14 @@ export const txOperations = {
                         description: true,
                         inputSchema: true,
                         isMonetized: true,
-                        payment: true,
+                        pricing: true,
                         status: true,
                         metadata: true,
                         createdAt: true,
                         updatedAt: true
                     },
                     with: {
-                        pricing: {
-                            where: eq(toolPricing.active, true),
-                            columns: {
-                                id: true,
-                                priceRaw: true,
-                                tokenDecimals: true,
-                                currency: true,
-                                network: true,
-                                assetAddress: true,
-                                active: true,
-                                createdAt: true
-                            }
-                        },
+                        // pricing relation removed - pricing data now in payment jsonb field
                         payments: {
                             columns: {
                                 id: true,
@@ -526,7 +539,7 @@ export const txOperations = {
                         description: true,
                         inputSchema: true,
                         isMonetized: true,
-                        payment: true,
+                        pricing: true,
                         status: true,
                         createdAt: true,
                         updatedAt: true
@@ -567,7 +580,7 @@ export const txOperations = {
                         description: true,
                         inputSchema: true,
                         isMonetized: true,
-                        payment: true,
+                        pricing: true,
                         status: true,
                         createdAt: true,
                         updatedAt: true
@@ -667,274 +680,6 @@ export const txOperations = {
         return sortedServers;
     },
 
-    searchMcpServers: (searchTerm: string, limit = 10, offset = 0) => async (tx: TransactionType) => {
-        // Input validation and sanitization
-        if (!searchTerm || typeof searchTerm !== 'string') {
-            throw new Error('Invalid search term');
-        }
-        
-        // Sanitize search term - remove any potentially dangerous characters
-        const sanitizedTerm = searchTerm
-            .trim()
-            .replace(/[%_\\]/g, '\\$&') // Escape SQL wildcards
-            .substring(0, 100); // Limit length to prevent DoS
-            
-        if (sanitizedTerm.length < 1) {
-            throw new Error('Search term too short');
-        }
-        
-        // Validate and sanitize numeric parameters
-        const safeLimitNum = Math.max(1, Math.min(100, Number(limit) || 10)); // Limit between 1-100
-        const safeOffsetNum = Math.max(0, Number(offset) || 0);
-        
-        // Use parameterized search pattern
-        const searchPattern = `%${sanitizedTerm}%`;
-        
-        // Search servers by name and description (with activity data for scoring)
-        const servers = await tx.query.mcpServers.findMany({
-            where: or(
-                ilike(mcpServers.name, searchPattern),
-                ilike(mcpServers.description, searchPattern),
-                // Use PostgreSQL's full-text search with proper parameterization
-                sql`to_tsvector('english', coalesce(${mcpServers.name}, '') || ' ' || coalesce(${mcpServers.description}, '')) @@ plainto_tsquery('english', ${sanitizedTerm})`
-            ),
-            columns: {
-                id: true,
-                serverId: true,
-                name: true,
-                receiverAddress: true,
-                description: true,
-                metadata: true,
-                status: true,
-                createdAt: true,
-                updatedAt: true
-            },
-            with: {
-                creator: {
-                    columns: {
-                        id: true,
-                        walletAddress: true,
-                        displayName: true,
-                        avatarUrl: true
-                    }
-                },
-                tools: {
-                    columns: {
-                        id: true,
-                        name: true,
-                        description: true,
-                        inputSchema: true,
-                        isMonetized: true,
-                        payment: true,
-                        status: true,
-                        createdAt: true,
-                        updatedAt: true
-                    },
-                    with: {
-                        payments: {
-                            where: eq(payments.status, 'completed'),
-                            columns: {
-                                id: true,
-                                amountRaw: true,
-                                tokenDecimals: true,
-                                currency: true,
-                                userId: true,
-                                createdAt: true
-                            }
-                        },
-                        usage: {
-                            columns: {
-                                id: true,
-                                userId: true,
-                                timestamp: true,
-                                responseStatus: true
-                            }
-                        }
-                    },
-                    orderBy: [mcpTools.name]
-                }
-            }
-        });
-
-        // Search for tools that match, then get their servers
-        const matchingTools = await tx.query.mcpTools.findMany({
-            where: or(
-                ilike(mcpTools.name, searchPattern),
-                ilike(mcpTools.description, searchPattern),
-                sql`to_tsvector('english', coalesce(${mcpTools.name}, '') || ' ' || coalesce(${mcpTools.description}, '')) @@ plainto_tsquery('english', ${sanitizedTerm})`
-            ),
-            columns: {
-                serverId: true
-            }
-        });
-
-        // Get unique server IDs from matching tools
-        const serverIdsFromTools = [...new Set(matchingTools.map(tool => tool.serverId))];
-
-        // Fetch servers that have matching tools (using simple IN clause with individual conditions)
-        let serversWithMatchingTools: typeof servers = [];
-        if (serverIdsFromTools.length > 0) {
-            serversWithMatchingTools = await tx.query.mcpServers.findMany({
-                where: or(...serverIdsFromTools.map(serverId => eq(mcpServers.id, serverId))),
-                columns: {
-                    id: true,
-                    serverId: true,
-                    name: true,
-                    receiverAddress: true,
-                    description: true,
-                    metadata: true,
-                    status: true,
-                    createdAt: true,
-                    updatedAt: true
-                },
-                with: {
-                    creator: {
-                        columns: {
-                            id: true,
-                            walletAddress: true,
-                            displayName: true,
-                            avatarUrl: true
-                        }
-                    },
-                    tools: {
-                        columns: {
-                            id: true,
-                            name: true,
-                            description: true,
-                            inputSchema: true,
-                            isMonetized: true,
-                            payment: true,
-                            status: true,
-                            createdAt: true,
-                            updatedAt: true
-                        },
-                        with: {
-                            payments: {
-                                where: eq(payments.status, 'completed'),
-                                                            columns: {
-                                id: true,
-                                amountRaw: true,
-                                tokenDecimals: true,
-                                currency: true,
-                                userId: true,
-                                createdAt: true
-                            }
-                            },
-                            usage: {
-                                columns: {
-                                    id: true,
-                                    userId: true,
-                                    timestamp: true,
-                                    responseStatus: true
-                                }
-                            }
-                        },
-                        orderBy: [mcpTools.name]
-                    }
-                }
-            });
-        }
-
-        // Combine results and remove duplicates
-        const allServers = [...servers, ...serversWithMatchingTools];
-        const uniqueServers = allServers.filter((server, index, self) => 
-            index === self.findIndex(s => s.id === server.id)
-        );
-
-        // Calculate activity metrics and search relevance for each server
-        const serversWithScoring = uniqueServers.map(server => {
-            const cleanSearchTerm = sanitizedTerm.toLowerCase();
-            
-            // Calculate search relevance score (0-3, higher is better)
-            let relevanceScore = 0;
-            if (server.name?.toLowerCase().includes(cleanSearchTerm)) {
-                relevanceScore += 3; // Exact name match gets highest relevance
-            }
-            if (server.description?.toLowerCase().includes(cleanSearchTerm)) {
-                relevanceScore += 2; // Description match gets medium relevance
-            }
-            // Check if any tools match the search term
-            const hasMatchingTool = server.tools?.some((tool) => 
-                tool.name?.toLowerCase().includes(cleanSearchTerm) || 
-                tool.description?.toLowerCase().includes(cleanSearchTerm)
-            );
-            if (hasMatchingTool) {
-                relevanceScore += 1; // Tool match gets lower relevance
-            }
-
-            // Calculate activity metrics (same as trending algorithm)
-            const allPayments = server.tools?.flatMap((tool) => tool.payments || []) || [];
-            const allUsage = server.tools?.flatMap((tool) => tool.usage || []) || [];
-            
-            const totalPayments = allPayments.length;
-            const totalRevenue = allPayments.reduce((sum: number, payment) => 
-                sum + parseFloat(payment.amountRaw), 0
-            );
-            const totalUsage = allUsage.length;
-            const successfulUsage = allUsage.filter((usage) => 
-                usage.responseStatus === 'success' || usage.responseStatus === '200'
-            ).length;
-            
-            // Get unique users from both payments and usage
-            const paymentUserIds = allPayments
-                .map((p) => p.userId)
-                .filter(Boolean);
-            const usageUserIds = allUsage
-                .map((u) => u.userId)
-                .filter(Boolean);
-            const uniqueUsers = new Set([...paymentUserIds, ...usageUserIds]).size;
-            
-            // Calculate recent activity (last 30 days)
-            const thirtyDaysAgo = new Date();
-            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-            
-            const recentPayments = allPayments.filter((p) => 
-                new Date(p.createdAt) > thirtyDaysAgo
-            ).length;
-            const recentUsage = allUsage.filter((u) => 
-                new Date(u.timestamp) > thirtyDaysAgo
-            ).length;
-            
-            // Calculate activity score (same weights as trending)
-            const activityScore = (
-                totalPayments * 10 +        // High weight for payments
-                totalRevenue * 0.1 +        // Revenue impact (assuming small amounts)
-                totalUsage * 2 +            // Medium weight for usage
-                uniqueUsers * 15 +          // High weight for unique users
-                recentPayments * 20 +       // Higher weight for recent payments
-                recentUsage * 5 +           // Medium weight for recent usage
-                successfulUsage * 1         // Small bonus for successful usage
-            );
-
-            // Combine relevance and activity score
-            // Relevance gets 40% weight, activity gets 60% weight
-            const combinedScore = (relevanceScore * 40) + (activityScore * 0.6);
-
-            return {
-                ...server,
-                activityMetrics: {
-                    totalPayments,
-                    totalRevenue,
-                    totalUsage,
-                    uniqueUsers,
-                    recentPayments,
-                    recentUsage,
-                    successfulUsage,
-                    activityScore,
-                    relevanceScore,
-                    combinedScore
-                }
-            };
-        });
-
-        // Sort by combined score (descending) and apply pagination
-        const sortedResults = serversWithScoring
-            .sort((a, b) => b.activityMetrics.combinedScore - a.activityMetrics.combinedScore)
-            .slice(safeOffsetNum, safeOffsetNum + safeLimitNum);
-
-        return sortedResults;
-    },
-
     updateMcpServer: (id: string, data: {
         url?: string;
         mcpOrigin?: string;
@@ -973,8 +718,9 @@ export const txOperations = {
         name: string;
         description: string;
         inputSchema: Record<string, unknown>;
+        outputSchema: Record<string, unknown>;
         isMonetized?: boolean;
-        payment?: Record<string, unknown>;
+        pricing?: PricingEntry[];
         status?: string;
         metadata?: Record<string, unknown>;
     }) => async (tx: TransactionType) => {
@@ -983,8 +729,9 @@ export const txOperations = {
             name: data.name,
             description: data.description,
             inputSchema: data.inputSchema,
+            outputSchema: data.outputSchema,
             isMonetized: data.isMonetized,
-            payment: data.payment,
+            pricing: data.pricing,
             status: data.status,
             metadata: data.metadata,
             createdAt: new Date(),
@@ -1013,13 +760,33 @@ export const txOperations = {
         description?: string;
         inputSchema?: Record<string, unknown>;
         isMonetized?: boolean;
-        payment?: Record<string, unknown>;
+        pricing?: PricingEntry[];
         status?: string;
         metadata?: Record<string, unknown>;
     }) => async (tx: TransactionType) => {
+        // Get existing tool to preserve pricing data
+        const existingTool = await tx.query.mcpTools.findFirst({
+            where: eq(mcpTools.id, toolId)
+        });
+
+        if (!existingTool) {
+            throw new Error(`Tool with ID ${toolId} not found`);
+        }
+
+        // Preserve existing pricing data when updating pricing field
+        const existingPricing = (existingTool.pricing as PricingEntry[]) || [];
+        const mergedPricing = data.pricing !== undefined ? data.pricing : existingPricing;
+        const isMonetized = data.isMonetized !== undefined ? data.isMonetized : !!(existingPricing.filter((p: PricingEntry) => p.active === true).length > 0);
+
         const tool = await tx.update(mcpTools)
             .set({
-                ...data,
+                name: data.name,
+                description: data.description,
+                inputSchema: data.inputSchema,
+                isMonetized: isMonetized,
+                pricing: mergedPricing,
+                status: data.status,
+                metadata: data.metadata,
                 updatedAt: new Date()
             })
             .where(eq(mcpTools.id, toolId))
@@ -1829,54 +1596,135 @@ export const txOperations = {
         return result[0];
     },
 
-    // Tool Pricing
-    createToolPricing: (toolId: string, data: {
-        priceRaw: string; // Base units as string (e.g., "100000" for 0.1 USDC)
-        tokenDecimals: number; // Token decimals (e.g., 6 for USDC)
-        currency: string;
-        network: string;
-        assetAddress?: string;
-    }) => async (tx: TransactionType) => {
-        const pricing = await tx.insert(toolPricing).values({
-            toolId,
-            priceRaw: data.priceRaw,
-            tokenDecimals: data.tokenDecimals,
-            currency: data.currency,
-            network: data.network,
-            assetAddress: data.assetAddress,
-            active: true,
-            createdAt: new Date(),
-            updatedAt: new Date()
-        }).returning();
+    // Enhanced Tool Pricing (now stored in mcpTools.payment field)
+    createToolPricing: (toolId: string, pricing: PricingEntry) => async (tx: TransactionType) => {
+        // Get current tool data
+        const tool = await tx.query.mcpTools.findFirst({
+            where: eq(mcpTools.id, toolId)
+        });
+        
+        if (!tool) {
+            throw new Error(`Tool with ID ${toolId} not found`);
+        }
 
-        if (!pricing[0]) throw new Error("Failed to create pricing");
-        return pricing[0];
+        const currentPricing = (tool.pricing as PricingEntry[]) || [];
+        
+        // Deactivate existing pricing entries
+        const updatedPricing = currentPricing.map((p: PricingEntry) => ({ ...p, active: false, updatedAt: new Date().toISOString() }));
+        
+        // Create new pricing entry
+        const newPricing = {
+            id: crypto.randomUUID(),
+            maxAmountRequiredRaw: pricing.maxAmountRequiredRaw,
+            tokenDecimals: pricing.tokenDecimals,
+            network: pricing.network,
+            assetAddress: pricing.assetAddress,
+            active: true,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+
+        // Add new pricing to the array
+        updatedPricing.push(newPricing);
+
+        const result = await tx
+            .update(mcpTools)
+            .set({ 
+                pricing: updatedPricing as PricingEntry[],
+                isMonetized: true,
+                updatedAt: new Date()
+            })
+            .where(eq(mcpTools.id, toolId))
+            .returning();
+
+        if (!result[0]) {
+            throw new Error("Failed to update tool with pricing");
+        }
+
+        // Return pricing in the same format as the old table
+        return {
+            id: newPricing.id,
+            toolId,
+            amountRaw: newPricing.maxAmountRequiredRaw,
+            tokenDecimals: newPricing.tokenDecimals,
+            network: newPricing.network,
+            assetAddress: newPricing.assetAddress,
+            active: newPricing.active,
+            createdAt: new Date(newPricing.createdAt),
+            updatedAt: new Date(newPricing.updatedAt)
+        };
     },
 
     getActiveToolPricing: (toolId: string) => async (tx: TransactionType) => {
-        return await tx.query.toolPricing.findFirst({
-            where: and(
-                eq(toolPricing.toolId, toolId),
-                eq(toolPricing.active, true)
-            )
+        const tool = await tx.query.mcpTools.findFirst({
+            where: eq(mcpTools.id, toolId)
         });
+        
+        if (!tool?.pricing) {
+            return null;
+        }
+        
+        const pricing = tool.pricing as PricingEntry[];
+        
+        if (!pricing.length) {
+            return null;
+        }
+
+        // Return only active pricing entries
+        const activePricing = pricing.filter(p => p.active === true);
+        
+        return activePricing.length > 0 ? activePricing : null;
     },
 
     deactivateToolPricing: (toolId: string) => async (tx: TransactionType) => {
-        const currentPricing = await tx.query.toolPricing.findFirst({
-            where: and(
-                eq(toolPricing.toolId, toolId),
-                eq(toolPricing.active, true)
-            )
+        const tool = await tx.query.mcpTools.findFirst({
+            where: eq(mcpTools.id, toolId)
         });
-
-        if (currentPricing) {
-            await tx.update(toolPricing)
-                .set({ active: false, updatedAt: new Date() })
-                .where(eq(toolPricing.id, currentPricing.id));
-            return currentPricing;
+        
+        if (!tool?.pricing) {
+            return null;
         }
-        return null;
+        
+        const pricing = tool.pricing as PricingEntry[];
+        
+        if (!pricing) {
+            return null;
+        }
+        
+        const currentActive = pricing.find((p: PricingEntry) => p.active === true);
+        
+        if (!currentActive) {
+            return null;
+        }
+        
+        // Deactivate current pricing
+        const updatedPricing = pricing.map((p: PricingEntry) => 
+            p.createdAt === currentActive.createdAt 
+                ? { ...p, active: false, updatedAt: new Date().toISOString() }
+                : p
+        );
+
+        await tx
+            .update(mcpTools)
+            .set({ 
+                pricing: updatedPricing as PricingEntry[],
+                isMonetized: false,
+                updatedAt: new Date()
+            })
+            .where(eq(mcpTools.id, toolId));
+
+        // Return the deactivated pricing in the same format
+        return {
+            id: currentActive.id,
+            toolId,
+            amountRaw: currentActive.maxAmountRequiredRaw,
+            tokenDecimals: currentActive.tokenDecimals,
+            network: currentActive.network,
+            assetAddress: currentActive.assetAddress,
+            active: false,
+            createdAt: new Date(currentActive.createdAt),
+            updatedAt: new Date()
+        };
     },
 
     // Payments
@@ -2041,7 +1889,6 @@ export const txOperations = {
     recordToolUsage: (data: {
         toolId: string;
         userId?: string;
-        pricingId?: string; // Optional reference to the pricing used for this usage
         responseStatus: string;
         executionTimeMs?: number;
         ipAddress?: string;
@@ -2054,7 +1901,6 @@ export const txOperations = {
         const result = await tx.insert(toolUsage).values({
             toolId: data.toolId,
             userId: data.userId,
-            pricingId: data.pricingId, // Include pricing reference
             responseStatus: data.responseStatus,
             executionTimeMs: executionTime,
             ipAddress: data.ipAddress,
@@ -2091,16 +1937,8 @@ export const txOperations = {
                             }
                         }
                     }
-                },
-                pricing: {
-                    columns: {
-                        id: true,
-                        priceRaw: true,
-                        tokenDecimals: true,
-                        currency: true,
-                        network: true
-                    }
                 }
+                // pricing relation removed - pricing data now in payment jsonb field
             }
         });
     },
@@ -2763,7 +2601,7 @@ export const txOperations = {
                         name: true,
                         description: true,
                         inputSchema: true,
-                        payment: true,
+                        pricing: true,
                         isMonetized: true
                     }
                 }
@@ -2783,10 +2621,10 @@ export const txOperations = {
             };
 
             // Add payment info if tool is monetized and has payment data
-            if (tool.isMonetized && tool.payment) {
+            if (tool.isMonetized && tool.pricing) {
                 return {
                     ...baseToolData,
-                    payment: tool.payment
+                    pricing: tool.pricing
                 };
             }
 
@@ -2866,26 +2704,13 @@ export const txOperations = {
                         description: true,
                         inputSchema: true,
                         isMonetized: true,
-                        payment: true,
+                        pricing: true,
                         status: true,
                         metadata: true,
                         createdAt: true,
                         updatedAt: true
                     },
                     with: {
-                        pricing: {
-                            where: eq(toolPricing.active, true),
-                            columns: {
-                                id: true,
-                                priceRaw: true,
-                                tokenDecimals: true,
-                                currency: true,
-                                network: true,
-                                assetAddress: true,
-                                active: true,
-                                createdAt: true
-                            }
-                        },
                         payments: {
                             columns: {
                                 id: true,
@@ -3104,11 +2929,8 @@ export const txOperations = {
             name: string;
             description?: string;
             inputSchema?: Record<string, unknown>;
-            payment?: {
-                maxAmountRequired?: number;
-                asset?: string;
-                network?: string;
-            };
+            outputSchema?: Record<string, unknown>;
+            pricing: PricingEntry[] | undefined;
         }>;
     }) => async (tx: TransactionType) => {
         console.log('Creating server for authenticated user:', data.authenticatedUserId);
@@ -3173,30 +2995,12 @@ export const txOperations = {
                 name: tool.name,
                 description: tool.description || `Access to ${tool.name}`,
                 inputSchema: tool.inputSchema || {},
-                isMonetized: !!tool.payment,
-                payment: tool.payment as Record<string, unknown> | undefined
+                outputSchema: tool.outputSchema || {},
+                isMonetized: !!tool.pricing,
+                pricing: tool.pricing as PricingEntry[] | undefined
             })(tx);
 
             createdTools.push(createdTool);
-
-            // Create pricing if monetized
-            if (tool.payment) {
-                console.log('Creating pricing for tool:', tool.name);
-                const paymentInfo = tool.payment;
-                const currency = String(paymentInfo.asset || 'USDC');
-                const tokenDecimals = COMMON_DECIMALS[currency as keyof typeof COMMON_DECIMALS] || 6;
-                
-                await txOperations.createToolPricing(
-                    createdTool.id,
-                    {
-                        priceRaw: String(paymentInfo.maxAmountRequired || 0),
-                        tokenDecimals,
-                        currency,
-                        network: String(paymentInfo.network || 'base-sepolia'),
-                        assetAddress: String(paymentInfo.asset || 'USDC'),
-                    }
-                )(tx);
-            }
         }
 
         // Assign ownership to the authenticated user
@@ -3210,147 +3014,4 @@ export const txOperations = {
             user: user
         };
     }
-};
-
-// Example of using standard transaction approach
-export const createServerWithToolAndPricing = async (
-    serverData: Parameters<typeof txOperations.createServer>[0],
-    toolData: Parameters<typeof txOperations.createTool>[0],
-    pricingData: Parameters<typeof txOperations.createToolPricing>[1]
-) => {
-    return await db.transaction(async (tx) => {
-        // Create server first
-        const server = await txOperations.createServer(serverData)(tx);
-
-        // Use server ID for the tool
-        toolData.serverId = server.serverId;
-        const tool = await txOperations.createTool(toolData)(tx);
-
-        // Add pricing for the tool
-        const pricing = await txOperations.createToolPricing(tool.id, pricingData)(tx);
-
-        // Assign ownership if creatorId exists
-        if (serverData.creatorId) {
-            await txOperations.assignOwnership(server.serverId, serverData.creatorId)(tx);
-        }
-
-        return { server, tool, pricing };
-    });
-};
-
-// Example of updating tool with pricing in a more flexible way
-export const updateToolWithNewPricing = async (
-    toolId: string,
-    toolData: Parameters<typeof txOperations.updateTool>[1],
-    pricingData: Parameters<typeof txOperations.createToolPricing>[1]
-) => {
-    return await db.transaction(async (tx) => {
-        const updatedTool = await txOperations.updateTool(toolId, toolData)(tx);
-        await txOperations.deactivateToolPricing(toolId)(tx);
-        const newPricing = await txOperations.createToolPricing(toolId, pricingData)(tx);
-
-        return { tool: updatedTool, pricing: newPricing };
-    });
-};
-
-// Complex transaction workflow examples
-
-// Example: User registers and creates a server with tools in one transaction
-export const registerUserWithServerAndTools = async (
-    userData: Parameters<typeof txOperations.createUser>[0],
-    serverData: Parameters<typeof txOperations.createServer>[0],
-    toolsData: Parameters<typeof txOperations.createTool>[0][],
-    webhookData?: Parameters<typeof txOperations.createWebhook>[0]
-) => {
-    return await db.transaction(async (tx) => {
-        // Create the user first
-        const user = await txOperations.createUser(userData)(tx);
-
-        // Use the user's ID for the server
-        serverData.creatorId = user.id;
-        const server = await txOperations.createServer(serverData)(tx);
-
-        // Create all tools
-        const tools = [];
-        for (const toolData of toolsData) {
-            toolData.serverId = server.serverId;
-            const tool = await txOperations.createTool(toolData)(tx);
-            tools.push(tool);
-        }
-
-        // Create webhook if provided
-        let webhook = null;
-        if (webhookData) {
-            webhookData.serverId = server.serverId;
-            webhook = await txOperations.createWebhook(webhookData)(tx);
-        }
-
-        // Assign ownership
-        await txOperations.assignOwnership(server.serverId, user.id, 'owner')(tx);
-
-        return {
-            user,
-            server,
-            tools,
-            webhook
-        };
-    });
-};
-
-// Example: Process payment and record usage together
-export const processPaymentWithUsage = async (
-    paymentData: Parameters<typeof txOperations.createPayment>[0],
-    usageData: Parameters<typeof txOperations.recordToolUsage>[0]
-) => {
-    return await db.transaction(async (tx) => {
-        // Create payment record
-        const payment = await txOperations.createPayment(paymentData)(tx);
-
-        // Record tool usage
-        const usage = await txOperations.recordToolUsage(usageData)(tx);
-
-        // Analytics are now computed in real-time from database views
-        // No need to manually update analytics data
-
-        return { payment, usage };
-    });
-};
-
-// Example: Create API key with transaction logging
-export const createApiKeyWithTracking = async (
-    userId: string,
-    keyName: string,
-    permissions: string[],
-    keyHash: string
-) => {
-    return await db.transaction(async (tx) => {
-        // Make sure user exists
-        const user = await txOperations.getUserById(userId)(tx);
-        if (!user) throw new Error(`User with ID ${userId} not found`);
-
-        // Create API key
-        const apiKey = await txOperations.createApiKey({
-            userId,
-            keyHash,
-            name: keyName,
-            permissions,
-            expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 365) // 1 year
-        })(tx);
-
-        // Create metadata record about API key creation
-        const metadata = {
-            event: 'api_key_created',
-            userId,
-            keyId: apiKey.id,
-            permissions,
-            timestamp: new Date()
-        };
-
-        // For demonstration - in real app we'd have a proper audit log table
-        // Note: Analytics are now computed from views, so audit logging would need
-        // to be implemented with a proper audit log table if needed
-        console.log('API key created:', metadata);
-
-        return { apiKey, metadata };
-    });
 };

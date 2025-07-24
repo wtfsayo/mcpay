@@ -1,6 +1,6 @@
 "use client"
 
-import { AddressLink, TransactionLink } from "@/components/custom-ui/explorer-link"
+import { TransactionLink } from "@/components/custom-ui/explorer-link"
 import { ToolExecutionModal } from "@/components/custom-ui/tool-execution-modal"
 import { useTheme } from "@/components/providers/theme-context"
 import { Badge } from "@/components/ui/badge"
@@ -17,6 +17,7 @@ import {
 } from "@/lib/commons"
 // Add missing imports from amounts utilities
 import { RevenueDetail } from "@/lib/gateway/db/schema"
+import { PricingEntry } from "@/types"
 import { type Network } from "@/types/blockchain"
 import { DailyServerAnalytics, type McpServerWithStats, type ServerSummaryAnalytics, type ToolFromMcpServerWithStats } from "@/types/mcp"
 import {
@@ -230,6 +231,12 @@ await client.connect(transport)
   const safeNumber = (value: unknown): number => {
     const num = Number(value)
     return isNaN(num) ? 0 : num
+  }
+
+  // Helper function to get active pricing entries
+  const getActivePricing = (pricing: PricingEntry[] | null): PricingEntry[] => {
+    if (!pricing || !Array.isArray(pricing)) return []
+    return pricing.filter(p => p.active === true)
   }
 
   // Helper function to calculate total revenue from revenueDetails array
@@ -1034,38 +1041,47 @@ await client.connect(transport)`}
                             </div>
                           </TableCell>
                           <TableCell>
-                            {tool.isMonetized ? (
-                              <Badge variant="secondary" className={`text-xs ${isDark ? "bg-gray-600 text-gray-200" : ""}`}>
-                                Paid
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className={`text-xs ${isDark ? "border-gray-500 text-gray-300" : ""}`}>
-                                Free
-                              </Badge>
-                            )}
+                            {(() => {
+                              const activePricing = getActivePricing(tool.pricing as PricingEntry[])
+                              return activePricing.length > 0 ? (
+                                <Badge variant="secondary" className={`text-xs ${isDark ? "bg-gray-600 text-gray-200" : ""}`}>
+                                  Paid
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className={`text-xs ${isDark ? "border-gray-500 text-gray-300" : ""}`}>
+                                  Free
+                                </Badge>
+                              )
+                            })()}
                           </TableCell>
                           <TableCell>
-                            {(tool.pricing || []).length > 0 && tool.pricing[0] ? (
-                              <TokenDisplay
-                                currency={tool.pricing[0].currency}
-                                network={tool.pricing[0].network}
-                                amount={tool.pricing[0].priceRaw && typeof tool.pricing[0].priceRaw === 'string' && tool.pricing[0].priceRaw.trim() !== ''
-                                  ? fromBaseUnits(tool.pricing[0].priceRaw, tool.pricing[0].tokenDecimals)
-                                  : '0'}
-                              />
-                            ) : (
-                              <span className={isDark ? "text-gray-400" : "text-gray-500"}>Free</span>
-                            )}
+                            {(() => {
+                              const activePricing = getActivePricing(tool.pricing as PricingEntry[])
+                              return activePricing.length > 0 && activePricing[0] ? (
+                                <TokenDisplay
+                                  currency={activePricing[0]?.assetAddress}
+                                  network={activePricing[0]?.network}
+                                  amount={activePricing[0]?.maxAmountRequiredRaw && typeof activePricing[0]?.maxAmountRequiredRaw === 'string' && activePricing[0]?.maxAmountRequiredRaw.trim() !== ''
+                                    ? fromBaseUnits(activePricing[0]?.maxAmountRequiredRaw, activePricing[0]?.tokenDecimals || 0)
+                                    : '0'}
+                                />
+                              ) : ( 
+                                <span className={isDark ? "text-gray-400" : "text-gray-500"}>Free</span>
+                              )
+                            })()}
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col gap-1">
-                              {(tool.pricing || []).length > 0 && tool.pricing[0]?.network ? (
-                                <Badge variant="outline" className={`text-xs ${isDark ? "border-gray-500 text-gray-300" : ""}`}>
-                                  {tool.pricing[0].network}
-                                </Badge>
-                              ) : (
-                                <span className={isDark ? "text-gray-400" : "text-gray-500"}>-</span>
-                              )}
+                              {(() => {
+                                const activePricing = getActivePricing(tool.pricing as PricingEntry[])
+                                return activePricing.length > 0 && activePricing[0]?.network ? (
+                                  <Badge variant="outline" className={`text-xs ${isDark ? "border-gray-500 text-gray-300" : ""}`}>
+                                    {activePricing[0].network}
+                                  </Badge>
+                                ) : (
+                                  <span className={isDark ? "text-gray-400" : "text-gray-500"}>-</span>
+                                )
+                              })()}
                             </div>
                           </TableCell>
                           <TableCell>

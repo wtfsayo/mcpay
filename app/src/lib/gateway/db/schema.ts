@@ -16,7 +16,7 @@
  * - formatAmount(baseUnits, decimals, options) -> displayString
  * 
  * Tables with amount_raw + token_decimals:
- * - toolPricing (price_raw, token_decimals)
+ * - mcpTools.pricing (price_raw, token_decimals) - stored in jsonb field
  * - payments (amount_raw, token_decimals)
  * - analytics (total_revenue_raw, uses mixed currencies - handle in app layer)
  * 
@@ -181,8 +181,9 @@ export const mcpTools = pgTable('mcp_tools', {
   name: text('name').notNull(),
   description: text('description').notNull(),
   inputSchema: jsonb('input_schema').notNull(),
+  outputSchema: jsonb('output_schema').default(sql`'{}'::jsonb`),
   isMonetized: boolean('is_monetized').default(false).notNull(),
-  payment: jsonb('payment'),
+  pricing: jsonb('pricing'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
   status: text('status').default('active').notNull(),
@@ -195,29 +196,9 @@ export const mcpTools = pgTable('mcp_tools', {
   index('mcp_tool_monetized_idx').on(table.isMonetized),
 ]);
 
-export const toolPricing = pgTable('tool_pricing', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  toolId: uuid('tool_id').references(() => mcpTools.id, { onDelete: 'cascade' }).notNull(),
-  priceRaw: decimal('price_raw', { precision: 38, scale: 0 }).notNull(), // Base units as NUMERIC(38,0)
-  tokenDecimals: integer('token_decimals').notNull(), // Token decimals for self-sufficient records
-  currency: text('currency').notNull(), // Token symbol or contract address
-  network: text('network').notNull(),
-  assetAddress: text('asset_address'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-  active: boolean('active').default(true).notNull(),
-}, (table) => [
-  index('tool_pricing_tool_id_idx').on(table.toolId),
-  index('tool_pricing_active_idx').on(table.active),
-  index('tool_pricing_network_idx').on(table.network),
-  index('tool_pricing_tool_network_idx').on(table.toolId, table.network),
-  check('price_raw_positive_check', sql`"price_raw" >= 0`), // Can validate numeric values
-]);
-
 export const toolUsage = pgTable('tool_usage', {
   id: uuid('id').primaryKey().defaultRandom(),
   toolId: uuid('tool_id').references(() => mcpTools.id, { onDelete: 'cascade' }).notNull(),
-  pricingId: uuid('pricing_id').references(() => toolPricing.id, { onDelete: 'set null' }), // Direct reference to pricing used
   timestamp: timestamp('timestamp').defaultNow().notNull(),
   userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
   requestData: jsonb('request_data'),
@@ -228,12 +209,10 @@ export const toolUsage = pgTable('tool_usage', {
   result: jsonb('result'),
 }, (table) => [
   index('tool_usage_tool_id_idx').on(table.toolId),
-  index('tool_usage_pricing_id_idx').on(table.pricingId), // Add index for pricing lookup
   index('tool_usage_user_id_idx').on(table.userId),
   index('tool_usage_timestamp_idx').on(table.timestamp),
   index('tool_usage_status_idx').on(table.responseStatus),
   index('tool_usage_tool_timestamp_idx').on(table.toolId, table.timestamp),
-  index('tool_usage_tool_pricing_idx').on(table.toolId, table.pricingId), // Composite index for queries
 ]);
 
 export const payments = pgTable('payments', {
@@ -381,7 +360,6 @@ export const mcpToolsRelations = relations(mcpTools, ({ one, many }) => ({
     fields: [mcpTools.serverId],
     references: [mcpServers.id],
   }),
-  pricing: many(toolPricing),
   usage: many(toolUsage),
   payments: many(payments),
   proofs: many(proofs),
@@ -428,22 +406,10 @@ export const accountRelations = relations(account, ({ one }) => ({
   }),
 }));
 
-export const toolPricingRelations = relations(toolPricing, ({ one, many }) => ({
-  tool: one(mcpTools, {
-    fields: [toolPricing.toolId],
-    references: [mcpTools.id],
-  }),
-  usage: many(toolUsage), // One pricing can be used by many tool usages
-}));
-
 export const toolUsageRelations = relations(toolUsage, ({ one }) => ({
   tool: one(mcpTools, {
     fields: [toolUsage.toolId],
     references: [mcpTools.id],
-  }),
-  pricing: one(toolPricing, {
-    fields: [toolUsage.pricingId],
-    references: [toolPricing.id],
   }),
   user: one(users, {
     fields: [toolUsage.userId],
