@@ -156,7 +156,7 @@ export const verification = pgTable("verification", {
 export const mcpServers = pgTable('mcp_servers', {
   id: uuid('id').primaryKey().defaultRandom(),
   serverId: text('server_id').notNull().unique(),
-  mcpOrigin: text('mcp_origin').notNull(),
+  mcpOrigin: text('mcp_origin').notNull().unique(),
   creatorId: uuid('creator_id').references(() => users.id, { onDelete: 'set null' }),
   receiverAddress: text('receiver_address').notNull(),
   requireAuth: boolean('require_auth').default(false).notNull(),
@@ -171,6 +171,7 @@ export const mcpServers = pgTable('mcp_servers', {
   index('mcp_server_status_idx').on(table.status),
   index('mcp_server_creator_idx').on(table.creatorId),
   index('mcp_server_created_at_idx').on(table.createdAt),
+  index('mcp_server_origin_idx').on(table.mcpOrigin),
   index('mcp_server_status_created_idx').on(table.status, table.createdAt),
 ]);
 

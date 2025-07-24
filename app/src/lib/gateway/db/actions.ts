@@ -94,6 +94,8 @@ function processRevenueDetails(revenueDetails: RevenueDetails): { revenueByCurre
     return { revenueByCurrency, totalRevenue };
 }
 
+
+
 // Enhanced transaction helper with better typing
 export const withTransaction = async <T>(callback: (tx: TransactionType) => Promise<T>): Promise<T> => {
     return await db.transaction(async (tx) => {
@@ -131,6 +133,79 @@ export const txOperations = {
 
         if (!server[0]) throw new Error("Failed to create server");
         return server[0];
+    },
+
+    // Upsert server by origin - truly atomic operation using Drizzle's onConflictDoUpdate
+    upsertServerByOrigin: (data: {
+        serverId: string;
+        mcpOrigin: string;
+        creatorId: string;
+        receiverAddress: string;
+        requireAuth?: boolean;
+        authHeaders?: Record<string, unknown>;
+        description?: string;
+        name?: string;
+        metadata?: Record<string, unknown>;
+    }) => async (tx: TransactionType) => {
+        const now = new Date();
+        
+        // Atomic upsert: insert if not exists, update if exists (but only if same owner)
+        const result = await tx.insert(mcpServers)
+            .values({
+                serverId: data.serverId,
+                name: data.name,
+                mcpOrigin: data.mcpOrigin,
+                creatorId: data.creatorId,
+                receiverAddress: data.receiverAddress,
+                requireAuth: data.requireAuth,
+                authHeaders: data.authHeaders,
+                description: data.description,
+                metadata: data.metadata,
+                createdAt: now,
+                updatedAt: now
+            })
+            .onConflictDoUpdate({
+                target: mcpServers.mcpOrigin,
+                // Only update if the creator is the same (ownership check)
+                where: eq(mcpServers.creatorId, data.creatorId),
+                set: {
+                    name: data.name,
+                    description: data.description,
+                    receiverAddress: data.receiverAddress,
+                    requireAuth: data.requireAuth,
+                    authHeaders: data.authHeaders,
+                    metadata: data.metadata,
+                    updatedAt: now
+                    // Note: we don't update serverId, mcpOrigin, creatorId, or createdAt
+                }
+            })
+            .returning();
+
+        // Check if the operation succeeded
+        if (result.length === 0) {
+            // This can happen if conflict occurred but ownership check failed
+            // Fetch the existing server to provide a proper error message
+            const existingServer = await tx.query.mcpServers.findFirst({
+                where: eq(mcpServers.mcpOrigin, data.mcpOrigin),
+                columns: { creatorId: true }
+            });
+
+            if (existingServer && existingServer.creatorId !== data.creatorId) {
+                throw new Error('Server already exists and is owned by another user');
+            }
+
+            throw new Error('Failed to upsert server - unknown error');
+        }
+
+        // Determine if this was an insert (new) or update (existing)
+        // If createdAt equals updatedAt, it was an insert; otherwise it was an update
+        const server = result[0];
+        const isNew = server.createdAt.getTime() === server.updatedAt.getTime();
+
+        return {
+            server,
+            isNew
+        };
     },
 
     updateServer: (serverId: string, data: {

@@ -31,47 +31,6 @@ export const textUtils = {
     return sanitized
   },
   
-  // Validate search term on client side
-  validateSearchTerm: (searchTerm: string): { isValid: boolean; error?: string } => {
-    if (!searchTerm || typeof searchTerm !== 'string') {
-      return { isValid: false, error: 'Search term is required' }
-    }
-    
-    const trimmed = searchTerm.trim()
-    if (trimmed.length < 1) {
-      return { isValid: false, error: 'Search term cannot be empty' }
-    }
-    
-    if (trimmed.length > 100) {
-      return { isValid: false, error: 'Search term too long (maximum 100 characters)' }
-    }
-    
-    // Check for suspicious patterns
-    const suspiciousPatterns = [
-      /[<>]/,  // HTML/XML tags
-      /['"]/,  // Quote characters
-      /--|\/\*|\*\//, // SQL comment patterns
-      /\b(DROP|DELETE|UPDATE|INSERT|ALTER|CREATE|TRUNCATE|EXEC|EXECUTE|UNION|SELECT)\b/i, // SQL keywords
-      /\b(script|javascript|vbscript|onload|onerror|onclick)\b/i, // Script injection patterns
-    ]
-    
-    for (const pattern of suspiciousPatterns) {
-      if (pattern.test(trimmed)) {
-        return { isValid: false, error: 'Invalid characters in search term' }
-      }
-    }
-    
-    return { isValid: true }
-  },
-  
-  // Escape text for safe HTML display
-  escapeHtml: (text: string): string => {
-    if (!text || typeof text !== 'string') return ''
-    
-    const div = document.createElement('div')
-    div.textContent = text
-    return div.innerHTML
-  }
 }
 
 // API Configuration

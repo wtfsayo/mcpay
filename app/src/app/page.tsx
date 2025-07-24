@@ -3,10 +3,9 @@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import { useTheme } from "@/components/providers/theme-context"
-import { urlUtils, textUtils } from "@/lib/client/utils"
+import { urlUtils } from "@/lib/client/utils"
 import {
   AlertCircle,
   ArrowRight,
@@ -15,13 +14,11 @@ import {
   Globe,
   Moon,
   Rocket,
-  Search,
   Server,
   Sparkles,
   Sun,
   PenToolIcon as Tool,
   TrendingUp,
-  X,
   Zap
 } from "lucide-react"
 import Link from "next/link"
@@ -125,15 +122,6 @@ interface AnalyticsData {
   }>;
 }
 
-// Search state type
-interface SearchState {
-  query: string;
-  results: MCPServer[];
-  isActive: boolean;
-  isLoading: boolean;
-  error: string | null;
-}
-
 const transformServerData = (apiServer: APIServer): MCPServer => ({
   id: apiServer.serverId,
   name: apiServer.name || 'Unknown Server',
@@ -167,110 +155,49 @@ export default function MCPBrowser() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMoreServers, setHasMoreServers] = useState(true)
   
-  // Consolidated search state
-  const [search, setSearch] = useState<SearchState>({
-    query: '',
-    results: [],
-    isActive: false,
-    isLoading: false,
-    error: null
-  })
-  
   const { isDark, toggleTheme } = useTheme()
 
-  // Debounced search function
-  const performSearch = useCallback(async (query: string) => {
-    if (!query.trim()) {
-      setSearch(prev => ({
-        ...prev,
-        isActive: false,
-        results: [],
-        error: null,
-        isLoading: false
-      }))
-      return
-    }
-
-    const validation = textUtils.validateSearchTerm(query)
-    if (!validation.isValid) {
-      setSearch(prev => ({
-        ...prev,
-        error: validation.error || null,
-        results: [],
-        isLoading: false
-      }))
-      return
-    }
-
-    setSearch(prev => ({
-      ...prev,
-      isLoading: true,
-      error: null,
-      isActive: true
-    }))
-
-    try {
-      const response = await fetch(urlUtils.getApiUrl(`/servers/search?q=${encodeURIComponent(query.trim())}&limit=20`))
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error || `Search failed: ${response.status}`)
+  // Helper function to get user-friendly error messages
+  const getFriendlyErrorMessage = (error: string) => {
+    if (error.includes('404')) {
+      return {
+        title: "Welcome to MCPay!",
+        message: "We're setting up the server directory. Be the first to register your MCP server and start earning!",
+        actionText: "Register your server",
+        actionHref: "/register",
+        showRetry: false
       }
-
-      const servers: APIServer[] = await response.json()
-      const transformedServers = servers.map(server => transformServerData(server))
-      
-      setSearch(prev => ({
-        ...prev,
-        results: transformedServers,
-        isLoading: false,
-        error: null
-      }))
-    } catch (err) {
-      setSearch(prev => ({
-        ...prev,
-        error: err instanceof Error ? err.message : 'Search failed',
-        results: [],
-        isLoading: false
-      }))
     }
-  }, [])
-
-  // Debounced search effect
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      performSearch(search.query)
-    }, 300)
-
-    return () => clearTimeout(timeoutId)
-  }, [search.query, performSearch])
-
-  // Search input handler
-  const handleSearchInput = (value: string) => {
-    setSearch(prev => ({
-      ...prev,
-      query: value,
-      // Clear error when user starts typing
-      error: prev.error && value.trim() ? null : prev.error
-    }))
+    
+    if (error.includes('500') || error.includes('502') || error.includes('503')) {
+      return {
+        title: "Server maintenance",
+        message: "We're performing some quick maintenance. Please try again in a few moments.",
+        actionText: "Try again",
+        actionHref: null,
+        showRetry: true
+      }
+    }
+    
+    if (error.includes('Network') || error.includes('fetch')) {
+      return {
+        title: "Connection issue",
+        message: "Please check your internet connection and try again.",
+        actionText: "Try again",
+        actionHref: null,
+        showRetry: true
+      }
+    }
+    
+    // Generic error fallback
+    return {
+      title: "Something went wrong",
+      message: "We're working to fix this issue. In the meantime, you can register your MCP server.",
+      actionText: "Register your server",
+      actionHref: "/register",
+      showRetry: true
+    }
   }
-
-  // Clear search
-  const clearSearch = () => {
-    setSearch({
-      query: '',
-      results: [],
-      isActive: false,
-      isLoading: false,
-      error: null
-    })
-  }
-
-  // Get current servers to display
-  const currentServers = search.isActive ? search.results : mcpServers
-  const isShowingSearchResults = search.isActive
-  const isSearching = search.isLoading
-  const searchError = search.error
 
   useEffect(() => {
     const fetchAnalytics = async () => {
@@ -473,20 +400,91 @@ export default function MCPBrowser() {
 
   // Error state
   if (error) {
+    const errorInfo = getFriendlyErrorMessage(error)
+    
     return (
       <div className={`min-h-screen ${isDark ? "bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900" : "bg-gradient-to-br from-gray-50 via-white to-gray-100"}`}>
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex items-center justify-center py-12">
-            <div className="text-center">
-              <div className="p-4 rounded-full bg-red-100 dark:bg-red-900/20 w-fit mx-auto mb-6">
-                <AlertCircle className={`h-12 w-12 ${isDark ? "text-red-400" : "text-red-500"}`} />
+        {/* Subtle background gradient */}
+        <div className="fixed inset-0 overflow-hidden pointer-events-none">
+          <div className={`absolute inset-0 ${isDark ? "bg-gradient-to-br from-gray-900/50 via-transparent to-gray-800/30" : "bg-gradient-to-br from-blue-50/30 via-transparent to-purple-50/20"}`} />
+        </div>
+
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Hero Section */}
+          <div className="text-center mb-16 relative">
+            <div className="mb-[100px]"></div>
+            <h1 className={`text-5xl font-extrabold tracking-tight mb-6 animate-fade-in-up ${isDark ? "text-white" : "text-gray-900"}`}>
+              {errorInfo.title}
+            </h1>
+
+            <p className={`text-lg max-w-3xl mx-auto leading-relaxed animate-fade-in-up animation-delay-300 ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+              {errorInfo.message}
+            </p>
+
+            <div className="flex items-center justify-center gap-6 mt-8 animate-fade-in-up animation-delay-500">
+              {errorInfo.actionHref && (
+                <Link href={errorInfo.actionHref}>
+                  <Button
+                    size="lg"
+                    className="bg-[#0052FF] hover:bg-[#0052FF]/90 text-white shadow-lg hover:shadow-xl transition-all duration-300"
+                  >
+                    <Rocket className="h-5 w-5 mr-2" />
+                    {errorInfo.actionText}
+                    <ArrowRight className="h-4 w-4 ml-2" />
+                  </Button>
+                </Link>
+              )}
+
+              {errorInfo.showRetry && (
+                <Button 
+                  onClick={() => window.location.reload()} 
+                  size="lg" 
+                  variant="outline"
+                  className="hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                >
+                  {errorInfo.actionHref ? "Try Again" : errorInfo.actionText}
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Enhanced Footer */}
+          <div className={`text-center py-12 border-t ${isDark ? "border-gray-700" : "border-gray-200"}`}>
+            <div className="flex flex-col items-center gap-6">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-blue-500" />
+                <p className={`text-lg ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+                  Powered by the <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Model Context Protocol</a> and <a href="https://x402.org" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">x402</a>
+                </p>
               </div>
-              <h3 className="text-2xl font-bold mb-2">Oops! Something went wrong</h3>
-              <p className={`mb-6 text-lg ${isDark ? "text-gray-400" : "text-gray-600"}`}>{error}</p>
-              <Button onClick={() => window.location.reload()} size="lg" className="bg-gradient-to-r from-blue-500 to-purple-600">
-                <Rocket className="h-4 w-4 mr-2" />
-                Try Again
-              </Button>
+
+              <div className="flex items-center gap-4 text-sm">
+                <a
+                  href="https://github.com/microchipgnu/mcpay.fun"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`hover:text-[#0052FF] transition-colors duration-200 ${isDark ? "text-gray-400" : "text-gray-500"} cursor-pointer`}
+                >
+                  GitHub
+                </a>
+                <span className={isDark ? "text-gray-600" : "text-gray-400"}>·</span>
+                <a
+                  href="https://x.com/microchipgnu"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`hover:text-[#0052FF] transition-colors duration-200 ${isDark ? "text-gray-400" : "text-gray-500"} cursor-pointer`}
+                >
+                  X
+                </a>
+                <span className={isDark ? "text-gray-600" : "text-gray-400"}>·</span>
+                <button
+                  onClick={toggleTheme}
+                  className={`flex items-center gap-1.5 hover:text-[#0052FF] transition-colors duration-200 ${isDark ? "text-gray-400" : "text-gray-500"} cursor-pointer`}
+                >
+                  {isDark ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+                  {isDark ? "Light" : "Dark"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -603,143 +601,24 @@ export default function MCPBrowser() {
           </div>
         </div>
 
-        {/* Enhanced Search Bar */}
-        <div className="flex justify-center mb-8">
-          <div className="relative w-full max-w-md">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className={`h-5 w-5 ${isDark ? "text-gray-400" : "text-gray-500"}`} />
-            </div>
-            <Input
-              type="text"
-              placeholder="Search servers, tools, or descriptions..."
-              value={search.query}
-              onChange={(e) => handleSearchInput(e.target.value)}
-              className={`pl-10 pr-10 py-3 w-full rounded-2xl border-0 shadow-lg ${
-                isDark 
-                  ? "bg-gray-800/50 backdrop-blur text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500" 
-                  : "bg-white/80 backdrop-blur text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-blue-500"
-              }`}
-              maxLength={100}
-              disabled={loading}
-            />
-            {search.query && (
-              <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={clearSearch}
-                  className="h-6 w-6 p-0 hover:bg-gray-100 dark:hover:bg-gray-700"
-                  disabled={loading}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Search Status */}
-        {isShowingSearchResults && (
-          <div className="text-center mb-6">
-            <div className="flex items-center justify-center gap-2 mb-2">
-              {isSearching && (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-              )}
-              <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                {isSearching 
-                  ? "Searching..." 
-                  : searchError
-                    ? `Search failed: ${searchError}`
-                    : `Found ${search.results.length} server${search.results.length === 1 ? '' : 's'} matching "${textUtils.sanitizeForDisplay(search.query, 50)}"`
-                }
-              </p>
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={clearSearch}
-              className="text-xs"
-            >
-              Back to trending servers
-            </Button>
-          </div>
-        )}
-
         {/* Enhanced MCP Server Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">
-          {(loading || isSearching) ? (
+          {loading ? (
             Array.from({ length: 6 }).map((_, index) => (
               <SkeletonCard key={`skeleton-${index}`} delay={index * 100} />
             ))
-          ) : searchError ? (
-            <div className="col-span-full text-center py-16">
-              <div className="p-6 rounded-2xl bg-red-50 dark:bg-red-900/20 w-fit mx-auto mb-6">
-                <AlertCircle className={`h-16 w-16 ${isDark ? "text-red-400" : "text-red-500"}`} />
-              </div>
-              <h3 className="text-2xl font-bold mb-4">Search Error</h3>
-              <p className={`mb-6 text-lg ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                {searchError}
-              </p>
-              <div className="flex gap-4 justify-center">
-                <Button onClick={clearSearch} size="lg" variant="outline">
-                  <TrendingUp className="h-4 w-4 mr-2" />
-                  Back to trending servers
-                </Button>
-                <Button 
-                  onClick={() => {
-                    setSearch(prev => ({ ...prev, query: '', error: null }))
-                    const inputElement = document.querySelector(`input[type="text"]`) as HTMLInputElement
-                    inputElement?.focus()
-                  }} 
-                  size="lg" 
-                  className={`${isDark ? "bg-blue-600 hover:bg-blue-700" : "bg-blue-600 hover:bg-blue-700"} text-white`}
-                >
-                  <Search className="h-4 w-4 mr-2" />
-                  Try different search
-                </Button>
-              </div>
-            </div>
-          ) : currentServers.length === 0 ? (
+          ) : mcpServers.length === 0 ? (
             <div className="col-span-full text-center py-16">
               <div className="p-6 rounded-2xl bg-gray-100 dark:bg-gray-800 w-fit mx-auto mb-6">
-                {isShowingSearchResults ? (
-                  <Search className={`h-16 w-16 ${isDark ? "text-gray-500" : "text-gray-400"}`} />
-                ) : (
-                  <Globe className={`h-16 w-16 ${isDark ? "text-gray-500" : "text-gray-400"}`} />
-                )}
+                <Globe className={`h-16 w-16 ${isDark ? "text-gray-500" : "text-gray-400"}`} />
               </div>
-              <h3 className="text-2xl font-bold mb-4">
-                {isShowingSearchResults ? "No results found" : "No Servers Found"}
-              </h3>
+              <h3 className="text-2xl font-bold mb-4">No Servers Found</h3>
               <p className={`mb-6 text-lg ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                {isShowingSearchResults 
-                  ? `We couldn't find any servers matching "${textUtils.sanitizeForDisplay(search.query, 50)}".`
-                  : "Be the first to register a server!"
-                }
+                Be the first to register a server!
               </p>
-              {isShowingSearchResults && (
-                <div className="flex gap-4 justify-center">
-                  <Button onClick={clearSearch} size="lg" variant="outline">
-                    <TrendingUp className="h-4 w-4 mr-2" />
-                    Back to trending servers
-                  </Button>
-                  <Button 
-                    onClick={() => {
-                      setSearch(prev => ({ ...prev, query: '', error: null }))
-                      const inputElement = document.querySelector(`input[type="text"]`) as HTMLInputElement
-                      inputElement?.focus()
-                    }} 
-                    size="lg" 
-                    className={`${isDark ? "bg-blue-600 hover:bg-blue-700" : "bg-blue-600 hover:bg-blue-700"} text-white`}
-                  >
-                    <Search className="h-4 w-4 mr-2" />
-                    Try different search
-                  </Button>
-                </div>
-              )}
             </div>
           ) : (
-            currentServers.map((server: MCPServer, index: number) => (
+            mcpServers.map((server: MCPServer, index: number) => (
               <Card key={server.id} className={`group relative overflow-hidden border ${isDark
                 ? "bg-surface-dark backdrop-blur border-white/[0.08] shadow-sm hover:shadow-md"
                 : "bg-surface backdrop-blur border-black/[0.05] shadow-sm hover:shadow-md"
@@ -831,8 +710,8 @@ export default function MCPBrowser() {
           )}
         </div>
 
-        {/* Load More Button - only show when not in search mode */}
-        {!isShowingSearchResults && hasMoreServers && !loading && (
+        {/* Load More Button */}
+        {hasMoreServers && !loading && (
           <div className="text-center mb-16">
             <Button
               onClick={loadMore}

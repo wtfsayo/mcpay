@@ -2,6 +2,7 @@
 
 import { extractApiKeyFromHeaders, hashApiKey } from "@/lib/gateway/auth-utils";
 import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
+import { mcpTools } from "@/lib/gateway/db/schema";
 import { getMcpToolsWithPayments, validatePaymentInfo } from "@/lib/gateway/inspect-mcp";
 import { Hono, type Context, type Next } from "hono";
 import { cors } from 'hono/cors';
@@ -202,51 +203,14 @@ app.post('/', pingAuthMiddleware, async (c) => {
             }
         });
 
-        // Auto-register or update server
+        // Auto-register or update server using atomic upsert to prevent race conditions
         const serverResult = await withTransaction(async (tx) => {
-            // Check if server already exists by origin
-            const existingServer = await txOperations.getMcpServerByOrigin(mcpUrl.toString())(tx);
-
-            if (existingServer) {
-                console.log('Updating existing server:', existingServer.id);
-
-                // Check if user owns this server
-                if (existingServer.creatorId !== user.id) {
-                    throw new Error('Server already exists and is owned by another user');
-                }
-
-                // Update existing server with new tool information
-                const result = await txOperations.updateServerFromPing(existingServer.id, {
-                    name: existingServer.name || 'Auto-registered Server',
-                    description: existingServer.description || 'Server registered via ping',
-                    metadata: {
-                        ...(existingServer.metadata && typeof existingServer.metadata === 'object' ? existingServer.metadata : {}),
-                        registeredFromPing: true,
-                        lastPing: new Date().toISOString(),
-                        toolsCount: toolsWithPricing.length,
-                        monetizedToolsCount: toolsWithPricing.filter(t => t.pricing).length
-                    },
-                    toolsData: toolsWithPricing.map(tool => ({
-                        name: tool.name,
-                        description: tool.description || `Access to ${tool.name}`,
-                        inputSchema: tool.inputSchema || {},
-                        pricing: tool.pricing
-                    }))
-                })(tx);
-
-                return {
-                    server: result.server,
-                    tools: result.tools,
-                    isNew: false
-                };
-            } else {
-                console.log('Creating new server for user:', user.id);
-
-                // Create new server
-                const result = await txOperations.createServerForAuthenticatedUser({
+            try {
+                // Use upsert operation to handle race conditions gracefully
+                const upsertResult = await txOperations.upsertServerByOrigin({
                     serverId: randomUUID(),
-                    mcpOrigin: mcpUrl.toString(),
-                    authenticatedUserId: user.id,
+                    mcpOrigin: mcpUrl.toString(), // Use raw URL as provided
+                    creatorId: user.id,
                     receiverAddress: receiverAddress || userWalletAddress || '0x0000000000000000000000000000000000000000',
                     requireAuth,
                     authHeaders,
@@ -257,20 +221,65 @@ app.post('/', pingAuthMiddleware, async (c) => {
                         timestamp: new Date().toISOString(),
                         toolsCount: toolsWithPricing.length,
                         monetizedToolsCount: toolsWithPricing.filter(t => t.pricing).length,
-                    },
-                    tools: toolsWithPricing.map(tool => ({
-                        name: tool.name,
-                        description: tool.description || `Access to ${tool.name}`,
-                        inputSchema: tool.inputSchema || {},
-                        pricing: tool.pricing
-                    }))
+                    }
                 })(tx);
 
-                return {
-                    server: result.server,
-                    tools: result.tools,
-                    isNew: true
-                };
+                if (upsertResult.isNew) {
+                    console.log('Created new server:', upsertResult.server.id);
+                    
+                    // Create tools for new server
+                    const toolResults = [];
+                    for (const tool of toolsWithPricing) {
+                        const newTool = await tx.insert(mcpTools).values({
+                            serverId: upsertResult.server.id,
+                            name: tool.name,
+                            description: tool.description || `Access to ${tool.name}`,
+                            inputSchema: tool.inputSchema || {},
+                            isMonetized: !!tool.pricing && tool.pricing.some((p: any) => p.active === true),
+                            pricing: tool.pricing,
+                            createdAt: new Date(),
+                            updatedAt: new Date()
+                        }).returning();
+                        
+                        toolResults.push(newTool[0]);
+                    }
+                    
+                    return {
+                        server: upsertResult.server,
+                        tools: toolResults,
+                        isNew: true
+                    };
+                } else {
+                    console.log('Updating existing server:', upsertResult.server.id);
+                    
+                    // Update existing server with tools
+                    const updateResult = await txOperations.updateServerFromPing(upsertResult.server.id, {
+                        name: upsertResult.server.name || 'Auto-registered Server',
+                        description: upsertResult.server.description || 'Server registered via ping',
+                        metadata: {
+                            ...(upsertResult.server.metadata && typeof upsertResult.server.metadata === 'object' ? upsertResult.server.metadata : {}),
+                            registeredFromPing: true,
+                            lastPing: new Date().toISOString(),
+                            toolsCount: toolsWithPricing.length,
+                            monetizedToolsCount: toolsWithPricing.filter(t => t.pricing).length
+                        },
+                        toolsData: toolsWithPricing.map(tool => ({
+                            name: tool.name,
+                            description: tool.description || `Access to ${tool.name}`,
+                            inputSchema: tool.inputSchema || {},
+                            pricing: tool.pricing
+                        }))
+                    })(tx);
+
+                    return {
+                        server: updateResult.server,
+                        tools: updateResult.tools,
+                        isNew: false
+                    };
+                }
+            } catch (error) {
+                console.error('Server upsert failed:', error);
+                throw error;
             }
         });
 
