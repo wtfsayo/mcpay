@@ -55,6 +55,65 @@ export function extractApiKeyFromHeaders(headers: { get: (name: string) => strin
 }
 
 /**
+ * Extract API key from request parameters (query params or body params)
+ */
+export function extractApiKeyFromParams(params: URLSearchParams | Record<string, unknown>): string | null {
+    let apiKey: string | null = null;
+    
+    if (params instanceof URLSearchParams) {
+        // Handle URLSearchParams (query parameters)
+        apiKey = params.get('apiKey') || params.get('api_key') || params.get('x-api-key');
+    } else if (typeof params === 'object' && params !== null) {
+        // Handle object parameters (body params)
+        const paramsObj = params as Record<string, unknown>;
+        apiKey = (paramsObj.apiKey as string) || 
+                 (paramsObj.api_key as string) || 
+                 (paramsObj['x-api-key'] as string) || 
+                 null;
+    }
+    
+    // Validate the API key format if found
+    if (apiKey && typeof apiKey === 'string' && isValidApiKeyFormat(apiKey)) {
+        return apiKey;
+    }
+    
+    return null;
+}
+
+/**
+ * Extract API key from headers, query params, or body params (comprehensive check)
+ */
+export function extractApiKey(request: {
+    headers: { get: (name: string) => string | null };
+    searchParams?: URLSearchParams;
+    bodyParams?: Record<string, unknown>;
+}): string | null {
+    // Try headers first (highest priority)
+    const headerApiKey = extractApiKeyFromHeaders(request.headers);
+    if (headerApiKey) {
+        return headerApiKey;
+    }
+    
+    // Try query parameters
+    if (request.searchParams) {
+        const queryApiKey = extractApiKeyFromParams(request.searchParams);
+        if (queryApiKey) {
+            return queryApiKey;
+        }
+    }
+    
+    // Try body parameters (lowest priority)
+    if (request.bodyParams) {
+        const bodyApiKey = extractApiKeyFromParams(request.bodyParams);
+        if (bodyApiKey) {
+            return bodyApiKey;
+        }
+    }
+    
+    return null;
+}
+
+/**
  * Validate API key format
  */
 export function isValidApiKeyFormat(apiKey: string): boolean {

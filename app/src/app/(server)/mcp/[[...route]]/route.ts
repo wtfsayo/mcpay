@@ -11,7 +11,7 @@
 
 import { fromBaseUnits } from "@/lib/commons";
 import { auth } from "@/lib/gateway/auth";
-import { extractApiKeyFromHeaders, hashApiKey } from "@/lib/gateway/auth-utils";
+import { extractApiKey, extractApiKeyFromHeaders, extractApiKeyFromParams, hashApiKey } from "@/lib/gateway/auth-utils";
 import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
 import { attemptAutoSign } from "@/lib/gateway/payment-strategies";
 import { createExactPaymentRequirements, decodePayment, settle, verifyPayment, x402Version } from "@/lib/gateway/payments";
@@ -48,8 +48,34 @@ function ensureString(value: string | undefined, fallback: string = 'unknown'): 
 async function getAuthMethod(c: Context, user: UserWithWallet | null): Promise<string> {
     if (!user) return 'none';
 
-    // Check API key first
-    if (extractApiKeyFromHeaders(c.req.raw.headers)) {
+    // Parse URL search params for API key checking
+    const url = new URL(c.req.url);
+    const searchParams = url.searchParams;
+    
+    // Parse body params if available (for POST requests)
+    let bodyParams: Record<string, unknown> | undefined = undefined;
+    try {
+        const contentType = c.req.header('content-type') || '';
+        if (contentType.includes('application/json') && c.req.raw.body) {
+            // Try to parse JSON body for API key
+            const clonedRequest = c.req.raw.clone();
+            const body = await clonedRequest.json();
+            if (typeof body === 'object' && body !== null) {
+                bodyParams = body as Record<string, unknown>;
+            }
+        }
+    } catch {
+        // Body parsing failed, continue without body params
+    }
+
+    // Check API key in headers, query params, or body params
+    const apiKey = extractApiKey({
+        headers: c.req.raw.headers,
+        searchParams,
+        bodyParams
+    });
+    
+    if (apiKey) {
         return 'api_key';
     }
 
@@ -115,11 +141,13 @@ const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer, metad
         });
     }
 
-    const headers = c.req.raw.headers;
+    const headers = new Headers();
 
-    headers.forEach((v, k) => {
-        if (!HOP_BY_HOP.has(k.toLowerCase())) headers.set(k, v)
-    })
+    c.req.raw.headers.forEach((v, k) => {
+        if (!HOP_BY_HOP.has(k.toLowerCase())) {
+            headers.set(k, v);
+        }
+    });
 
     headers.set('host', targetUpstream.host);
 
@@ -286,8 +314,33 @@ const inspectRequest = async (c: Context): Promise<{ toolCall?: ToolCall, body?:
  * Enhanced user resolution with priority: API key → Session → Wallet headers
  */
 async function resolveUserFromRequest(c: Context): Promise<UserWithWallet | null> {
-    // 1. First priority: API key authentication
-    const apiKey = extractApiKeyFromHeaders(c.req.raw.headers);
+    // Parse URL search params for API key checking
+    const url = new URL(c.req.url);
+    const searchParams = url.searchParams;
+    
+    // Parse body params if available (for POST requests)
+    let bodyParams: Record<string, unknown> | undefined = undefined;
+    try {
+        const contentType = c.req.header('content-type') || '';
+        if (contentType.includes('application/json') && c.req.raw.body) {
+            // Try to parse JSON body for API key
+            const clonedRequest = c.req.raw.clone();
+            const body = await clonedRequest.json();
+            if (typeof body === 'object' && body !== null) {
+                bodyParams = body as Record<string, unknown>;
+            }
+        }
+    } catch {
+        // Body parsing failed, continue without body params
+    }
+
+    // 1. First priority: API key authentication (check headers, query params, and body params)
+    const apiKey = extractApiKey({
+        headers: c.req.raw.headers,
+        searchParams,
+        bodyParams
+    });
+    
     if (apiKey) {
         console.log(`[${new Date().toISOString()}] API key found, validating...`);
         try {
@@ -586,7 +639,30 @@ async function processPayment(params: {
     // OR if specific managed wallet headers are present
     // OR if API key authentication is present (indicates programmatic access)
     const managedWalletHeaders = c.req.header('x-wallet-provider') === 'coinbase-cdp' && c.req.header('x-wallet-type') === 'managed';
-    const hasApiKey = !!extractApiKeyFromHeaders(c.req.raw.headers);
+    
+    // Check for API key in headers, query params, or body params
+    const url = new URL(c.req.url);
+    const searchParams = url.searchParams;
+    let bodyParams: Record<string, unknown> | undefined = undefined;
+    try {
+        const contentType = c.req.header('content-type') || '';
+        if (contentType.includes('application/json') && c.req.raw.body) {
+            const clonedRequest = c.req.raw.clone();
+            const body = await clonedRequest.json();
+            if (typeof body === 'object' && body !== null) {
+                bodyParams = body as Record<string, unknown>;
+            }
+        }
+    } catch {
+        // Body parsing failed, continue without body params
+    }
+    
+    const hasApiKey = !!extractApiKey({
+        headers: c.req.raw.headers,
+        searchParams,
+        bodyParams
+    });
+    
     const shouldAutoSign = toolCall.pricing && (
         (!paymentHeader) && (
             managedWalletHeaders || hasApiKey
