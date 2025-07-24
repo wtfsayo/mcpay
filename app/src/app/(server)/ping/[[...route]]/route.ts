@@ -3,7 +3,7 @@
 import { extractApiKeyFromHeaders, hashApiKey } from "@/lib/gateway/auth-utils";
 import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
 import { mcpTools } from "@/lib/gateway/db/schema";
-import { getMcpToolsWithPayments, validatePaymentInfo } from "@/lib/gateway/inspect-mcp";
+import { getMcpServerInfo, getMcpToolsWithPayments, validatePaymentInfo } from "@/lib/gateway/inspect-mcp";
 import { PricingEntry } from "@/types";
 import { Hono, type Context, type Next } from "hono";
 import { cors } from 'hono/cors';
@@ -243,11 +243,13 @@ app.post('/', pingAuthMiddleware, async (c) => {
             console.warn('Failed to get user wallet address:', error);
         }
 
+        const serverInfo = await getMcpServerInfo(mcpUrl.toString(), userWalletAddress || receiverAddress || '0x0000000000000000000000000000000000000000');
+
         // Extract tools with payment information
         let toolsWithPricing;
         try {
             // FIX THIS: receiverAddress is not always set
-            toolsWithPricing = await getMcpToolsWithPayments(mcpUrl.toString(), userWalletAddress || receiverAddress || '0x0000000000000000000000000000000000000000');
+            toolsWithPricing = serverInfo.tools;
             console.log(`Found ${toolsWithPricing.length} tools, ${toolsWithPricing.filter(t => t.pricing).length} with pricing info`);
         } catch (error) {
             console.error('Failed to connect to MCP server:', error);
@@ -334,7 +336,7 @@ app.post('/', pingAuthMiddleware, async (c) => {
                         toolsData: toolsWithPricing.map(tool => ({
                             name: tool.name,
                             description: tool.description || `Access to ${tool.name}`,
-                            inputSchema: tool.inputSchema || {},
+                            inputSchema: tool.inputSchema || ({} as Record<string, unknown>),
                             pricing: tool.pricing
                         }))
                     })(tx);

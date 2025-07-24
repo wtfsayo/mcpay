@@ -7,6 +7,50 @@ import { STABLECOIN_CONFIGS, getNetworkTokens, type UnifiedNetwork } from "@/lib
 import { PaymentConfig } from "mcpay/handler"
 import { nanoid } from "nanoid"
 
+// Server metadata type definition
+export interface MCPServerMetadata {
+  name?: string
+  version?: string
+  description?: string
+  protocolVersion?: string
+  capabilities?: {
+    experimental?: Record<string, unknown>
+    logging?: Record<string, unknown>
+    prompts?: {
+      listChanged?: boolean
+    }
+    resources?: {
+      subscribe?: boolean
+      listChanged?: boolean
+    }
+    tools?: {
+      listChanged?: boolean
+    }
+  }
+  metadata?: Record<string, unknown>
+  vendor?: {
+    name?: string
+    version?: string
+  }
+}
+
+// Tool with payment information
+export interface MCPToolWithPayments {
+  name: string
+  description?: string
+  inputSchema?: Record<string, unknown>
+  annotations?: Record<string, unknown>
+  pricing?: PricingEntry[]
+}
+
+// Comprehensive server information
+export interface MCPServerInfo {
+  metadata: MCPServerMetadata
+  tools: MCPToolWithPayments[]
+  toolCount: number
+  hasPayments: boolean
+}
+
 // Payment annotation type definitions
 interface SimplePaymentOption {
   type?: 'simple'
@@ -27,15 +71,6 @@ interface AdvancedPaymentOption {
   description?: string
 }
 
-interface LegacyPaymentOption {
-  asset?: string
-  network?: string
-  maxAmountRequired?: string | number
-  payTo?: string
-  recipient?: string
-  resource?: string
-  description?: string
-}
 
 export async function getMcpTools(url: string) {
   try {
@@ -90,6 +125,59 @@ export async function getMcpToolsWithPayments(url: string, userWalletAddress: st
   } catch (error) {
     console.error("Error fetching MCP tools with payments:", error)
     throw new Error("Failed to fetch tools from MCP server")
+  }
+}
+
+/**
+ * Gets comprehensive MCP server information including metadata and tools
+ */
+export async function getMcpServerInfo(url: string, userWalletAddress: string): Promise<MCPServerInfo> {
+  try {
+    const transport = new StreamableHTTPClientTransport(new URL(url))
+    const client = new Client({ name: "mcpay-inspect", version: "1.0.0" })
+
+    await client.connect(transport)
+
+    // Get server metadata
+    const serverInfo = client.getServerVersion()
+    const serverCapabilities = client.getServerCapabilities()
+
+    // Helper function to safely extract string values
+    const getString = (value: unknown): string | undefined => {
+      return typeof value === 'string' ? value : undefined
+    }
+
+    const metadata: MCPServerMetadata = {
+      name: serverInfo?.name || 'Unknown Server',
+      version: getString(serverInfo?.version) || 'Unknown Version',
+      description: getString(serverInfo?.description),
+      protocolVersion: getString(serverInfo?.protocolVersion),
+      capabilities: serverCapabilities,
+    }
+
+    // Get tools with payment information
+    const toolsResult = await client.listTools()
+    const tools = toolsResult.tools.map((tool) => {
+      const pricingInfo = extractPaymentFromAnnotations(tool.annotations, userWalletAddress)
+
+      return {
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        annotations: tool.annotations,
+        pricing: pricingInfo
+      }
+    })
+
+    return {
+      metadata,
+      tools,
+      toolCount: tools.length,
+      hasPayments: tools.some(tool => tool.pricing && tool.pricing.length > 0)
+    }
+  } catch (error) {
+    console.error("Error fetching comprehensive MCP server info:", error)
+    throw new Error("Failed to fetch server information")
   }
 }
 
