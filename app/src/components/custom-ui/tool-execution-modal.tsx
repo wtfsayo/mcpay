@@ -365,6 +365,8 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     Object.entries(properties).forEach(([key, prop]) => {
       if (prop.type === 'array') {
         inputs[key] = prop.default || []
+      } else if (prop.type === 'object') {
+        inputs[key] = prop.default || {}
       } else {
         inputs[key] = prop.default || ''
       }
@@ -384,6 +386,8 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     Object.entries(properties).forEach(([key, prop]) => {
       if (prop.type === 'array') {
         inputs[key] = prop.default || []
+      } else if (prop.type === 'object') {
+        inputs[key] = prop.default || {}
       } else {
         inputs[key] = prop.default || ''
       }
@@ -612,6 +616,334 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
   // INPUT FIELD RENDERING
   // =============================================================================
 
+  // Recursive function to render object fields with nested properties
+  const renderObjectField = (
+    inputName: string, 
+    inputProp: InputProperty, 
+    currentValue: unknown, 
+    isRequired: boolean,
+    pathPrefix: string
+  ): React.ReactElement => {
+    const objectValue = (typeof currentValue === 'object' && currentValue !== null) ? currentValue as Record<string, unknown> : {}
+    const fullPath = pathPrefix ? `${pathPrefix}.${inputName}` : inputName
+    
+    // If the object has defined properties, render individual fields
+    if (inputProp.properties && Object.keys(inputProp.properties).length > 0) {
+      const objectRequiredFields = inputProp.required || []
+      
+             const updateObjectProperty = (propertyName: string, value: unknown) => {
+         const newObject = { ...objectValue }
+         if (value === '' || value === null || value === undefined) {
+           delete newObject[propertyName]
+         } else {
+           newObject[propertyName] = value
+         }
+         // Update the correct input path - if pathPrefix is empty, use inputName directly
+         const targetPath = pathPrefix ? fullPath : inputName
+         updateToolInput(targetPath, newObject)
+       }
+
+      return (
+        <div key={fullPath} className="space-y-3">
+          <div className="space-y-2">
+            <label className={`text-sm font-medium flex items-center gap-1 ${themeClasses.text.primary}`}>
+              {inputProp.title || inputName}
+              {isRequired && <span className="text-red-500">*</span>}
+              <span className="text-xs text-gray-500 ml-1">(Object)</span>
+            </label>
+            {inputProp.description && (
+              <p className={`text-xs ${themeClasses.text.secondary}`}>
+                {inputProp.description}
+              </p>
+            )}
+          </div>
+          
+          <div className="ml-4 pl-4 border-l-2 border-gray-200 dark:border-gray-700 space-y-3">
+            {Object.entries(inputProp.properties).map(([propertyName, propertySchema]) => {
+              const propertyValue = objectValue[propertyName]
+              const isPropertyRequired = objectRequiredFields.includes(propertyName)
+              const propertyPath = `${fullPath}.${propertyName}`
+              
+              // Handle nested objects recursively
+              if (propertySchema.type === 'object') {
+                return renderObjectField(propertyName, propertySchema, propertyValue, isPropertyRequired, fullPath)
+              }
+              
+              // Handle arrays
+              if (propertySchema.type === 'array') {
+                return renderArrayField(propertyName, propertySchema, propertyValue, isPropertyRequired, propertyPath, updateObjectProperty)
+              }
+              
+              // Handle primitive types
+              return renderPrimitiveField(propertyName, propertySchema, propertyValue, isPropertyRequired, updateObjectProperty)
+            })}
+          </div>
+        </div>
+      )
+    }
+    
+    // Fallback to JSON editor for objects without defined schema
+    return renderJsonEditor(inputName, inputProp, currentValue, isRequired, fullPath)
+  }
+
+  // Helper function to render array fields within objects
+  const renderArrayField = (
+    propertyName: string,
+    propertySchema: InputProperty,
+    currentValue: unknown,
+    isRequired: boolean,
+    propertyPath: string,
+    updateProperty: (name: string, value: unknown) => void
+  ): React.ReactElement => {
+    const arrayValue = Array.isArray(currentValue) ? currentValue : []
+    
+    const addArrayItem = () => {
+      const newArray = [...arrayValue, '']
+      updateProperty(propertyName, newArray)
+    }
+
+    const removeArrayItem = (index: number) => {
+      const newArray = arrayValue.filter((_: unknown, i: number) => i !== index)
+      updateProperty(propertyName, newArray)
+    }
+
+    const updateArrayItem = (index: number, value: unknown) => {
+      const newArray = [...arrayValue]
+      newArray[index] = value
+      updateProperty(propertyName, newArray)
+    }
+
+    return (
+      <div key={propertyPath} className="space-y-2">
+        <label className={`text-sm font-medium flex items-center gap-1 ${themeClasses.text.primary}`}>
+          {propertySchema.title || propertyName}
+          {isRequired && <span className="text-red-500">*</span>}
+          <span className="text-xs text-gray-500 ml-1">(Array)</span>
+        </label>
+        {propertySchema.description && (
+          <p className={`text-xs ${themeClasses.text.secondary}`}>
+            {propertySchema.description}
+          </p>
+        )}
+        <div className="space-y-2">
+          {arrayValue.map((item: unknown, index: number) => (
+            <div key={index} className="flex items-center gap-2">
+              <Input
+                type="text"
+                value={String(item)}
+                onChange={(e) => updateArrayItem(index, e.target.value)}
+                placeholder={`Enter ${propertyName} item ${index + 1}`}
+                className={`flex-1 ${themeClasses.input}`}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => removeArrayItem(index)}
+                className={`px-2 ${themeClasses.button}`}
+              >
+                ×
+              </Button>
+            </div>
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addArrayItem}
+            className={`w-full ${themeClasses.button}`}
+          >
+            + Add {propertyName} item
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // Helper function to render primitive fields within objects
+  const renderPrimitiveField = (
+    propertyName: string,
+    propertySchema: InputProperty,
+    currentValue: unknown,
+    isRequired: boolean,
+    updateProperty: (name: string, value: unknown) => void
+  ): React.ReactElement => {
+    const fieldValue = currentValue ?? (propertySchema.default || '')
+
+    if (propertySchema.enum) {
+      return (
+        <div key={propertyName} className="space-y-2">
+          <label className={`text-sm font-medium flex items-center gap-1 ${themeClasses.text.primary}`}>
+            {propertySchema.title || propertyName}
+            {isRequired && <span className="text-red-500">*</span>}
+          </label>
+          <select
+            className={`w-full px-3 py-2 rounded-md border text-sm ${isDark
+                ? "bg-gray-700 border-gray-600 text-white"
+                : "bg-white border-gray-300 text-gray-900"
+              }`}
+            value={String(fieldValue)}
+            onChange={(e) => updateProperty(propertyName, e.target.value)}
+          >
+            <option value="">Select {propertyName}</option>
+            {propertySchema.enum.map(option => (
+              <option key={String(option)} value={String(option)}>{String(option)}</option>
+            ))}
+          </select>
+          {propertySchema.description && (
+            <p className={`text-xs ${themeClasses.text.secondary}`}>
+              {propertySchema.description}
+            </p>
+          )}
+        </div>
+      )
+    }
+
+    if (propertySchema.type === 'boolean') {
+      return (
+        <div key={propertyName} className="space-y-2">
+          <label className={`flex items-center gap-2 text-sm font-medium ${themeClasses.text.primary}`}>
+            <input
+              type="checkbox"
+              checked={fieldValue === true}
+              onChange={(e) => updateProperty(propertyName, e.target.checked)}
+              className="rounded"
+            />
+            {propertySchema.title || propertyName}
+            {isRequired && <span className="text-red-500">*</span>}
+          </label>
+          {propertySchema.description && (
+            <p className={`text-xs ml-6 ${themeClasses.text.secondary}`}>
+              {propertySchema.description}
+            </p>
+          )}
+        </div>
+      )
+    }
+
+    if (propertySchema.type === 'number' || propertySchema.type === 'integer') {
+      return (
+        <div key={propertyName} className="space-y-2">
+          <label className={`text-sm font-medium flex items-center gap-1 ${themeClasses.text.primary}`}>
+            {propertySchema.title || propertyName}
+            {isRequired && <span className="text-red-500">*</span>}
+          </label>
+          <Input
+            type="number"
+            value={String(fieldValue)}
+            onChange={(e) => updateProperty(propertyName, parseFloat(e.target.value) || '')}
+            placeholder={`Enter ${propertyName}`}
+            min={propertySchema.minimum}
+            max={propertySchema.maximum}
+            className={themeClasses.input}
+          />
+          {propertySchema.description && (
+            <p className={`text-xs ${themeClasses.text.secondary}`}>
+              {propertySchema.description}
+            </p>
+          )}
+        </div>
+      )
+    }
+
+    // Default to text input
+    const isLongText = propertySchema.description && propertySchema.description.length > 100
+
+    return (
+      <div key={propertyName} className="space-y-2">
+        <label className={`text-sm font-medium flex items-center gap-1 ${themeClasses.text.primary}`}>
+          {propertySchema.title || propertyName}
+          {isRequired && <span className="text-red-500">*</span>}
+        </label>
+        {isLongText ? (
+          <Textarea
+            value={String(fieldValue)}
+            onChange={(e) => updateProperty(propertyName, e.target.value)}
+            placeholder={`Enter ${propertyName}`}
+            rows={3}
+            className={themeClasses.input}
+          />
+        ) : (
+          <Input
+            type="text"
+            value={String(fieldValue)}
+            onChange={(e) => updateProperty(propertyName, e.target.value)}
+            placeholder={`Enter ${propertyName}`}
+            className={themeClasses.input}
+          />
+        )}
+        {propertySchema.description && (
+          <p className={`text-xs ${themeClasses.text.secondary}`}>
+            {propertySchema.description}
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  // Fallback JSON editor for objects without schema
+  const renderJsonEditor = (
+    inputName: string,
+    inputProp: InputProperty,
+    currentValue: unknown,
+    isRequired: boolean,
+    fullPath: string
+  ): React.ReactElement => {
+    const [jsonError, setJsonError] = useState<string | null>(null)
+    const [jsonValue, setJsonValue] = useState<string>(() => {
+      // Initialize with formatted JSON if currentValue is an object, otherwise use string
+      if (typeof currentValue === 'object' && currentValue !== null) {
+        return JSON.stringify(currentValue, null, 2)
+      }
+      return String(currentValue || '{}')
+    })
+
+    const handleJsonChange = (value: string) => {
+      setJsonValue(value)
+      try {
+        if (value.trim() === '') {
+          updateToolInput(fullPath, {})
+          setJsonError(null)
+        } else {
+          const parsed = JSON.parse(value)
+          updateToolInput(fullPath, parsed)
+          setJsonError(null)
+        }
+      } catch (error) {
+        setJsonError(error instanceof Error ? error.message : 'Invalid JSON')
+      }
+    }
+
+    return (
+      <div key={fullPath} className="space-y-2">
+        <label className={`text-sm font-medium flex items-center gap-1 ${themeClasses.text.primary}`}>
+          {inputProp.title || inputName}
+          {isRequired && <span className="text-red-500">*</span>}
+          <span className="text-xs text-gray-500 ml-1">(JSON Object)</span>
+        </label>
+        <Textarea
+          value={jsonValue}
+          onChange={(e) => handleJsonChange(e.target.value)}
+          placeholder={`Enter ${inputName} as JSON object`}
+          rows={4}
+          className={`font-mono text-sm ${themeClasses.input} ${
+            jsonError ? 'border-red-500 focus:border-red-500' : ''
+          }`}
+        />
+        {jsonError && (
+          <p className="text-xs text-red-500">
+            JSON Error: {jsonError}
+          </p>
+        )}
+        {inputProp.description && (
+          <p className={`text-xs ${themeClasses.text.secondary}`}>
+            {inputProp.description}
+          </p>
+        )}
+      </div>
+    )
+  }
+
   const renderInputField = (inputName: string, inputProp: InputProperty) => {
     console.log("Rendering input field:", inputName, inputProp)
     if (!stableTool) return null
@@ -760,6 +1092,11 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
           )}
         </div>
       )
+    }
+
+    // Handle object inputs with dynamic form generation
+    if (inputProp.type === 'object') {
+      return renderObjectField(inputName, inputProp, currentValue, isRequired, '')
     }
 
     // Default to text input
@@ -1089,6 +1426,8 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     Object.entries(properties).forEach(([key, prop]) => {
       if (prop.type === 'array') {
         inputs[key] = prop.default || []
+      } else if (prop.type === 'object') {
+        inputs[key] = prop.default || {}
       } else {
         inputs[key] = prop.default || ''
       }

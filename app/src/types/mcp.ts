@@ -46,6 +46,32 @@ export interface InputProperty {
   default?: unknown
   minimum?: number
   maximum?: number
+  // Enhanced JSON Schema support for objects
+  properties?: Record<string, InputProperty>
+  required?: string[]
+  additionalProperties?: boolean | InputProperty
+  // Array support
+  items?: InputProperty
+  minItems?: number
+  maxItems?: number
+  // String validation
+  pattern?: string
+  minLength?: number
+  maxLength?: string
+  // Number validation
+  multipleOf?: number
+  // Union types
+  oneOf?: InputProperty[]
+  anyOf?: InputProperty[]
+  allOf?: InputProperty[]
+  // Conditional schemas
+  if?: InputProperty
+  then?: InputProperty
+  else?: InputProperty
+  // Schema metadata
+  title?: string
+  examples?: unknown[]
+  const?: unknown
 }
 
 export interface ToolInputSchema {

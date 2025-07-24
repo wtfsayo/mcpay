@@ -583,13 +583,13 @@ class PaymentProcessor {
 
       try {
         // Extract payment header and tool arguments
-        const { payment, ...toolArgs } = args as (z.infer<ArgsSchema> & { payment?: string });
+        const { ...toolArgs } = args as (z.infer<ArgsSchema>);
         
         // Validate tool arguments against schema
         const validatedArgs = schema.parse(toolArgs);
 
         // Check if payment header is provided
-        if (!payment) {
+        if (!context.authInfo?.scopes.includes('payment:verified')) {
           // No payment provided - generate and return payment requirements
           try {
             const requirements = await this.generatePaymentRequirements(name, paymentConfig);
