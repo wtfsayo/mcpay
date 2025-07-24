@@ -270,23 +270,19 @@ export const txOperations = {
             if (existingTool) {
                 const existingPricing = (existingTool.pricing as PricingEntry[]) || [];
                 
-                // Smart pricing merge: invalidate older entries with same network + assetAddress
+                // Smart pricing merge: remove duplicate entries and keep only unique combinations
                 let mergedPricing = [...existingPricing];
                 
                 if (toolData.pricing && toolData.pricing.length > 0) {
-                    // For each new pricing entry, invalidate older entries with same network + assetAddress
-                    for (const newPricing of toolData.pricing) {                        
-                        // Deactivate conflicting entries (older ones)
-                        mergedPricing = mergedPricing.map(existing => {
-                            if (existing.network === newPricing.network && 
-                                existing.assetAddress === newPricing.assetAddress) {
-                                return {
-                                    ...existing,
-                                    active: false,
-                                    updatedAt: new Date().toISOString()
-                                };
-                            }
-                            return existing;
+                    // For each new pricing entry, remove any existing duplicates
+                    for (const newPricing of toolData.pricing) {
+                        // Remove existing entries with same network, assetAddress, tokenDecimals, and maxAmountRequiredRaw
+                        mergedPricing = mergedPricing.filter(existing => {
+                            const isDuplicate = existing.network === newPricing.network && 
+                                              existing.assetAddress === newPricing.assetAddress &&
+                                              existing.tokenDecimals === newPricing.tokenDecimals &&
+                                              existing.maxAmountRequiredRaw === newPricing.maxAmountRequiredRaw;
+                            return !isDuplicate; // Keep only non-duplicates
                         });
                     }
                     
