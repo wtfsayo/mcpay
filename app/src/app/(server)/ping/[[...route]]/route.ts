@@ -4,6 +4,7 @@ import { extractApiKeyFromHeaders, hashApiKey } from "@/lib/gateway/auth-utils";
 import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
 import { mcpTools } from "@/lib/gateway/db/schema";
 import { getMcpToolsWithPayments, validatePaymentInfo } from "@/lib/gateway/inspect-mcp";
+import { PricingEntry } from "@/types";
 import { Hono, type Context, type Next } from "hono";
 import { cors } from 'hono/cors';
 import { handle } from 'hono/vercel';
@@ -302,7 +303,7 @@ app.post('/', pingAuthMiddleware, async (c) => {
                             name: tool.name,
                             description: tool.description || `Access to ${tool.name}`,
                             inputSchema: tool.inputSchema || {},
-                            isMonetized: !!tool.pricing && tool.pricing.some((p: any) => p.active === true),
+                            isMonetized: !!tool.pricing && tool.pricing.some((p: PricingEntry) => p.active === true),
                             pricing: tool.pricing,
                             createdAt: new Date(),
                             updatedAt: new Date()

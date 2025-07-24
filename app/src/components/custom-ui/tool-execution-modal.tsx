@@ -36,7 +36,6 @@ import {
   Wrench
 } from "lucide-react"
 import { createPaymentTransport } from "mcpay/client"
-import Image from "next/image"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { privateKeyToAccount } from "viem/accounts"
@@ -137,7 +136,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     return tool as ToolFromMcpServerWithStats & {
       pricing?: PricingEntry[]
     }
-  }, [tool, tool?.id, tool?.name, toolInputSchemaString, tool?.description, tool?.isMonetized, tool?.pricing])
+  }, [tool, toolInputSchemaString])
 
   // State management
   const [toolInputs, setToolInputs] = useState<Record<string, unknown>>({})
@@ -148,6 +147,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
   const [isInitialized, setIsInitialized] = useState(false)
   const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false)
   const [showPrettyJson, setShowPrettyJson] = useState(true)
+  const [jsonEditorStates, setJsonEditorStates] = useState<Record<string, { value: string; error: string | null }>>({})
 
   // =============================================================================
   // NETWORK UTILITIES
@@ -182,13 +182,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     return requiredNetwork === currentNetwork
   }, [getRequiredNetwork, getCurrentNetwork, activeWallet?.walletType])
 
-  const shouldShowNetworkStatus = useCallback((): boolean => {
-    const activePricing = getActivePricing()
-    if (!activePricing.length || !isConnected) {
-      return false
-    }
-    return isOnCorrectNetwork()
-  }, [getActivePricing, isConnected, isOnCorrectNetwork])
+
 
   const handleNetworkSwitch = async () => {
     const requiredNetwork = getRequiredNetwork()
@@ -506,6 +500,7 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
       setWalletPopoverOpen(false)
       setPricingPopoverOpen(false)
       setSelectedPricingTier(0)
+      setJsonEditorStates({})
     }
   }, [isOpen])
 
@@ -889,29 +884,31 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
     isRequired: boolean,
     fullPath: string
   ): React.ReactElement => {
-    const [jsonError, setJsonError] = useState<string | null>(null)
-    const [jsonValue, setJsonValue] = useState<string>(() => {
-      // Initialize with formatted JSON if currentValue is an object, otherwise use string
-      if (typeof currentValue === 'object' && currentValue !== null) {
-        return JSON.stringify(currentValue, null, 2)
-      }
-      return String(currentValue || '{}')
-    })
+    const editorKey = fullPath
+    const currentState = jsonEditorStates[editorKey] || {
+      value: typeof currentValue === 'object' && currentValue !== null
+        ? JSON.stringify(currentValue, null, 2)
+        : String(currentValue || '{}'),
+      error: null
+    }
 
     const handleJsonChange = (value: string) => {
-      setJsonValue(value)
+      let error = null
       try {
         if (value.trim() === '') {
           updateToolInput(fullPath, {})
-          setJsonError(null)
         } else {
           const parsed = JSON.parse(value)
           updateToolInput(fullPath, parsed)
-          setJsonError(null)
         }
-      } catch (error) {
-        setJsonError(error instanceof Error ? error.message : 'Invalid JSON')
+      } catch (e) {
+        error = e instanceof Error ? e.message : 'Invalid JSON'
       }
+      
+      setJsonEditorStates(prev => ({
+        ...prev,
+        [editorKey]: { value, error }
+      }))
     }
 
     return (
@@ -922,17 +919,17 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
           <span className="text-xs text-gray-500 ml-1">(JSON Object)</span>
         </label>
         <Textarea
-          value={jsonValue}
+          value={currentState.value}
           onChange={(e) => handleJsonChange(e.target.value)}
           placeholder={`Enter ${inputName} as JSON object`}
           rows={4}
           className={`font-mono text-sm ${themeClasses.input} ${
-            jsonError ? 'border-red-500 focus:border-red-500' : ''
+            currentState.error ? 'border-red-500 focus:border-red-500' : ''
           }`}
         />
-        {jsonError && (
+        {currentState.error && (
           <p className="text-xs text-red-500">
-            JSON Error: {jsonError}
+            JSON Error: {currentState.error}
           </p>
         )}
         {inputProp.description && (
@@ -1606,7 +1603,6 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
 
     const properties = getToolProperties(stableTool)
     const hasInputs = hasToolInputs(stableTool)
-    const status = getStatusIndicator()
 
     return (
       <div className="space-y-4">
