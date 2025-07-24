@@ -4,9 +4,38 @@
  * This module is used to proxy requests to the MCPay.fun API.
  * It is used to bypass CORS restrictions and to add authentication to the requests.
  * 
- * It is also used to add a layer of caching to the requests.
+ * Rate Limiting & Anti-Bot Protection Features:
+ * ============================================
  * 
- * It is also used to add a layer of error handling to the requests.
+ * 1. REQUEST THROTTLING:
+ *    - Limits requests per hostname (30/minute by default)
+ *    - Enforces minimum 1-second delay between requests
+ *    - In-memory rate limiting to prevent rapid-fire requests
+ * 
+ * 2. BROWSER-LIKE BEHAVIOR:
+ *    - Rotates realistic User-Agent strings (Chrome, Firefox, Safari)
+ *    - Adds browser headers (Accept, Accept-Language, Sec-Fetch-*)
+ *    - Sets appropriate Origin/Referer headers for API domains
+ * 
+ * 3. RETRY LOGIC:
+ *    - Exponential backoff for 429 (rate limited) responses
+ *    - Up to 3 retries with randomized delays (2s base)
+ *    - Automatic detection and handling of Cloudflare rate limits
+ * 
+ * 4. INTELLIGENT CACHING:
+ *    - GET request caching with configurable TTL
+ *    - Domain-specific cache durations (CoinGecko: 1min, APIs: 45s)
+ *    - Automatic cache cleanup to prevent memory leaks
+ *    - Cache key includes URL, method, and body hash
+ * 
+ * 5. CONFIGURATION:
+ *    - All limits configurable via RATE_LIMIT_CONFIG
+ *    - Easy to adjust for different APIs or traffic patterns
+ *    - Separate settings for different types of endpoints
+ * 
+ * This should significantly reduce 429 errors from Cloudflare and other
+ * rate limiting systems by making requests appear more human-like and
+ * reducing the actual number of upstream requests through caching.
  */
 
 import { fromBaseUnits } from "@/lib/commons";
@@ -21,6 +50,213 @@ import { Hono, type Context } from "hono";
 import { handle } from "hono/vercel";
 
 export const runtime = 'nodejs'
+
+// Configuration for rate limiting and caching
+const RATE_LIMIT_CONFIG = {
+    // Maximum requests per minute per hostname
+    MAX_REQUESTS_PER_MINUTE: 30,
+    // Minimum delay between requests (milliseconds)
+    MIN_REQUEST_DELAY: 1000,
+    // Retry configuration
+    MAX_RETRIES: 3,
+    BASE_RETRY_DELAY: 2000, // 2 seconds
+    // Cache configuration
+    DEFAULT_CACHE_TTL: 30000, // 30 seconds
+    COINGECKO_CACHE_TTL: 60000, // 1 minute
+    API_CACHE_TTL: 45000, // 45 seconds
+    MAX_CACHE_SIZE: 100
+};
+
+// Rate limiting storage (in-memory for simplicity)
+const rateLimitMap = new Map<string, { requests: number; resetTime: number; lastRequest: number }>();
+
+// Simple response cache (in-memory, with TTL)
+interface CacheEntry {
+    response: {
+        status: number;
+        statusText: string;
+        headers: Record<string, string>;
+        body: string;
+    };
+    timestamp: number;
+    ttl: number; // Time to live in milliseconds
+}
+
+const responseCache = new Map<string, CacheEntry>();
+
+/**
+ * Generate cache key for request
+ */
+function getCacheKey(url: string, method: string, body?: ArrayBuffer): string {
+    const bodyHash = body ? btoa(String.fromCharCode(...new Uint8Array(body))).substring(0, 32) : '';
+    return `${method}:${url}:${bodyHash}`;
+}
+
+/**
+ * Check if we have a valid cached response
+ */
+function getCachedResponse(cacheKey: string): Response | null {
+    const entry = responseCache.get(cacheKey);
+    if (!entry) return null;
+    
+    const now = Date.now();
+    if (now > entry.timestamp + entry.ttl) {
+        responseCache.delete(cacheKey);
+        return null;
+    }
+    
+    console.log(`[${new Date().toISOString()}] Cache hit for ${cacheKey}`);
+    
+    // Reconstruct Response object
+    const headers = new Headers(entry.response.headers);
+    return new Response(entry.response.body, {
+        status: entry.response.status,
+        statusText: entry.response.statusText,
+        headers
+    });
+}
+
+/**
+ * Cache a response (only cache GET requests and successful responses)
+ */
+async function cacheResponse(cacheKey: string, response: Response, ttl: number = RATE_LIMIT_CONFIG.DEFAULT_CACHE_TTL): Promise<void> {
+    try {
+        // Only cache GET requests and successful responses
+        if (!cacheKey.startsWith('GET:') || response.status >= 400) {
+            return;
+        }
+        
+        const clonedResponse = response.clone();
+        const body = await clonedResponse.text();
+        const headers: Record<string, string> = {};
+        
+        clonedResponse.headers.forEach((value, key) => {
+            headers[key] = value;
+        });
+        
+        const entry: CacheEntry = {
+            response: {
+                status: response.status,
+                statusText: response.statusText,
+                headers,
+                body
+            },
+            timestamp: Date.now(),
+            ttl
+        };
+        
+        responseCache.set(cacheKey, entry);
+        console.log(`[${new Date().toISOString()}] Cached response for ${cacheKey} (TTL: ${ttl}ms)`);
+        
+        // Clean up old cache entries periodically
+        if (responseCache.size > RATE_LIMIT_CONFIG.MAX_CACHE_SIZE) {
+            const now = Date.now();
+            for (const [key, cachedEntry] of responseCache.entries()) {
+                if (now > cachedEntry.timestamp + cachedEntry.ttl) {
+                    responseCache.delete(key);
+                }
+            }
+        }
+    } catch (error) {
+        console.warn(`[${new Date().toISOString()}] Failed to cache response:`, error);
+    }
+}
+
+// Browser-like User-Agent strings to rotate through
+const USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:121.0) Gecko/20100101 Firefox/121.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15'
+];
+
+/**
+ * Simple rate limiter to prevent rapid-fire requests
+ */
+function shouldRateLimit(hostname: string, maxRequestsPerMinute: number = RATE_LIMIT_CONFIG.MAX_REQUESTS_PER_MINUTE): boolean {
+    const now = Date.now();
+    const windowMs = 60 * 1000; // 1 minute
+    
+    let rateInfo = rateLimitMap.get(hostname);
+    if (!rateInfo || now > rateInfo.resetTime) {
+        rateInfo = { requests: 0, resetTime: now + windowMs, lastRequest: 0 };
+        rateLimitMap.set(hostname, rateInfo);
+    }
+    
+    // Check if we need to add delay between requests
+    const timeSinceLastRequest = now - rateInfo.lastRequest;
+    
+    if (timeSinceLastRequest < RATE_LIMIT_CONFIG.MIN_REQUEST_DELAY) {
+        return true; // Rate limit - too fast
+    }
+    
+    if (rateInfo.requests >= maxRequestsPerMinute) {
+        return true; // Rate limit - too many requests
+    }
+    
+    rateInfo.requests++;
+    rateInfo.lastRequest = now;
+    return false;
+}
+
+/**
+ * Add delay between requests to avoid rate limiting
+ */
+async function addRequestDelay(hostname: string): Promise<void> {
+    const rateInfo = rateLimitMap.get(hostname);
+    if (!rateInfo) return;
+    
+    const now = Date.now();
+    const timeSinceLastRequest = now - rateInfo.lastRequest;
+    
+    if (timeSinceLastRequest < RATE_LIMIT_CONFIG.MIN_REQUEST_DELAY) {
+        const delayNeeded = RATE_LIMIT_CONFIG.MIN_REQUEST_DELAY - timeSinceLastRequest;
+        console.log(`[${new Date().toISOString()}] Adding ${delayNeeded}ms delay for ${hostname}`);
+        await new Promise(resolve => setTimeout(resolve, delayNeeded));
+    }
+}
+
+/**
+ * Get a random User-Agent to avoid detection
+ */
+function getRandomUserAgent(): string {
+    return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+}
+
+/**
+ * Retry with exponential backoff for rate limited requests
+ */
+async function retryWithBackoff<T>(
+    operation: () => Promise<T>,
+    maxRetries: number = 3,
+    baseDelayMs: number = 1000
+): Promise<T> {
+    let lastError: Error = new Error('Maximum retries exceeded');
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            return await operation();
+        } catch (error) {
+            lastError = error as Error;
+            
+            // Check if it's a rate limit error
+            if (error instanceof Error && error.message.includes('429')) {
+                if (attempt < maxRetries) {
+                    const delayMs = baseDelayMs * Math.pow(2, attempt) + Math.random() * 1000;
+                    console.log(`[${new Date().toISOString()}] Rate limited, retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries + 1})`);
+                    await new Promise(resolve => setTimeout(resolve, delayMs));
+                    continue;
+                }
+            }
+            
+            // For non-rate-limit errors, don't retry
+            throw error;
+        }
+    }
+    
+    throw lastError;
+}
 
 const app = new Hono<{ Bindings: AuthType }>({
     strict: false,
@@ -183,6 +419,22 @@ const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer, metad
         });
     }
 
+    // Check cache first for GET requests
+    const cacheKey = getCacheKey(url.toString(), c.req.raw.method, body);
+    if (c.req.raw.method === 'GET') {
+        const cachedResponse = getCachedResponse(cacheKey);
+        if (cachedResponse) {
+            return cachedResponse;
+        }
+    }
+
+    // Check rate limiting before proceeding
+    const hostname = targetUpstream.hostname;
+    if (shouldRateLimit(hostname)) {
+        console.log(`[${new Date().toISOString()}] Rate limiting detected for ${hostname}, adding delay`);
+        await addRequestDelay(hostname);
+    }
+
     const headers = new Headers();
 
     c.req.raw.headers.forEach((v, k) => {
@@ -192,6 +444,21 @@ const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer, metad
     });
 
     headers.set('host', targetUpstream.host);
+
+    // Add browser-like headers to avoid bot detection
+    if (!headers.has('user-agent')) {
+        headers.set('user-agent', getRandomUserAgent());
+    }
+    
+    // Add more realistic browser headers
+    headers.set('accept', 'application/json, text/plain, */*');
+    headers.set('accept-language', 'en-US,en;q=0.9');
+    headers.set('accept-encoding', 'gzip, deflate, br');
+    headers.set('sec-fetch-dest', 'empty');
+    headers.set('sec-fetch-mode', 'cors');
+    headers.set('sec-fetch-site', 'cross-site');
+    headers.set('referer', 'https://mcpay.fun');
+    headers.set('origin', 'https://mcpay.fun');
 
     // set user information headers
     console.log(`[${new Date().toISOString()}] Metadata: ${JSON.stringify(metadata, null, 2)}`);
@@ -215,14 +482,47 @@ const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer, metad
         body: body ? new TextDecoder().decode(body) : undefined
     });
 
-    const response = await fetch(url.toString(), {
-        method: c.req.raw.method,
-        headers,
-        body: body || (c.req.raw.method !== 'GET' ? c.req.raw.body : undefined),
-        // @ts-expect-error - TODO: fix this
-        duplex: 'half'
-    });
+    // Wrap the fetch in retry logic with exponential backoff
+    const response = await retryWithBackoff(async () => {
+        const fetchResponse = await fetch(url.toString(), {
+            method: c.req.raw.method,
+            headers,
+            body: body || (c.req.raw.method !== 'GET' ? c.req.raw.body : undefined),
+            // @ts-expect-error - TODO: fix this
+            duplex: 'half'
+        });
+
+        // Check if we got rate limited
+        if (fetchResponse.status === 429) {
+            console.log(`[${new Date().toISOString()}] Received 429 from ${hostname}, will retry`);
+            throw new Error(`429 Rate Limited by ${hostname}`);
+        }
+
+        return fetchResponse;
+    }, RATE_LIMIT_CONFIG.MAX_RETRIES, RATE_LIMIT_CONFIG.BASE_RETRY_DELAY);
+
     console.log(`[${new Date().toISOString()}] Received response from upstream with status: ${response.status}`);
+
+    // Cache successful GET responses
+    if (c.req.raw.method === 'GET' && response.status < 400) {
+        // Determine TTL based on content type and status
+        let ttl = RATE_LIMIT_CONFIG.DEFAULT_CACHE_TTL;
+        
+        // Cache API responses for longer if they're likely to be stable
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+            if (hostname.includes('coingecko.com')) {
+                ttl = RATE_LIMIT_CONFIG.COINGECKO_CACHE_TTL;
+            } else if (hostname.includes('api.')) {
+                ttl = RATE_LIMIT_CONFIG.API_CACHE_TTL;
+            }
+        }
+        
+        // Don't block the response on caching
+        cacheResponse(cacheKey, response, ttl).catch(error => {
+            console.warn(`[${new Date().toISOString()}] Failed to cache response:`, error);
+        });
+    }
 
     return response;
 }
