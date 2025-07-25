@@ -78,14 +78,18 @@ export function McpPreview({ url, userWalletAddress }: McpPreviewProps) {
 
               <span className="text-muted-foreground">URL:</span>
               <span className="text-right font-medium break-all">
-                <a
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-cyan-500 hover:text-cyan-500/80"
-                >
-                  {url}
-                </a>
+                {url ? (
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-cyan-500 hover:text-cyan-500/80"
+                  >
+                    {url}
+                  </a>
+                ) : (
+                  <span className="text-muted-foreground/70">No URL</span>
+                )}
               </span>
             </div>
           </CardContent>

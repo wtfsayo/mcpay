@@ -62,7 +62,7 @@ export default function ChatWithPreview({
               Code
             </Button>
           </div>
-          <div className="flex-1 p-4 overflow-auto">
+          <div className="flex-1 p-6 overflow-auto">
             {activeTab === 'preview' ? (
               <McpPreview url={"https://vercel-mcp-handler-mcpay.vercel.app/mcp"} userWalletAddress={"0x0000000000000000000000000000000000000000"} />
             ) : (
