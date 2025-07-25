@@ -28,7 +28,6 @@ export default function BuildPage() {
 
   return (
     <Suspense fallback={null}>
-      <div className="flex flex-col h-screen">
         <ChatWithPreview
           id="main-chat"
           messages={messages}
@@ -37,7 +36,6 @@ export default function BuildPage() {
           onSendMessage={handleSendMessage}
           onStop={handleStop}
         />
-      </div>
     </Suspense>
   );
 }

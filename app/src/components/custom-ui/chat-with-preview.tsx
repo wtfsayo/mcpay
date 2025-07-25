@@ -1,4 +1,3 @@
-// app/src/components/custom-ui/chat-with-preview.tsx
 'use client';
 
 import { useState } from 'react';
@@ -26,8 +25,9 @@ export default function ChatWithPreview({
   const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview');
 
   return (
-    <div className="flex flex-col h-dvh">
+    <div className="flex flex-col flex-1 min-h-0">
       <div className="flex flex-1 min-h-0">
+        {/* Chat pane */}
         <div className="flex-1 flex flex-col min-h-0">
           <ChatBody
             chatId={id}
@@ -37,9 +37,9 @@ export default function ChatWithPreview({
             onSendMessage={onSendMessage}
             onStop={onStop}
           />
-          {/* <DataStreamHandler /> */}
         </div>
 
+        {/* Preview/Code pane */}
         <div className="hidden md:flex flex-col w-2/3 border-l border-gray-200 bg-background">
           <div className="flex space-x-2 p-2 border-b border-muted-background">
             <Button
