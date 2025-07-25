@@ -13,13 +13,13 @@ import { Badge } from "@/components/ui/badge"
 
 export default function Navbar() {
   const pathname = usePathname()
-
   const { isDark } = useTheme()
   const { data: session, isPending: sessionLoading } = useSession()
   const { isOpen, defaultTab, openModal, closeModal } = useAccountModal()
 
-  // Determine logo based on theme
+  // Determine logo and symbol based on theme
   const logoSrc = isDark ? "/MCPay-logo-dark.svg" : "/MCPay-logo-light.svg"
+  const symbolSrc = isDark ? "/MCPay-symbol-dark.svg" : "/MCPay-symbol-light.svg"
 
   return (
     <nav
@@ -33,11 +33,31 @@ export default function Navbar() {
         <div className="flex items-center justify-between py-2">
           {/* Logo/Brand */}
           <div className="flex items-center">
-            <Link href="/" className="flex-shrink-0 flex items-center gap-3 p-2 hover:bg-muted rounded-md">
-              <Image src={logoSrc} alt="MCPay Logo" width={112} height={72} />
-              <Badge variant="outline" className="text-xs">
-                Alpha
-              </Badge>
+            <Link
+              href="/"
+              className="flex-shrink-0 p-2 hover:bg-muted rounded-md"
+            >
+              {/* Mobile: symbol only, no badge */}
+              <div className="block sm:hidden">
+                <Image
+                  src={symbolSrc}
+                  alt="MCPay Symbol"
+                  width={30}
+                  height={30}
+                />
+              </div>
+              {/* Desktop: full logo + badge */}
+              <div className="hidden sm:flex items-center gap-3">
+                <Image
+                  src={logoSrc}
+                  alt="MCPay Logo"
+                  width={112}
+                  height={72}
+                />
+                <Badge variant="outline" className="text-xs">
+                  Alpha
+                </Badge>
+              </div>
             </Link>
           </div>
 
@@ -47,7 +67,7 @@ export default function Navbar() {
               variant="ghost"
               asChild
               className={`px-3 py-2 text-sm font-medium transition-colors duration-200 ${
-                pathname === "/register"
+                pathname === "/build"
                   ? isDark
                     ? "bg-gray-800 text-white"
                     : "bg-gray-100 text-gray-900"
@@ -56,7 +76,7 @@ export default function Navbar() {
                   : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
               }`}
             >
-              <Link href="/build">Build Server</Link>
+              <Link href="/build">Build</Link>
             </Button>
 
             <Button
@@ -72,10 +92,10 @@ export default function Navbar() {
                   : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
               }`}
             >
-              <Link href="/register">Register Server</Link>
+              <Link href="/register">Register</Link>
             </Button>
 
-            {/* Account Button */}
+            {/* Account/Connect Button */}
             <Button
               variant="ghost"
               onClick={() => openModal('funds')}
@@ -88,13 +108,15 @@ export default function Navbar() {
             >
               {session?.user ? (
                 <>
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                    isDark ? "bg-gray-700" : "bg-gray-200"
-                  }`}>
+                  <div
+                    className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                      isDark ? "bg-gray-700" : "bg-gray-200"
+                    }`}
+                  >
                     {session.user.image ? (
-                      <Image 
-                        src={session.user.image} 
-                        alt="Profile" 
+                      <Image
+                        src={session.user.image}
+                        alt="Profile"
                         width={24}
                         height={24}
                         className="w-6 h-6 rounded-full object-cover"
