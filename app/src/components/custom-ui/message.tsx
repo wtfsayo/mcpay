@@ -5,6 +5,7 @@ import { UIMessage } from 'ai';
 import { AnimatePresence, motion } from 'motion/react';
 import { memo } from 'react';
 import Image from 'next/image';
+import { Markdown } from './markdown';
 
 interface PreviewMessageProps {
   message: UIMessage;
@@ -59,8 +60,10 @@ function PurePreviewMessage({
                   message.role === 'user',
               })}
             >
-              {message.parts.map((part) => {
-                if (part.type === 'text') return part.text;
+              {message.parts.map((part, i) => {
+                if (part.type === 'text') {
+                  return <Markdown key={i}>{part.text}</Markdown>;
+                }
                 if (part.type.startsWith('tool-')) return JSON.stringify(part, null, 2);
                 return '';
               })}
