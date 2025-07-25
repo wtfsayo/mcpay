@@ -36,15 +36,14 @@ function PurePreviewMessage({
         >
           {message.role === 'assistant' && (
             <div className="w-8 h-8 flex-shrink-0 rounded-full overflow-hidden ring-1 ring-border bg-background">
-            {/* If you’re using Next.js public/, you can refer to it at “/MCPay-symbol-light.svg” */}
-            <Image
-              src="/MCPay-symbol-light.svg"
-              alt="MCPay logo"
-              width={32}
-              height={32}
-              className="object-cover"
-            />
-          </div>
+              <Image
+                src="/MCPay-build-symbol.svg"
+                alt="MCPay logo"
+                width={32}
+                height={32}
+                className="object-cover"
+              />
+            </div>
           )}
 
           <div
@@ -95,7 +94,15 @@ export const ThinkingMessage = () => (
     data-role="assistant"
   >
     <div className="flex items-center gap-4 px-3 py-2 rounded-xl bg-muted">
-      <div className="size-8 flex items-center justify-center rounded-full ring-1 ring-border" />
+      <div className="w-8 h-8 flex-shrink-0 rounded-full overflow-hidden ring-1 ring-border bg-background">
+        <Image
+          src="/MCPay-build-symbol.svg"
+          alt="MCPay logo"
+          width={32}
+          height={32}
+          className="object-cover"
+        />
+      </div>
       <div className="flex-1 text-muted-foreground">Hmm…</div>
     </div>
   </motion.div>
