@@ -43,6 +43,11 @@ function isOriginBlocked(url: string): boolean {
         const urlObj = new URL(url);
         const hostname = urlObj.hostname.toLowerCase();
         
+        // Block domains ending with vercel.run
+        if (hostname.endsWith('.vercel.run') || hostname === 'vercel.run') {
+            return true;
+        }
+        
         // Check against blocked origins list
         return BLOCKED_ORIGINS.some(blockedOrigin => {
             const normalizedBlocked = blockedOrigin.toLowerCase();
