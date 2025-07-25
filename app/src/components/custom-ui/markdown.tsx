@@ -3,6 +3,7 @@ import React, { memo } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CodeBlock } from './code-block';
+import rehypeHighlight from 'rehype-highlight';
 
 const components: Partial<Components> = {
   // @ts-expect-error
@@ -94,10 +95,11 @@ const components: Partial<Components> = {
 };
 
 const remarkPlugins = [remarkGfm];
+const rehypePlugins  = [rehypeHighlight];
 
 const NonMemoizedMarkdown = ({ children }: { children: string }) => {
   return (
-    <ReactMarkdown remarkPlugins={remarkPlugins} components={components}>
+    <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
       {children}
     </ReactMarkdown>
   );
