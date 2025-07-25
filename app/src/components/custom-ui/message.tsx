@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { UIMessage } from 'ai';
 import { AnimatePresence, motion } from 'motion/react';
 import { memo } from 'react';
+import Image from 'next/image';
 
 interface PreviewMessageProps {
   message: UIMessage;
@@ -27,37 +28,42 @@ function PurePreviewMessage({
       >
         <div
           className={cn(
-            'flex gap-4 w-full',
-            message.role === 'user' ? 'ml-auto max-w-2xl' : undefined
+            'flex items-start gap-4 w-full',
+            message.role === 'user'
+              ? 'ml-auto max-w-2xl w-fit'  // right‑align & shrink‑to‑fit
+              : undefined
           )}
         >
-          {/* Assistant icon placeholder */}
           {message.role === 'assistant' && (
-            <div className="size-8 flex items-center justify-center rounded-full ring-1 ring-border bg-background" />
+            <div className="w-8 h-8 flex-shrink-0 rounded-full overflow-hidden ring-1 ring-border bg-background">
+            {/* If you’re using Next.js public/, you can refer to it at “/MCPay-symbol-light.svg” */}
+            <Image
+              src="/MCPay-symbol-light.svg"
+              alt="MCPay logo"
+              width={32}
+              height={32}
+              className="object-cover"
+            />
+          </div>
           )}
-          
+
           <div
-            className={cn('flex flex-col gap-4 w-full', {
+            className={cn('flex flex-col gap-4', {
               'min-h-96': message.role === 'assistant' && requiresScrollPadding,
+              'items-end': message.role === 'user',
             })}
           >
             <div
               data-testid="message-content"
               className={cn('flex flex-col gap-4', {
-                'bg-primary text-primary-foreground px-3 py-2 rounded-xl':
+                'bg-primary/90 text-primary-foreground px-3 py-2 rounded-md':
                   message.role === 'user',
               })}
             >
               {message.parts.map((part) => {
-                switch (part.type) {
-                  case 'text':
-                    return part.text;
-                  default:
-                    if (part.type.startsWith('tool-')) {
-                      return JSON.stringify(part, null, 2);
-                    }
-                    return '';
-                }
+                if (part.type === 'text') return part.text;
+                if (part.type.startsWith('tool-')) return JSON.stringify(part, null, 2);
+                return '';
               })}
             </div>
 
@@ -66,6 +72,7 @@ function PurePreviewMessage({
             )}
           </div>
         </div>
+
       </motion.div>
     </AnimatePresence>
   );
