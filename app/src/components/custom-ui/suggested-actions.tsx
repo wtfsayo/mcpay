@@ -11,24 +11,14 @@ interface SuggestedActionsProps {
 
 const suggestedActions = [
   {
-    title: 'What are the advantages',
-    label: 'of using Next.js?',
-    action: 'What are the advantages of using Next.js?',
+    title: 'MCP for developer assitant',
+    label: 'specializing in frontend',
+    action: 'Lets build an MCP that is an developer assitant specializing in frontend',
   },
   {
-    title: 'Write code to',
-    label: "demonstrate Dijkstra's algorithm",
-    action: "Write code to demonstrate Dijkstra's algorithm",
-  },
-  {
-    title: 'Help me write an essay',
-    label: 'about Silicon Valley',
-    action: 'Help me write an essay about Silicon Valley',
-  },
-  {
-    title: 'What is the weather',
-    label: 'in San Francisco?',
-    action: 'What is the weather in San Francisco?',
+    title: 'Base structure',
+    label: 'for general MCP',
+    action: 'Just build the base structure of an MCP',
   },
 ];
 

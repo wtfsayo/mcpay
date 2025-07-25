@@ -76,7 +76,7 @@ export function MultimodalInput({
         <SuggestedActions chatId={chatId} sendMessage={onSendMessage} />
       )}
 
-      <div className="flex w-full items-end gap-2 p-4">
+      <div className="flex w-full items-end gap-2">
         <Textarea
           placeholder="Type a message..."
           value={input}
