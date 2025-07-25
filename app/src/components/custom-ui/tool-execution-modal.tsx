@@ -89,7 +89,7 @@ const getThemeClasses = (isDark: boolean) => ({
 // MAIN COMPONENT
 // =============================================================================
 
-export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExecutionModalProps) {
+export function ToolExecutionModal({ isOpen, onClose, tool, serverId, url }: ToolExecutionModalProps) {
   const { isDark } = useTheme()
   const { hasWallets } = useUser()
   const primaryWallet = usePrimaryWallet()
@@ -411,8 +411,15 @@ export function ToolExecutionModal({ isOpen, onClose, tool, serverId }: ToolExec
       try {
         setExecution({ status: 'initializing' })
 
-        // Create the MCP URL using the serverId
-        const mcpUrl = new URL(urlUtils.getMcpUrl(serverId))
+        let mcpUrl = null
+
+        if (url) {
+          mcpUrl = new URL(url)
+        } else if (serverId) {
+          mcpUrl = new URL(urlUtils.getMcpUrl(serverId))
+        } else {
+          throw new Error("Either server ID or URL must be provided")
+        }
 
         // Create a viem-compatible Account object that x402 can use
         let account
