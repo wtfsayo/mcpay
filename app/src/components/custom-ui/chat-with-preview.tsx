@@ -13,6 +13,8 @@ export interface ChatWithPreviewProps {
   isReadonly?: boolean;
   onSendMessage: (text: string) => void;
   onStop?: () => void;
+  previewUrl?: string | null;
+  userWalletAddress?: string;
 }
 
 export default function ChatWithPreview({
@@ -22,6 +24,8 @@ export default function ChatWithPreview({
   isReadonly = false,
   onSendMessage,
   onStop,
+  previewUrl = 'https://vercel-mcp-handler-mcpay.vercel.app/mcp',
+  userWalletAddress = '0x0000000000000000000000000000000000000000',
 }: ChatWithPreviewProps) {
   const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview');
 
@@ -64,7 +68,11 @@ export default function ChatWithPreview({
           </div>
           <div className="flex-1 p-6 overflow-auto">
             {activeTab === 'preview' ? (
-              <McpPreview url={"https://vercel-mcp-handler-mcpay.vercel.app/mcp"} userWalletAddress={"0x0000000000000000000000000000000000000000"} />
+              previewUrl
+                ? <McpPreview url={previewUrl} userWalletAddress={userWalletAddress} />
+                : <div className="p-4 text-center text-muted-foreground/80">
+                  No preview available.
+                </div>
             ) : (
               <div>{/* code viewer here */}</div>
             )}
