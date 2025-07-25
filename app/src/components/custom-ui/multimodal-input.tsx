@@ -8,6 +8,7 @@ import { SuggestedActions } from '@/components/custom-ui/suggested-actions';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { ArrowDown, ArrowUp, Ban } from 'lucide-react';
+import { StopIcon } from './icons';
 import { toast } from 'sonner';
 import { ChatStatus } from 'ai';
 
@@ -83,9 +84,14 @@ export function MultimodalInput({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            if (
+              e.key === 'Enter' &&
+              !e.shiftKey &&
+              !e.nativeEvent.isComposing
+            ) {
               e.preventDefault();
-              if (status === 'streaming') {
+
+              if (status !== 'ready') {
                 toast.error(
                   'Please wait for the response before sending a new message.'
                 );
@@ -98,9 +104,9 @@ export function MultimodalInput({
           rows={2}
         />
 
-        {status === 'streaming' || status === 'submitted' ? (
-          <Button variant="ghost" onClick={onStop} title="Stop generation">
-            <Ban size={16} />
+        {status === 'submitted' ? (
+          <Button variant="secondary" onClick={onStop} title="Stop generation">
+            <StopIcon size={16} />
           </Button>
         ) : (
           <Button
