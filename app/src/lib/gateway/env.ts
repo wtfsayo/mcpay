@@ -24,6 +24,10 @@ const envSchema = z.object({
   CDP_API_SECRET: z.string().min(1, 'CDP_API_SECRET is required'),
   CDP_WALLET_SECRET: z.string().min(1, 'CDP_WALLET_SECRET is required'),
 
+  // Vercel KV Configuration
+  KV_REST_API_URL: z.string().url('KV_REST_API_URL must be a valid URL'),
+  KV_REST_API_TOKEN: z.string().min(1, 'KV_REST_API_TOKEN is required'),
+
   // Payment strategy configuration
   PAYMENT_STRATEGY_ENABLED: z.boolean().default(true),
   PAYMENT_STRATEGY_FALLBACK: z.enum(['fail', 'continue', 'log_only']).default('fail'),
@@ -110,6 +114,12 @@ export const getCDPConfig = () => ({
   apiKey: env.CDP_API_KEY,
   apiSecret: env.CDP_API_SECRET,
   walletSecret: env.CDP_WALLET_SECRET,
+});
+
+// Helper for KV configuration
+export const getKVConfig = () => ({
+  restApiUrl: env.KV_REST_API_URL,
+  restApiToken: env.KV_REST_API_TOKEN,
 });
 
 // Helper for facilitator private key (with validation)

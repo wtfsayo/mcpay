@@ -44,6 +44,7 @@
     "@radix-ui/react-toggle-group": "^1.1.10",
     "@radix-ui/react-tooltip": "^1.2.7",
     "@vercel/ai-sdk-gateway": "^0.1.9",
+    "@vercel/kv": "^3.0.0",
     "@vercel/mcp-adapter": "0.11.1",
     "@vercel/sandbox": "^0.0.12",
     "ai": "5.0.0-beta.20",
