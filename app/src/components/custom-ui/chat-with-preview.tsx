@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ChatBody } from '@/components/custom-ui/chat-body';
 import { Button } from '@/components/ui/button';
 import { ChatStatus, UIMessage } from 'ai';
+import { McpPreview } from './mcp-preview';
 
 export interface ChatWithPreviewProps {
   id: string;
@@ -45,9 +46,8 @@ export default function ChatWithPreview({
             <Button
               variant="ghost"
               size="sm"
-              className={`px-2 transition-opacity ${
-                activeTab === 'preview' ? 'opacity-100 bg-accent' : 'opacity-50'
-              }`}
+              className={`px-2 transition-opacity ${activeTab === 'preview' ? 'opacity-100 bg-accent' : 'opacity-50'
+                }`}
               onClick={() => setActiveTab('preview')}
             >
               Preview
@@ -55,9 +55,8 @@ export default function ChatWithPreview({
             <Button
               variant="ghost"
               size="sm"
-              className={`px-2 transition-opacity ${
-                activeTab === 'code' ? 'opacity-100 bg-accent' : 'opacity-50'
-              }`}
+              className={`px-2 transition-opacity ${activeTab === 'code' ? 'opacity-100 bg-accent' : 'opacity-50'
+                }`}
               onClick={() => setActiveTab('code')}
             >
               Code
@@ -65,7 +64,7 @@ export default function ChatWithPreview({
           </div>
           <div className="flex-1 p-4 overflow-auto">
             {activeTab === 'preview' ? (
-              <div>{/* preview renderer here */}</div>
+              <McpPreview url={"https://vercel-mcp-handler-mcpay.vercel.app/mcp"} userWalletAddress={"0x0000000000000000000000000000000000000000"} />
             ) : (
               <div>{/* code viewer here */}</div>
             )}

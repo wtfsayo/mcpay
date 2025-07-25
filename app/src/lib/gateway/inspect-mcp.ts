@@ -134,22 +134,41 @@ export async function getMcpToolsWithPayments(url: string, userWalletAddress: st
  */
 export async function getMcpServerInfo(url: string, userWalletAddress: string): Promise<MCPServerInfo> {
   try {
+    console.log('Getting MCP server info for URL:', url)
     const transport = new StreamableHTTPClientTransport(new URL(url))
     const client = new Client({ name: "mcpay-inspect", version: "1.0.0" })
 
+    console.log('Connecting to MCP server...')
     await client.connect(transport)
 
-    // Get server metadata
-    const serverInfo = client.getServerVersion()
-    const serverCapabilities = client.getServerCapabilities()
+    let serverInfo;
+    let serverCapabilities;
+    let prompts;
+    let toolsResult;
 
-    const prompts = await client.listPrompts()
+    // Get server metadata
+    console.log('Fetching server metadata...')
+    try {
+      serverInfo = client.getServerVersion()
+      serverCapabilities = client.getServerCapabilities()
+    } catch (err) {
+      console.warn('Error fetching server metadata:', err)
+    }
+
+    console.log('Fetching server prompts...')
+    try {
+      prompts = await client.listPrompts()
+    } catch (err) {
+      console.warn('Error fetching prompts:', err)
+      prompts = { prompts: [] }
+    }
 
     // Helper function to safely extract string values
     const getString = (value: unknown): string | undefined => {
       return typeof value === 'string' ? value : undefined
     }
 
+    console.log('Building server metadata object...')
     const metadata: MCPServerMetadata = {
       name: serverInfo?.name || 'Unknown Server',
       version: getString(serverInfo?.version) || 'Unknown Version',
@@ -157,31 +176,57 @@ export async function getMcpServerInfo(url: string, userWalletAddress: string): 
       protocolVersion: getString(serverInfo?.protocolVersion),
       capabilities: serverCapabilities,
     }
+    console.log('Server metadata:', metadata)
 
     // Get tools with payment information
-    const toolsResult = await client.listTools()
-    const tools = toolsResult.tools.map((tool) => {
-      const pricingInfo = extractPaymentFromAnnotations(tool.annotations, userWalletAddress)
+    console.log('Fetching tools list...')
+    let tools: MCPToolWithPayments[] = []
+    try {
+      toolsResult = await client.listTools()
+      console.log(`Found ${toolsResult.tools.length} tools`)
+      
+      tools = toolsResult.tools.map((tool) => {
+        console.log('Processing tool:', tool.name)
+        const pricingInfo = extractPaymentFromAnnotations(tool.annotations, userWalletAddress)
 
-      return {
-        name: tool.name,
-        description: tool.description,
-        inputSchema: tool.inputSchema,
-        annotations: tool.annotations,
-        pricing: pricingInfo,
-      }
-    })
+        return {
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+          annotations: tool.annotations,
+          pricing: pricingInfo,
+        }
+      })
+    } catch (err) {
+      console.warn('Error fetching tools:', err)
+    }
+
+    const hasPayments = tools.some(tool => tool.pricing && tool.pricing.length > 0)
+    console.log('Tools with payments:', hasPayments)
 
     return {
       metadata,
       tools,
       toolCount: tools.length,
-      hasPayments: tools.some(tool => tool.pricing && tool.pricing.length > 0),
+      hasPayments,
       prompts
     }
   } catch (error) {
     console.error("Error fetching comprehensive MCP server info:", error)
-    throw new Error("Failed to fetch server information")
+    // Return partial data instead of throwing
+    return {
+      metadata: {
+        name: 'Unknown Server',
+        version: 'Unknown Version',
+        description: undefined,
+        protocolVersion: undefined,
+        capabilities: undefined,
+      },
+      tools: [],
+      toolCount: 0,
+      hasPayments: false,
+      prompts: { prompts: [] }
+    }
   }
 }
 

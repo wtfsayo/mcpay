@@ -150,6 +150,11 @@ export const api = {
     return apiCall(`/inspect-mcp-tools?url=${encodeURIComponent(url)}`)
   },
 
+  // Get MCP server info from a server URL
+  getMcpServerInfo: async (url: string) => {
+    return apiCall(`/inspect-mcp-server?url=${encodeURIComponent(url)}`)
+  },
+
   // Get servers list
   getServers: async (limit = 10, offset = 0) => {
     return apiCall(`/servers?limit=${limit}&offset=${offset}`)

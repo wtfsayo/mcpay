@@ -12,7 +12,7 @@ import { VLayer, type ExecutionContext } from "@/lib/gateway/3rd-parties/vlayer"
 import { auth } from "@/lib/gateway/auth";
 import { generateApiKey } from "@/lib/gateway/auth-utils";
 import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
-import { getMcpTools } from "@/lib/gateway/inspect-mcp";
+import { getMcpServerInfo, getMcpTools } from "@/lib/gateway/inspect-mcp";
 import { AppContext, CDPNetwork, CDPWalletMetadata, ExecutionHeaders, McpServerWithActivity, McpServerWithRelations, type CreateCDPWalletOptions } from "@/types";
 import { type AuthType } from "@/types/auth";
 import { type BlockchainArchitecture } from "@/types/blockchain";
@@ -367,6 +367,16 @@ app.get('/inspect-mcp-tools', async (c) => {
     }
     const tools = await getMcpTools(url);
     return c.json(tools);
+});
+
+app.get('/inspect-mcp-server', async (c) => {
+    const { url } = c.req.query();
+    if (!url) {
+        return c.json({ error: 'mcpUrl is required' }, 400);
+    }
+    const decodedUrl = decodeURIComponent(url);
+    const serverInfo = await getMcpServerInfo(decodedUrl, "0x0000000000000000000000000000000000000000");
+    return c.json(serverInfo);
 });
 
 // Proofs endpoints
