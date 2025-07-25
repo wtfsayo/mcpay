@@ -3,16 +3,17 @@
 
 import { Greeting } from '@/components/custom-ui/greeting';
 import { memo } from 'react';
-import type { ChatMessage } from '@/types/chat';
 import { PreviewMessage, ThinkingMessage } from '@/components/custom-ui/message';
 import { motion } from 'motion/react';
+import { ChatStatus, UIMessage } from 'ai';
 
 interface MessagesProps {
-  status: 'idle' | 'streaming' | 'submitted' | 'ready';
-  messages: ChatMessage[];
+  status: ChatStatus;
+  messages: UIMessage[];
 }
 
 function PureMessages({ status, messages }: MessagesProps) {
+  console.log("status", status);
   return (
     <div className="flex flex-col min-w-0 gap-6 flex-1 overflow-y-scroll pt-4 relative">
       {messages.length === 0 && <Greeting />}

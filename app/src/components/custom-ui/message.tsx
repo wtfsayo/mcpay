@@ -1,12 +1,12 @@
 'use client';
 
+import { cn } from '@/lib/utils';
+import { UIMessage } from 'ai';
 import { AnimatePresence, motion } from 'motion/react';
 import { memo } from 'react';
-import type { ChatMessage } from '@/types/chat';
-import { cn, sanitizeText } from '@/lib/utils';
 
 interface PreviewMessageProps {
-  message: ChatMessage;
+  message: UIMessage;
   isLoading: boolean;
   requiresScrollPadding?: boolean;
 }
@@ -48,9 +48,17 @@ function PurePreviewMessage({
                   message.role === 'user',
               })}
             >
-              {sanitizeText(
-                message.parts.find((p) => p.type === 'text')?.text || ''
-              )}
+              {message.parts.map((part) => {
+                switch (part.type) {
+                  case 'text':
+                    return part.text;
+                  default:
+                    if (part.type.startsWith('tool-')) {
+                      return JSON.stringify(part, null, 2);
+                    }
+                    return '';
+                }
+              })}
             </div>
 
             {isLoading && message.role === 'assistant' && (

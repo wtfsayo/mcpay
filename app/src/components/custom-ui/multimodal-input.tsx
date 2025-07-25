@@ -9,11 +9,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { ArrowDown, ArrowUp, Ban } from 'lucide-react';
 import { toast } from 'sonner';
+import { ChatStatus } from 'ai';
 
 interface MultimodalInputProps {
   chatId: string;
   messagesCount: number;
-  status: 'idle' | 'streaming' | 'submitted' | 'ready';
+  status: ChatStatus;
   input: string;
   setInput: Dispatch<SetStateAction<string>>;
   isReadonly?: boolean;

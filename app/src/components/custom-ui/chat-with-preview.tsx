@@ -3,12 +3,12 @@
 import { useState } from 'react';
 import { ChatBody } from '@/components/custom-ui/chat-body';
 import { Button } from '@/components/ui/button';
-import type { ChatMessage } from '@/types/chat';
+import { ChatStatus, UIMessage } from 'ai';
 
 export interface ChatWithPreviewProps {
   id: string;
-  messages: ChatMessage[];
-  status: 'idle' | 'streaming' | 'submitted' | 'ready';
+  messages: UIMessage[];
+  status: ChatStatus
   isReadonly?: boolean;
   onSendMessage: (text: string) => void;
   onStop?: () => void;

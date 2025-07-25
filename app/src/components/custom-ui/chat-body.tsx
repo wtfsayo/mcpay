@@ -1,14 +1,14 @@
 'use client';
 
-import { useState } from 'react';
-import type { ChatMessage } from '@/types/chat';
 import { Messages } from '@/components/custom-ui/messages';
 import { MultimodalInput } from '@/components/custom-ui/multimodal-input';
+import { ChatStatus, UIMessage } from 'ai';
+import { useState } from 'react';
 
 export interface ChatBodyProps {
   chatId: string;
-  status: 'idle' | 'streaming' | 'submitted' | 'ready';
-  messages: ChatMessage[];
+  status: ChatStatus;
+  messages: UIMessage[];
   isReadonly?: boolean;
   onSendMessage: (text: string) => void;
   onStop?: () => void;
