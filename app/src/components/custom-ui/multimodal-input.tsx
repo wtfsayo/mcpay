@@ -103,10 +103,11 @@ export function MultimodalInput({
           </Button>
         ) : (
           <Button
-            variant="ghost"
+            variant="default"
             onClick={handleSubmit}
             disabled={!input.trim()}
             title="Send message"
+            className="rounded-md h-fit border dark:border-zinc-600"
           >
             <ArrowUp size={16} />
           </Button>
