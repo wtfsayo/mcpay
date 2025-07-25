@@ -41,7 +41,7 @@ export function MultimodalInput({
   const { isAtBottom, scrollToBottom } = useScrollToBottom();
 
   return (
-    <div className="relative w-full flex flex-col gap-2 bg-background">
+    <div className="relative w-full flex flex-col gap-4">
       <AnimatePresence>
         {!isAtBottom && (
           <motion.div
@@ -86,7 +86,7 @@ export function MultimodalInput({
               }
             }
           }}
-          className="flex-1 resize-none"
+          className="flex-1 resize-none rounded-xl !text-base bg-muted pb-10 dark:border-zinc-700 max-h-[25vh] overflow-y-auto"
           rows={2}
         />
 
