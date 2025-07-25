@@ -1,6 +1,6 @@
 {
   "name": "mcpay",
-  "version": "0.0.15",
+  "version": "0.0.17",
   "description": "SDK and CLI for MCPay functionality - MCP servers with payment capabilities",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -64,6 +64,7 @@
     "viem": "^2.30.5",
     "x402": "^0.3.7",
     "x402-fetch": "^0.3.3",
-    "zod": "^3.25.42"
+    "zod": "^3.25.42",
+    "mcp-handler": "1.0.1"
   }
 }

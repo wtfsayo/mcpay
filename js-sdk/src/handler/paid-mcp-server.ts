@@ -243,11 +243,11 @@ class PaymentProcessor {
 
     // Define default ping options
     const defaultPingOptions = {
-      enabled: false, // Disabled by default to prevent hanging when no server is available
+      enabled: true, // Disabled by default to prevent hanging when no server is available
+      pingOnCreate: true,
       timeout: 3000,  // Reduced timeout for faster failures
-      pingOnCreate: false,
       retryAttempts: 2,
-      retryDelay: 1000, // 1 second base delay
+      retryDelay: 1000, // 1 second base delay      
     };
 
     // Define default mcpay options
@@ -330,7 +330,9 @@ class PaymentProcessor {
             this.pingCircuitBreakerUntil = new Date(Date.now() + this.circuitBreakerDuration);
             this.log('Ping circuit breaker activated until', this.pingCircuitBreakerUntil.toISOString());
           }
-          throw error;
+          // Log the final failure but don't throw - let server continue running normally
+          this.log('All ping attempts failed, continuing server operation normally:', error instanceof Error ? error.message : String(error));
+          return;
         }
         
         // Exponential backoff with jitter
