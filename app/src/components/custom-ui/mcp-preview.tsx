@@ -4,6 +4,13 @@ import { api } from '@/lib/client/utils';
 import { type MCPServerInfo, type MCPToolWithPayments } from '@/lib/gateway/inspect-mcp';
 import type { PricingEntry } from '@/types/payments';
 import { useEffect, useState } from 'react';
+import {
+  Card,
+  CardContent,
+  CardFooter,
+} from '@/components/ui/card';
+import { CheckCircle2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 interface McpPreviewProps {
   url: string;
@@ -17,106 +24,155 @@ export function McpPreview({ url, userWalletAddress }: McpPreviewProps) {
 
   useEffect(() => {
     let isMounted = true;
-
     const fetchServerInfo = async () => {
       try {
         setLoading(true);
         setError(null);
-        
-        console.log('Fetching MCP server info');
-        const data = await api.getMcpServerInfo(url);   
-        
+        const data = await api.getMcpServerInfo(url);
         if (isMounted) {
           setServerInfo(data as MCPServerInfo);
           setLoading(false);
         }
       } catch (err) {
-        console.error('Error fetching MCP server info:', err);
         if (isMounted) {
           setError(err instanceof Error ? err.message : 'Failed to fetch server info');
           setLoading(false);
         }
       }
     };
-
     fetchServerInfo();
-
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [url, userWalletAddress]);
 
   if (loading) {
     return <div className="p-4 text-center">Loading server information...</div>;
   }
-
   if (error) {
     return <div className="p-4 text-center text-red-500">Error: {error}</div>;
   }
-
   if (!serverInfo) {
     return <div className="p-4 text-center">No server information available</div>;
   }
 
   return (
     <div className="space-y-6">
-      {/* Server Metadata */}
-      <div className="space-y-2">
-        <h2 className="text-lg font-semibold">Server Information</h2>
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          <div>Name:</div>
-          <div>{serverInfo.metadata.name}</div>
-          <div>Version:</div>
-          <div>{serverInfo.metadata.version}</div>
-          {serverInfo.metadata.description && (
-            <>
-              <div>Description:</div>
-              <div>{serverInfo.metadata.description}</div>
-            </>
-          )}
-          <div>Protocol Version:</div>
-          <div>{serverInfo.metadata.protocolVersion}</div>
-        </div>
+      {/* Title & Description */}
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold">{serverInfo.metadata.name}</h1>
+        {serverInfo.metadata.description && (
+          <p className="text-sm text-muted-foreground">
+            {serverInfo.metadata.description}
+          </p>
+        )}
       </div>
 
-      {/* Tools */}
-      <div className="space-y-4">
-        <h2 className="text-lg font-semibold">Available Tools ({serverInfo.toolCount})</h2>
-        <div className="space-y-4">
-          {serverInfo.tools.map((tool: MCPToolWithPayments) => (
-            <div key={tool.name} className="border rounded-lg p-4 space-y-2">
-              <h3 className="font-medium">{tool.name}</h3>
-              {tool.description && (
-                <p className="text-sm text-muted-foreground">{tool.description}</p>
-              )}
-              
-              {/* Pricing Information */}
-              {tool.pricing && tool.pricing.length > 0 && (
-                <div className="mt-2">
-                  <h4 className="text-sm font-medium">Pricing</h4>
-                  {tool.pricing.map((price: PricingEntry) => (
-                    <div key={price.id} className="text-sm text-muted-foreground">
-                      {price.maxAmountRequiredRaw} (decimals: {price.tokenDecimals}) on {price.network}
-                    </div>
-                  ))}
-                </div>
-              )}
+      {/* Server Info + Capabilities */}
+      <div className="grid grid-cols-2 gap-4">
+        {/* Server Information Card */}
+        <Card className="p-0 rounded-md border-0">
+          <CardContent className="p-4">
+            <h2 className="text-md font-semibold mb-3">Server Information</h2>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <span className="text-muted-foreground">Version:</span>
+              <span className="text-right font-medium">{serverInfo.metadata.version}</span>
+
+              <span className="text-muted-foreground">URL:</span>
+              <span className="text-right font-medium break-all">
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-cyan-500 hover:text-cyan-500/80"
+                >
+                  {url}
+                </a>
+              </span>
             </div>
-          ))}
-        </div>
+          </CardContent>
+        </Card>
+
+        {/* Capabilities Card */}
+        {serverInfo.metadata.capabilities && (
+          <Card className="p-0 rounded-md border-0">
+            <CardContent className="p-4">
+              <h2 className="text-md font-semibold mb-3">Capabilities</h2>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <span className="text-muted-foreground">Prompts List Changed:</span>
+                <span className="text-right font-medium">
+                  {serverInfo.metadata.capabilities.prompts?.listChanged ? 'Yes' : 'No'}
+                </span>
+
+                <span className="text-muted-foreground">Resources Subscribe:</span>
+                <span className="text-right font-medium">
+                  {serverInfo.metadata.capabilities.resources?.subscribe ? 'Yes' : 'No'}
+                </span>
+
+                <span className="text-muted-foreground">Tools List Changed:</span>
+                <span className="text-right font-medium">
+                  {serverInfo.metadata.capabilities.tools?.listChanged ? 'Yes' : 'No'}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
-      {/* Capabilities */}
-      {serverInfo.metadata.capabilities && (
-        <div className="space-y-2">
-          <h2 className="text-lg font-semibold">Capabilities</h2>
-          <div className="text-sm space-y-1">
-            <div>Prompts List Changed: {serverInfo.metadata.capabilities.prompts?.listChanged ? 'Yes' : 'No'}</div>
-            <div>Resources Subscribe: {serverInfo.metadata.capabilities.resources?.subscribe ? 'Yes' : 'No'}</div>
-            <div>Tools List Changed: {serverInfo.metadata.capabilities.tools?.listChanged ? 'Yes' : 'No'}</div>
-          </div>
+      {/* Available Tools */}
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold flex items-center">
+          Available Tools
+          <span className="ml-2 bg-green-500/20 text-green-500 text-xs font-semibold px-2 py-0.5 rounded">
+            {serverInfo.toolCount}
+          </span>
+        </h2>
+
+        <div className="grid grid-cols-2 gap-4">
+          {serverInfo.tools.map((tool: MCPToolWithPayments) => {
+            const hasPricing = Array.isArray(tool.pricing) && tool.pricing.length > 0;
+
+            return (
+              <Card key={tool.name} className="p-0 rounded-md border-0">
+                <CardContent className="p-4 space-y-2">
+                  <h3 className="font-medium">{tool.name}</h3>
+                  {tool.description && (
+                    <p className="text-sm text-muted-foreground">
+                      {tool.description}
+                    </p>
+                  )}
+                </CardContent>
+
+                <CardFooter className="p-4 pt-0 flex flex-col items-start space-y-2">
+                  <h4
+                    className={`text-sm font-semibold uppercase flex items-center ${!hasPricing ? 'text-muted-foreground/70' : ''
+                      }`}
+                  >
+                    PRICING
+                    {hasPricing && (
+                      <Badge variant="outline" className="ml-2 flex items-center space-x-1 normal-case">
+                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        <span className="text-muted-foreground normal-case font-medium">Active</span>
+                      </Badge>
+                    )}
+                  </h4>
+
+                  <div className="space-y-1">
+                    {hasPricing ? (
+                      tool.pricing!.map((price: PricingEntry) => (
+                        <p key={price.id} className="text-sm">
+                          {price.maxAmountRequiredRaw} (decimals: {price.tokenDecimals}) on{' '}
+                          {price.network}
+                        </p>
+                      ))
+                    ) : (
+                      <p className="text-sm text-muted-foreground/70">Null</p>
+                    )}
+                  </div>
+                </CardFooter>
+              </Card>
+            );
+          })}
         </div>
-      )}
+      </div>
     </div>
   );
 }
