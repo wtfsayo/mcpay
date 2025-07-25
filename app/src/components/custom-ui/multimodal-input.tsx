@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useScrollToBottom } from '@/hooks/use-scroll-to-bottom';
@@ -39,6 +39,13 @@ export function MultimodalInput({
   }, [input, onSendMessage, setInput]);
 
   const { isAtBottom, scrollToBottom } = useScrollToBottom();
+
+  // Scroll to bottom when a message is submitted
+  useEffect(() => {
+    if (status === 'submitted') {
+      scrollToBottom();
+    }
+  }, [status, scrollToBottom]);
 
   return (
     <div className="relative w-full flex flex-col gap-4">
@@ -90,7 +97,7 @@ export function MultimodalInput({
           rows={2}
         />
 
-        {status === 'streaming' ? (
+        {status === 'streaming' || status === 'submitted' ? (
           <Button variant="ghost" onClick={onStop} title="Stop generation">
             <Ban size={16} />
           </Button>
