@@ -48,7 +48,8 @@ export interface MCPServerInfo {
   metadata: MCPServerMetadata
   tools: MCPToolWithPayments[]
   toolCount: number
-  hasPayments: boolean
+  hasPayments: boolean,
+  prompts?: Record<string, unknown>
 }
 
 // Payment annotation type definitions
@@ -142,6 +143,8 @@ export async function getMcpServerInfo(url: string, userWalletAddress: string): 
     const serverInfo = client.getServerVersion()
     const serverCapabilities = client.getServerCapabilities()
 
+    const prompts = await client.listPrompts()
+
     // Helper function to safely extract string values
     const getString = (value: unknown): string | undefined => {
       return typeof value === 'string' ? value : undefined
@@ -165,7 +168,7 @@ export async function getMcpServerInfo(url: string, userWalletAddress: string): 
         description: tool.description,
         inputSchema: tool.inputSchema,
         annotations: tool.annotations,
-        pricing: pricingInfo
+        pricing: pricingInfo,
       }
     })
 
@@ -173,11 +176,48 @@ export async function getMcpServerInfo(url: string, userWalletAddress: string): 
       metadata,
       tools,
       toolCount: tools.length,
-      hasPayments: tools.some(tool => tool.pricing && tool.pricing.length > 0)
+      hasPayments: tools.some(tool => tool.pricing && tool.pricing.length > 0),
+      prompts
     }
   } catch (error) {
     console.error("Error fetching comprehensive MCP server info:", error)
     throw new Error("Failed to fetch server information")
+  }
+}
+
+export async function getMcpPrompts(url: string) {
+  const transport = new StreamableHTTPClientTransport(new URL(url))
+  const client = new Client({ name: "mcpay-inspect", version: "1.0.0" })
+  await client.connect(transport)
+  const prompts = await client.listPrompts()
+  
+  const enrichedPrompts = []
+  for (const prompt of prompts.prompts) {
+    const promptDetail = await client.getPrompt({ name: prompt.name })
+    
+    // Extract text content from messages
+    const textContent = promptDetail.messages
+      ?.map(message => {
+        if (typeof message.content === 'string') {
+          return message.content
+        } else if (message.content?.type === 'text') {
+          return message.content.text
+        }
+        return ''
+      })
+      .filter(text => text.length > 0)
+      .join('\n\n') || ''
+    
+    enrichedPrompts.push({
+      name: prompt.name,
+      description: prompt.description || promptDetail.description,
+      content: textContent,
+      messages: promptDetail.messages || []
+    })
+  }
+  
+  return {
+    prompts: enrichedPrompts
   }
 }
 
