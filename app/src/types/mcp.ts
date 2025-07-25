@@ -84,7 +84,8 @@ export interface ToolExecutionModalProps {
   isOpen: boolean
   onClose: () => void
   tool: ToolFromMcpServerWithStats | null
-  serverId: string
+  serverId?: string,
+  url?: string,
 }
 export interface MCPToolInputSchema {
   jsonSchema?: {
