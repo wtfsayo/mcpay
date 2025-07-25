@@ -26,13 +26,14 @@ export async function POST(req: Request) {
 
     const modelMessages = convertToModelMessages(messages);
 
-    console.log('modelMessages', modelMessages);
-
     const result = streamText({
       system: systemPrompt?.content || "You are a helpful assistant.",
-      model: "gpt-4o",
+      model: "openai/gpt-4o",
       messages: modelMessages,
-      tools
+      tools,
+      stopWhen: ({ steps }) => {
+        return steps.length === 10;
+      }
     });
 
     return result.toUIMessageStreamResponse()

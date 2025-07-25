@@ -3,7 +3,7 @@
 
 import ChatWithPreview from '@/components/custom-ui/chat-with-preview';
 import { useChat } from '@ai-sdk/react';
-import { Suspense, useState } from 'react';
+import { Suspense } from 'react';
 
 export default function BuildPage() {
   const { sendMessage, messages, stop, status} = useChat();
