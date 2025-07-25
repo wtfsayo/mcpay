@@ -3,10 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { useTheme } from "@/components/providers/theme-context"
 import { useSession } from "@/lib/client/auth"
-import {
-  LogIn,
-  User
-} from "lucide-react"
+import { User, LogIn } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -26,21 +23,26 @@ export default function Navbar() {
 
   return (
     <nav
-      className={`sticky top-0 z-40 w-full border-b transition-colors duration-200 ${isDark ? "bg-black/95 backdrop-blur border-gray-800" : "bg-white/95 backdrop-blur border-gray-200"
-        }`}
+      className={`sticky top-0 z-40 w-full border-b transition-colors duration-200 ${
+        isDark
+          ? "bg-black/95 backdrop-blur border-gray-800"
+          : "bg-white/95 backdrop-blur border-gray-200"
+      }`}
     >
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="flex items-center justify-between h-16">
+      <div className="max-w-7xl mx-auto px-4">
+        <div className="flex items-center justify-between py-2">
           {/* Logo/Brand */}
           <div className="flex items-center">
-            <Link href="/" className="flex-shrink-0 flex items-center gap-3">
+            <Link href="/" className="flex-shrink-0 flex items-center gap-3 p-2 hover:bg-muted rounded-md">
               <Image src={logoSrc} alt="MCPay Logo" width={112} height={72} />
-              <Badge variant="outline" className="text-xs">Alpha</Badge>
+              <Badge variant="outline" className="text-xs">
+                Alpha
+              </Badge>
             </Link>
           </div>
 
           {/* Navigation Items - Always Visible */}
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2">
             <Button
               variant="ghost"
               asChild
@@ -50,8 +52,8 @@ export default function Navbar() {
                     ? "bg-gray-800 text-white"
                     : "bg-gray-100 text-gray-900"
                   : isDark
-                    ? "text-gray-300 hover:bg-gray-800 hover:text-white"
-                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  ? "text-gray-200 hover:bg-gray-800 hover:text-white"
+                  : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
               }`}
             >
               <Link href="/build">Build Server</Link>
@@ -66,13 +68,13 @@ export default function Navbar() {
                     ? "bg-gray-800 text-white"
                     : "bg-gray-100 text-gray-900"
                   : isDark
-                    ? "text-gray-300 hover:bg-gray-800 hover:text-white"
-                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  ? "text-gray-200 hover:bg-gray-800 hover:text-white"
+                  : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
               }`}
             >
               <Link href="/register">Register Server</Link>
             </Button>
-            
+
             {/* Account Button */}
             <Button
               variant="ghost"
@@ -115,10 +117,10 @@ export default function Navbar() {
           </div>
         </div>
       </div>
-      
+
       {/* Account Modal */}
-      <AccountModal 
-        isOpen={isOpen} 
+      <AccountModal
+        isOpen={isOpen}
         onClose={closeModal}
         defaultTab={defaultTab}
       />
