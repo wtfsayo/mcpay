@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { memo } from 'react';
 import Image from 'next/image';
 import { Markdown } from './markdown';
+import { ToolCall, ToolCallPart } from './tool-call-streaming';
 
 interface PreviewMessageProps {
   message: UIMessage;
@@ -64,8 +65,11 @@ function PurePreviewMessage({
                 if (part.type === 'text') {
                   return <Markdown key={i}>{part.text}</Markdown>;
                 }
-                if (part.type.startsWith('tool-')) return JSON.stringify(part, null, 2);
-                return '';
+                if (part.type.startsWith('tool-')) {
+                  // render our streaming step component
+                  return <ToolCall key={i} step={part as ToolCallPart} />;
+                }
+                return null;
               })}
             </div>
 
