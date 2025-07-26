@@ -30,7 +30,7 @@ export function McpPreview({ url, userWalletAddress }: McpPreviewProps) {
 
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
-    navigator.clipboard.writeText(url);
+    navigator.clipboard.writeText(url || '');
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
@@ -225,15 +225,15 @@ export function McpPreview({ url, userWalletAddress }: McpPreviewProps) {
       </div>
 
       {/* Execution Modal */}
-      {selectedTool && (
+      {selectedTool && url && (
         <ToolExecutionModal
           isOpen={isModalOpen}
           onClose={() => {
             setIsModalOpen(false);
             setSelectedTool(null);
           }}
-          tool={selectedTool as any}
-          url={url}
+          tool={selectedTool}
+          url={url as string}
         />
       )}
     </>

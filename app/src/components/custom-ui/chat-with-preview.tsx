@@ -5,6 +5,7 @@ import { ChatBody } from '@/components/custom-ui/chat-body';
 import { Button } from '@/components/ui/button';
 import { ChatStatus, UIMessage } from 'ai';
 import { McpPreview } from './mcp-preview';
+import { CodebasePreview } from './code-preview';
 
 export interface ChatWithPreviewProps {
   id: string;
@@ -15,6 +16,7 @@ export interface ChatWithPreviewProps {
   onStop?: () => void;
   previewUrl?: string | null;
   userWalletAddress?: string;
+  codebase?: string;
 }
 
 export default function ChatWithPreview({
@@ -26,6 +28,7 @@ export default function ChatWithPreview({
   onStop,
   previewUrl = 'https://vercel-mcp-handler-mcpay.vercel.app/mcp',
   userWalletAddress = '0x0000000000000000000000000000000000000000',
+  codebase = '',
 }: ChatWithPreviewProps) {
   const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview');
 
@@ -74,7 +77,7 @@ export default function ChatWithPreview({
                   No preview available.
                 </div>
             ) : (
-              <div>{/* code viewer here */}</div>
+              <CodebasePreview sessionData={codebase} />
             )}
           </div>
         </div>

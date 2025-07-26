@@ -8,7 +8,7 @@ import { Suspense, useState, useCallback } from 'react';
 export default function BuildPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [mcpUrl, setMcpUrl] = useState<string | null>(null);
-
+  const [codebase, setCodebase] = useState<string | null>(null);
   const getSessionData = useCallback(() => ({
     sessionId,
     mcpUrl,
@@ -20,7 +20,7 @@ export default function BuildPage() {
     },
     onData: (data) => {
       console.log('Data:', data);
-      
+
       // Handle session data if it comes directly in the data stream
       if (data.type === 'data-session' && data.data) {
         const sessionData = data.data as { sessionId?: string };
@@ -36,26 +36,42 @@ export default function BuildPage() {
           setMcpUrl(`${previewData.url}/mcp`);
         }
       }
+      if (data.type === 'data-codebase' && data.data) {
+        const codebaseData = data.data as { codebase?: string };
+        if (codebaseData.codebase) {
+          console.log('Received codebase from stream:', codebaseData.codebase);
+          setCodebase(codebaseData.codebase);
+        }
+      }
     },
     onFinish: (message) => {
       console.log('Chat finished:', { message });
     },
   });
 
+  const _sendMessage = (text: string) => {
+    sendMessage({
+      role: 'user',
+      parts: [{ type: 'text', text: text }]
+    }, {
+      body: {
+        sessionId: sessionId,
+      }
+    });
+  }
+
   return (
     <Suspense fallback={null}>
       <ChatWithPreview
         id="main-chat"
+        codebase={codebase || ''}
         messages={messages}
         previewUrl={mcpUrl}
         status={status}
         isReadonly={false}
         onSendMessage={(text) => {
           console.log('sendMessage with session:', getSessionData());
-          sendMessage({
-            role: 'user', 
-            parts: [{ type: 'text', text: text }]
-          });
+          _sendMessage(text);
         }}
         onStop={stop}
       />

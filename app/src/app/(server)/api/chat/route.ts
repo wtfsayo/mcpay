@@ -1,11 +1,11 @@
 import { getMcpPrompts } from '@/lib/gateway/inspect-mcp';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { 
-  convertToModelMessages, 
-  experimental_createMCPClient as createMCPClient, 
-  streamText, 
-  UIMessage, 
-  ToolSet, 
+import {
+  convertToModelMessages,
+  experimental_createMCPClient as createMCPClient,
+  streamText,
+  UIMessage,
+  ToolSet,
   generateObject,
   createUIMessageStream,
   createUIMessageStreamResponse
@@ -15,6 +15,7 @@ import { createClient } from '@vercel/kv';
 import { createHash } from 'crypto';
 import { getKVConfig } from '@/lib/gateway/env';
 import { z } from 'zod';
+import type { MCPClient } from '@/types/mcp';
 
 // Type definitions for MCP data
 interface McpPrompt {
@@ -52,7 +53,7 @@ function getCacheKey(mcpUrl: string): string {
 }
 
 // Create MCP client efficiently for serverless environment
-async function createOptimizedMcpClient(mcpUrl: string): Promise<{ client: any; tools: ToolSet }> {
+async function createOptimizedMcpClient(mcpUrl: string): Promise<{ client: MCPClient; tools: ToolSet }> {
   console.log('Chat API: Creating optimized MCP client for serverless');
 
   try {
@@ -121,8 +122,10 @@ async function getCachedMcpData(mcpUrl: string): Promise<CachedMcpData> {
 export async function POST(req: Request) {
   console.log('Chat API: POST request received');
   try {
-    const { messages }: { messages: UIMessage[] } = await req.json();
+    const { messages, sessionId }: { messages: UIMessage[], sessionId?: string } = await req.json();
     console.log('Chat API: Messages received:', messages);
+
+    console.log('Chat API: Session ID:', sessionId);
 
     const mcpUrl = "https://mcpay-tech-dev.vercel.app/mcp/73b54493-048d-4433-8687-fdf2dc1ebf4d?apiKey=mcpay_btBwYdWL7KPOoQ6AKNnjNQjMSSvU8jYInOeEXgxWwj0";
 
@@ -135,7 +138,8 @@ export async function POST(req: Request) {
 
     const stream = createUIMessageStream({
       execute: ({ writer }) => {
-    
+
+        let _sessionId = "";
         const result = streamText({
           system: systemPrompt?.content || "You are a helpful assistant.",
           model: "openai/gpt-4o",
@@ -145,25 +149,27 @@ export async function POST(req: Request) {
             toolResults.forEach(async (toolResult) => {
               if (toolResult.toolName === 'create_session') {
                 const result = await generateObject({
-                  model: "openai/gpt-4o-mini",
+                  model: "openai/gpt-4o",
                   schema: z.object({
-                    sessionId: z.string(),
+                    sessionId: z.string().min(1).describe("The session ID of the chat"),
                   }),
-                  prompt: `Generate a session ID based on the tool result: ${toolResult.output}`,
+                  prompt: `Extract the session ID from this tool result. Return only the session ID value as a string: ${JSON.stringify(toolResult.output)}`,
                 });
-                
+
                 // Stream the session ID back to the client
                 writer.write({
                   type: 'data-session',
                   data: { sessionId: result.object.sessionId },
                 });
+                console.log('Session ID:', result.object.sessionId);
+                _sessionId = result.object.sessionId;
+                console.log('Session ID:', _sessionId);
               }
               if (toolResult.toolName === 'preview') {
-
                 const result = await generateObject({
-                  model: "openai/gpt-4o-mini",
+                  model: "openai/gpt-4o",
                   schema: z.object({
-                    url: z.string(),
+                    url: z.string().min(1).describe("The URL of the preview")
                   }),
                   prompt: `Extract the preview URL from the tool result: ${JSON.stringify(toolResult.output, null, 2)}`,
                 });
@@ -181,12 +187,34 @@ export async function POST(req: Request) {
           stopWhen: ({ steps }) => {
             return steps.length === 10;
           },
+          onFinish: async ({ toolResults, toolCalls, usage, finishReason }) => {
+            console.log('Chat API: Finish reason:', finishReason);
+            console.log('Chat API: Session ID:', _sessionId, sessionId);
+            if (tools && tools["get_all_codebase"] && tools["get_all_codebase"].execute && (_sessionId || sessionId)) {
+              const codebaseResult = await tools["get_all_codebase"].execute({
+                sessionId: _sessionId || sessionId,
+              }, { toolCallId: "", messages: [] });
+
+              // Parse the codebase data from the content text
+              if (codebaseResult.content && codebaseResult.content[0] && codebaseResult.content[0].text) {
+                try {
+                  const codebase = codebaseResult.content[0].text;
+                  writer.write({
+                    type: 'data-codebase',
+                    data: { codebase },
+                  });
+                } catch (error) {
+                  console.error('Error parsing codebase result:', error);
+                }
+              }
+            }
+          },
         });
-        
+
         writer.merge(result.toUIMessageStream());
       },
     });
-    
+
     return createUIMessageStreamResponse({ stream });
   } catch (error) {
     console.error('Chat API error:', error);

@@ -1,6 +1,7 @@
 import { txOperations } from "@/lib/gateway/db/actions";
 import { mcpTools } from "@/lib/gateway/db/schema";
 import { experimental_createMCPClient } from "ai";
+import type { MCPToolWithPayments } from '@/lib/gateway/inspect-mcp';
 
 export type McpServerList = Awaited<ReturnType<ReturnType<typeof txOperations.listMcpServers>>>;
 export type McpServerWithRelations = McpServerList[number];
@@ -83,7 +84,7 @@ export interface ToolInputSchema {
 export interface ToolExecutionModalProps {
   isOpen: boolean
   onClose: () => void
-  tool: ToolFromMcpServerWithStats | null
+  tool: ToolFromMcpServerWithStats | MCPToolWithPayments | null
   serverId?: string,
   url?: string,
 }
