@@ -4,11 +4,13 @@
 import ChatWithPreview from '@/components/custom-ui/chat-with-preview';
 import { useChat } from '@ai-sdk/react';
 import { Suspense, useState, useCallback } from 'react';
+import { toast } from 'sonner';
 
 export default function BuildPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [mcpUrl, setMcpUrl] = useState<string | null>(null);
   const [codebase, setCodebase] = useState<string | null>(null);
+
   const getSessionData = useCallback(() => ({
     sessionId,
     mcpUrl,
@@ -19,7 +21,13 @@ export default function BuildPage() {
       console.log('Tool call:', toolCall);
     },
     onData: (data) => {
-      console.log('Data:', data);
+      if (data.type === 'data-payment' && data.data) {
+        const paymentData = data.data as { paid?: boolean };
+        if (paymentData.paid) {
+          console.log('Received payment from stream:', paymentData.paid);
+          toast.success('Payment successful'); 
+        }
+      }
 
       // Handle session data if it comes directly in the data stream
       if (data.type === 'data-session' && data.data) {

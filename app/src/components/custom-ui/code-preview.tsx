@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { File, Copy, Download, FileText, Code } from 'lucide-react';
+import { File, Copy, Download, FileText, Code, Folder, FolderOpen, ChevronRight, ChevronDown } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 
 interface FileInfo {
@@ -18,6 +18,14 @@ interface SessionData {
   files: Record<string, FileInfo>;
 }
 
+interface TreeNode {
+  name: string;
+  path: string;
+  type: 'file' | 'folder';
+  children?: TreeNode[];
+  fileInfo?: FileInfo;
+}
+
 interface CodebasePreviewProps {
   sessionData: string;
 }
@@ -26,6 +34,7 @@ export function CodebasePreview({ sessionData }: CodebasePreviewProps) {
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [parsedData, setParsedData] = useState<SessionData | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
   // theme & mount for Monaco
   const { resolvedTheme } = useTheme();
@@ -37,6 +46,51 @@ export function CodebasePreview({ sessionData }: CodebasePreviewProps) {
       : 'vs'
     : 'vs';
 
+  // Build file tree from flat file structure
+  const buildFileTree = (files: Record<string, FileInfo>): TreeNode[] => {
+    const tree: TreeNode[] = [];
+    const folders: Record<string, TreeNode> = {};
+
+    // Sort files to ensure consistent ordering
+    const sortedFilePaths = Object.keys(files).sort();
+
+    for (const filePath of sortedFilePaths) {
+      const parts = filePath.split('/');
+      let currentLevel = tree;
+      let currentPath = '';
+
+      // Create folders for all path segments except the last one (which is the file)
+      for (let i = 0; i < parts.length - 1; i++) {
+        const folderName = parts[i];
+        currentPath = currentPath ? `${currentPath}/${folderName}` : folderName;
+
+        let folder = currentLevel.find(node => node.name === folderName && node.type === 'folder');
+        if (!folder) {
+          folder = {
+            name: folderName,
+            path: currentPath,
+            type: 'folder',
+            children: []
+          };
+          currentLevel.push(folder);
+          folders[currentPath] = folder;
+        }
+        currentLevel = folder.children!;
+      }
+
+      // Add the file
+      const fileName = parts[parts.length - 1];
+      currentLevel.push({
+        name: fileName,
+        path: filePath,
+        type: 'file',
+        fileInfo: files[filePath]
+      });
+    }
+
+    return tree;
+  };
+
   // parse JSON
   useEffect(() => {
     try {
@@ -45,11 +99,27 @@ export function CodebasePreview({ sessionData }: CodebasePreviewProps) {
       setParseError(null);
       const first = Object.keys(data.files)[0];
       if (first) setSelectedFile(first);
+      // Auto-expand root level folders
+      const tree = buildFileTree(data.files);
+      const rootFolders = new Set(tree.filter(node => node.type === 'folder').map(folder => folder.path));
+      setExpandedFolders(rootFolders);
     } catch (err) {
       setParsedData(null);
       setParseError(err instanceof Error ? err.message : 'Invalid session data');
     }
   }, [sessionData]);
+
+  const toggleFolder = (folderPath: string) => {
+    setExpandedFolders(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(folderPath)) {
+        newSet.delete(folderPath);
+      } else {
+        newSet.add(folderPath);
+      }
+      return newSet;
+    });
+  };
 
   const handleCopy = (text: string) => navigator.clipboard.writeText(text);
   const handleDownload = (name: string, content: string) => {
@@ -72,7 +142,7 @@ export function CodebasePreview({ sessionData }: CodebasePreviewProps) {
       : `${(b / 1024 ** 2).toFixed(1)} MB`;
 
   const iconClass = 'h-4 w-4 text-muted-foreground';
-  const getIcon = (fn: string) => {
+  const getFileIcon = (fn: string) => {
     const ext = fn.split('.').pop()?.toLowerCase();
     if (['ts', 'tsx', 'js', 'jsx'].includes(ext!)) return <Code className={iconClass} />;
     if (['json', 'md'].includes(ext!)) return <FileText className={iconClass} />;
@@ -87,6 +157,59 @@ export function CodebasePreview({ sessionData }: CodebasePreviewProps) {
     if (ext === 'md') return 'markdown';
     if (ext === 'env') return 'bash';
     return 'text';
+  };
+
+  // Recursive component to render tree nodes
+  const TreeNode: React.FC<{ node: TreeNode; depth: number }> = ({ node, depth }) => {
+    const isExpanded = expandedFolders.has(node.path);
+    const paddingLeft = `${depth * 12 + 8}px`;
+
+    if (node.type === 'folder') {
+      return (
+        <div key={node.path}>
+          <Button
+            variant="ghost"
+            className="w-full justify-start px-2 py-1 text-xs font-medium h-auto"
+            onClick={() => toggleFolder(node.path)}
+            style={{ paddingLeft }}
+          >
+            <div className="flex items-center gap-2">
+              {isExpanded ? 
+                <ChevronDown className="h-3 w-3 text-muted-foreground" /> : 
+                <ChevronRight className="h-3 w-3 text-muted-foreground" />
+              }
+              {isExpanded ? 
+                <FolderOpen className={iconClass} /> : 
+                <Folder className={iconClass} />
+              }
+              <span className="truncate">{node.name}</span>
+            </div>
+          </Button>
+          {isExpanded && node.children && (
+            <div>
+              {node.children.map((child) => (
+                <TreeNode key={child.path} node={child} depth={depth + 1} />
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    } else {
+      return (
+        <Button
+          key={node.path}
+          variant={selectedFile === node.path ? 'secondary' : 'ghost'}
+          className="w-full justify-start px-2 py-1 text-xs font-medium h-auto"
+          onClick={() => setSelectedFile(node.path)}
+          style={{ paddingLeft }}
+        >
+          <div className="flex items-center gap-2">
+            {getFileIcon(node.name)}
+            <span className="truncate">{node.name}</span>
+          </div>
+        </Button>
+      );
+    }
   };
 
   // Error / Loading states
@@ -110,22 +233,14 @@ export function CodebasePreview({ sessionData }: CodebasePreviewProps) {
     );
   }
 
+  const fileTree = buildFileTree(parsedData.files);
+
   return (
     <div className="flex flex-1 overflow-hidden">
       {/* File list panel */}
       <div className="w-1/3 flex-shrink-0 bg-gray-50 dark:bg-gray-800 overflow-auto p-2 space-y-1">
-        {Object.keys(parsedData.files).map((fn) => (
-          <Button
-            key={fn}
-            variant={selectedFile === fn ? 'secondary' : 'ghost'}
-            className="w-full justify-start px-2 py-1 text-xs font-medium"
-            onClick={() => setSelectedFile(fn)}
-          >
-            <div className="flex items-center gap-2">
-              {getIcon(fn)}
-              <span className="truncate">{fn}</span>
-            </div>
-          </Button>
+        {fileTree.map((node) => (
+          <TreeNode key={node.path} node={node} depth={0} />
         ))}
       </div>
 
@@ -139,7 +254,7 @@ export function CodebasePreview({ sessionData }: CodebasePreviewProps) {
               style={{ lineHeight: '2rem' }}
             >
               <div className="flex items-center gap-2 text-xs font-medium">
-                {getIcon(selectedFile)}
+                {getFileIcon(selectedFile)}
                 <span className="truncate text-foreground">{selectedFile}</span>
                 <span className="ml-2 text-xs text-muted-foreground">
                   {fmtSize(parsedData.files[selectedFile].size)}

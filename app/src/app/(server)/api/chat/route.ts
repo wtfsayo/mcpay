@@ -53,6 +53,8 @@ function getCacheKey(mcpUrl: string): string {
 }
 
 // Create MCP client efficiently for serverless environment
+// TODO: use the clients auth session to connect to the MCP server
+// This will charge the user directly for the MCP server calls
 async function createOptimizedMcpClient(mcpUrl: string): Promise<{ client: MCPClient; tools: ToolSet }> {
   console.log('Chat API: Creating optimized MCP client for serverless');
 
@@ -127,6 +129,7 @@ export async function POST(req: Request) {
 
     console.log('Chat API: Session ID:', sessionId);
 
+    // TODO: remove the hardcoded API key
     const mcpUrl = "https://mcpay-tech-dev.vercel.app/mcp/73b54493-048d-4433-8687-fdf2dc1ebf4d?apiKey=mcpay_btBwYdWL7KPOoQ6AKNnjNQjMSSvU8jYInOeEXgxWwj0";
 
     const { prompts, tools } = await getCachedMcpData(mcpUrl);
@@ -142,7 +145,7 @@ export async function POST(req: Request) {
         let _sessionId = "";
         const result = streamText({
           system: systemPrompt?.content || "You are a helpful assistant.",
-          model: "anthropic/claude-4-sonnet",
+          model: "openai/gpt-4o",
           messages: modelMessages,
           tools,
           onStepFinish: async ({ toolResults, toolCalls, usage, finishReason }) => {
@@ -161,9 +164,13 @@ export async function POST(req: Request) {
                   type: 'data-session',
                   data: { sessionId: result.object.sessionId },
                 });
-                console.log('Session ID:', result.object.sessionId);
+
+                writer.write({
+                  type: 'data-payment',
+                  data: { paid: true },
+                });
+
                 _sessionId = result.object.sessionId;
-                console.log('Session ID:', _sessionId);
               }
               if (toolResult.toolName === 'preview') {
                 const result = await generateObject({
@@ -174,12 +181,14 @@ export async function POST(req: Request) {
                   prompt: `Extract the preview URL from the tool result: ${JSON.stringify(toolResult.output, null, 2)}`,
                 });
 
-                console.log('Tool result:', JSON.stringify(toolResult, null, 2));
-                console.log('Preview URL:', JSON.stringify(result.object.url, null, 2));
-
                 writer.write({
                   type: 'data-preview',
                   data: { url: result.object.url },
+                });
+
+                writer.write({
+                  type: 'data-payment',
+                  data: { paid: true },
                 });
               }
             });
