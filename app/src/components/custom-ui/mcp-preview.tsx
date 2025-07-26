@@ -73,7 +73,7 @@ export function McpPreview({ url, userWalletAddress }: McpPreviewProps) {
 
   return (
     <>
-      <div className="space-y-6">
+      <div className="space-y-6 p-6">
         {/* Title & Description */}
         <div className="space-y-1">
           <h1 className="text-2xl font-bold">{serverInfo.metadata.name}</h1>

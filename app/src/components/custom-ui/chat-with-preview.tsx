@@ -69,7 +69,7 @@ export default function ChatWithPreview({
               Code
             </Button>
           </div>
-          <div className="flex-1 p-6 overflow-auto">
+          <div className="flex-1 flex overflow-hidden">
             {activeTab === 'preview' ? (
               previewUrl
                 ? <McpPreview url={previewUrl} userWalletAddress={userWalletAddress} />
