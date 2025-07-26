@@ -21,6 +21,7 @@ export default function BuildPage() {
       console.log('Tool call:', toolCall);
     },
     onData: (data) => {
+      console.log('📦 onData received:', data.type, data);
       if (data.type === 'data-payment' && data.data) {
         const paymentData = data.data as { paid?: boolean };
         if (paymentData.paid) {
@@ -56,6 +57,10 @@ export default function BuildPage() {
       console.log('Chat finished:', { message });
     },
   });
+
+  // Add logging to track messages changes
+  console.log('🔄 BuildPage render - messages count:', messages.length, 'status:', status);
+  console.log('🔄 Last message parts:', messages[messages.length - 1]?.parts?.length || 0);
 
   const _sendMessage = (text: string) => {
     sendMessage({

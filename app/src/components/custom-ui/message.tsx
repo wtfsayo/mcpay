@@ -3,10 +3,9 @@
 import { cn } from '@/lib/utils';
 import { UIMessage } from 'ai';
 import { AnimatePresence, motion } from 'motion/react';
-import { memo } from 'react';
 import Image from 'next/image';
 import { Markdown } from './markdown';
-import { ToolCall, ToolCallPart } from './tool-call-streaming';
+import { ToolCall } from './tool-call-streaming';
 
 interface PreviewMessageProps {
   message: UIMessage;
@@ -19,6 +18,7 @@ function PurePreviewMessage({
   isLoading,
   requiresScrollPadding = false,
 }: PreviewMessageProps) {
+  console.log("💬 PreviewMessage render - message ID:", message.id, "parts:", message.parts.length, "isLoading:", isLoading);
   return (
     <AnimatePresence>
       <motion.div
@@ -63,11 +63,21 @@ function PurePreviewMessage({
             >
               {message.parts.map((part, i) => {
                 if (part.type === 'text') {
-                  return <Markdown key={i}>{part.text}</Markdown>;
+                  const isStreaming = (part as { state?: string }).state === 'streaming';
+                  console.log("📝 Rendering text part:", i, "text length:", part.text?.length || 0, "isStreaming:", isStreaming);
+                  return (
+                    <div key={i} className="relative">
+                      <Markdown>{part.text}</Markdown>
+                      {isStreaming && (
+                        <span className="inline-block w-0.5 h-4 bg-primary animate-pulse ml-0.5" />
+                      )}
+                    </div>
+                  );
                 }
                 if (part.type.startsWith('tool-')) {
+                  console.log("🛠️ Rendering tool part:", i, "type:", part.type, "state:", (part as { state?: string }).state);
                   // render our streaming step component
-                  return <ToolCall key={i} step={part as ToolCallPart} />;
+                  return <ToolCall key={i} step={part as Parameters<typeof ToolCall>[0]['step']} />;
                 }
                 return null;
               })}
@@ -84,13 +94,8 @@ function PurePreviewMessage({
   );
 }
 
-export const PreviewMessage = memo(
-  PurePreviewMessage,
-  (prev, next) =>
-    prev.isLoading === next.isLoading &&
-    prev.message.id === next.message.id &&
-    prev.requiresScrollPadding === next.requiresScrollPadding
-);
+// Temporarily disable memoization to test
+export const PreviewMessage = PurePreviewMessage;
 
 export const ThinkingMessage = () => (
   <motion.div

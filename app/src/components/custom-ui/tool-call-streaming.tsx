@@ -1,29 +1,19 @@
 'use client';
 
-import { FC } from 'react';
-import { motion } from 'motion/react';
-import { Loader2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
-import { CheckCircleIcon } from './icons'
-
-export interface ToolCallPart {
-  type: string;            // e.g. "tool-create_session"
-  state: 'waiting' 
-        | 'running' 
-        | 'output-available' 
-        | 'error';
-  input?: unknown;
-  output?: unknown;
-  toolCallId: string;
-}
+import { ToolUIPart } from "ai";
+import { CheckCircleIcon, Loader2 } from 'lucide-react';
+import { motion } from 'motion/react';
+import { FC } from 'react';
 
 interface ToolCallProps {
-  step: ToolCallPart;
+  step: ToolUIPart;
 }
 
 export const ToolCall: FC<ToolCallProps> = ({ step }) => {
-  const isDone = step.state === 'output-available';
-  const isError = step.state === 'error';
+
+  const isDone = step.state === "output-available";
+  const isError = step.state === "output-error";
 
   // Turn "tool-create_session" into "Create Session"
   const label = step.type
@@ -37,7 +27,7 @@ export const ToolCall: FC<ToolCallProps> = ({ step }) => {
       <CardContent className="flex items-center gap-2 text-sm font-medium">
         {/* icon */}
         <div className="flex-shrink-0">
-          {isDone ? (
+        {isDone ? (
             <CheckCircleIcon className="h-4 w-4 text-green-600" />
           ) : isError ? (
             <span className="inline-block h-4 w-4 text-red-500">Error</span>
