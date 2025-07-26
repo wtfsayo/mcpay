@@ -28,6 +28,13 @@ export function McpPreview({ url, userWalletAddress }: McpPreviewProps) {
   const [selectedTool, setSelectedTool] = useState<MCPToolWithPayments | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
   useEffect(() => {
     let isMounted = true;
     const fetchServerInfo = async () => {
@@ -86,23 +93,37 @@ export function McpPreview({ url, userWalletAddress }: McpPreviewProps) {
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <span className="text-muted-foreground">Version:</span>
                 <span className="text-right font-medium">{serverInfo.metadata.version}</span>
+              </div>
 
-                <span className="text-muted-foreground">URL:</span>
-                <span className="text-right font-medium break-all">
-                  {url ? (
+              <div className="text-sm mt-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">URL:</span>
+                  <Button
+                    variant="secondary"
+                    size="xs"
+                    onClick={handleCopy}
+                    className="cursor-pointer"
+                  >
+                    {copied ? 'Copied' : 'Copy'}
+                  </Button>
+                </div>
+
+                {url ? (
+                  <div className="w-full bg-blue-600/5 dark:bg-blue-600/20 p-2 rounded text-center mt-2 break-words">
                     <a
                       href={url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-cyan-500 hover:text-cyan-500/80"
+                      className="text-blue-600 dark:text-blue-400 hover:underline break-all"
                     >
                       {url}
                     </a>
-                  ) : (
-                    <span className="text-muted-foreground/70">No URL</span>
-                  )}
-                </span>
+                  </div>
+                ) : (
+                  <span className="text-muted-foreground/70">No URL</span>
+                )}
               </div>
+
             </CardContent>
           </Card>
 
@@ -160,6 +181,7 @@ export function McpPreview({ url, userWalletAddress }: McpPreviewProps) {
                       <Button
                         variant="secondary"
                         size="xs"
+                        className="cursor-pointer"
                         onClick={() => {
                           setSelectedTool(tool);
                           setIsModalOpen(true);
