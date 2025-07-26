@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { ToolExecutionModal } from '@/components/custom-ui/tool-execution-modal';
 
 interface McpPreviewProps {
-  url: string;
+  url?: string;
   userWalletAddress: string;
 }
 
@@ -34,6 +34,10 @@ export function McpPreview({ url, userWalletAddress }: McpPreviewProps) {
       try {
         setLoading(true);
         setError(null);
+        if (!url) {
+          throw new Error('URL is required');
+        }
+        console.log('Fetching server info for URL:', url);
         const data = await api.getMcpServerInfo(url);
         if (isMounted) {
           setServerInfo(data as MCPServerInfo);
@@ -138,7 +142,7 @@ export function McpPreview({ url, userWalletAddress }: McpPreviewProps) {
           </h2>
 
           <div className="grid grid-cols-2 gap-4">
-            {serverInfo.tools.map((tool: MCPToolWithPayments) => {
+            {serverInfo.tools.map((tool) => {
               const hasPricing = Array.isArray(tool.pricing) && tool.pricing.length > 0;
 
               return (
