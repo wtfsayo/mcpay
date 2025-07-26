@@ -142,14 +142,14 @@ export async function POST(req: Request) {
         let _sessionId = "";
         const result = streamText({
           system: systemPrompt?.content || "You are a helpful assistant.",
-          model: "openai/gpt-4o",
+          model: "anthropic/claude-4-sonnet",
           messages: modelMessages,
           tools,
           onStepFinish: async ({ toolResults, toolCalls, usage, finishReason }) => {
             toolResults.forEach(async (toolResult) => {
               if (toolResult.toolName === 'create_session') {
                 const result = await generateObject({
-                  model: "openai/gpt-4o",
+                  model: "openai/gpt-4o-mini",
                   schema: z.object({
                     sessionId: z.string().min(1).describe("The session ID of the chat"),
                   }),
@@ -167,7 +167,7 @@ export async function POST(req: Request) {
               }
               if (toolResult.toolName === 'preview') {
                 const result = await generateObject({
-                  model: "openai/gpt-4o",
+                  model: "openai/gpt-4o-mini",
                   schema: z.object({
                     url: z.string().min(1).describe("The URL of the preview")
                   }),
