@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { File, Copy, Download, FileText, Code, Folder, FolderOpen, ChevronRight, ChevronDown, Check } from 'lucide-react';
 import Editor from '@monaco-editor/react';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 
 interface FileInfo {
   content: string;
@@ -265,15 +266,15 @@ export function CodebasePreview({ sessionData }: CodebasePreviewProps) {
         {/* fixed footer */}
         <div className="px-2">
           <div className="border-t border-foreground/10 py-2">
-          <div className="flex justify-between items-center mt-1 mb-1 text-xs text-muted-foreground">
-            <span className="font-medium">Total files</span>
-            <span className="text-foreground/80 font-semibold">{totalFiles}</span>
-          </div>
-          <div className="flex justify-between items-center text-xs text-muted-foreground">
-            <span className="font-medium">Total size</span>
-            <span className="text-foreground/80 font-semibold">
-              {fmtSize(totalSizeBytes)}
-            </span>
+            <div className="flex justify-between items-center mt-1 mb-1 text-xs text-muted-foreground">
+              <span className="font-medium">Total files</span>
+              <span className="text-foreground/80 font-semibold">{totalFiles}</span>
+            </div>
+            <div className="flex justify-between items-center text-xs text-muted-foreground">
+              <span className="font-medium">Total size</span>
+              <span className="text-foreground/80 font-semibold">
+                {fmtSize(totalSizeBytes)}
+              </span>
             </div>
           </div>
         </div>
@@ -296,40 +297,56 @@ export function CodebasePreview({ sessionData }: CodebasePreviewProps) {
                 </span>
               </div>
               <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  className="text-muted-foreground hover:text-foreground cursor-pointer"
-                  aria-label="Copy to clipboard"
-                  onClick={() =>
-                    handleCopy(parsedData.files[selectedFile].content)
-                  }
-                >
-                  {justCopied ? (
-                    <Check className="h-4 w-4" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  className="text-muted-foreground hover:text-foreground cursor-pointer"
-                  aria-label="Download file"
-                  onClick={() =>
-                    handleDownload(
-                      selectedFile,
-                      parsedData.files[selectedFile].content
-                    )
-                  }
-                >
-                  {justDownloaded ? (
-                    <Check className="h-4 w-4" />
-                  ) : (
-                    <Download className="h-4 w-4" />
-                  )}
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      className="text-muted-foreground hover:text-foreground cursor-pointer"
+                      aria-label="Copy to clipboard"
+                      onClick={() =>
+                        handleCopy(parsedData.files[selectedFile].content)
+                      }
+                    >
+                      {justCopied ? (
+                        <Check className="h-4 w-4" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    Copy
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      className="text-muted-foreground hover:text-foreground cursor-pointer"
+                      aria-label="Download file"
+                      onClick={() =>
+                        handleDownload(
+                          selectedFile,
+                          parsedData.files[selectedFile].content
+                        )
+                      }
+                    >
+                      {justDownloaded ? (
+                        <Check className="h-4 w-4" />
+                      ) : (
+                        <Download className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    Download
+                  </TooltipContent>
+                </Tooltip>
               </div>
+
             </div>
 
             <Separator className="my-0" />
