@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { File, Copy, Download, FileText, Code, Folder, FolderOpen, ChevronRight, ChevronDown } from 'lucide-react';
+import { File, Copy, Download, FileText, Code, Folder, FolderOpen, ChevronRight, ChevronDown, Check } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 
 interface FileInfo {
@@ -121,7 +121,16 @@ export function CodebasePreview({ sessionData }: CodebasePreviewProps) {
     });
   };
 
-  const handleCopy = (text: string) => navigator.clipboard.writeText(text);
+  const [justCopied, setJustCopied] = useState(false);
+  const [justDownloaded, setJustDownloaded] = useState(false);
+
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setJustCopied(true);
+      setTimeout(() => setJustCopied(false), 2000); // reset after 2s
+    });
+  };
+
   const handleDownload = (name: string, content: string) => {
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -132,14 +141,18 @@ export function CodebasePreview({ sessionData }: CodebasePreviewProps) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+
+    // indicate success
+    setJustDownloaded(true);
+    setTimeout(() => setJustDownloaded(false), 2000);
   };
 
   const fmtSize = (b: number) =>
     b < 1024
       ? `${b} B`
       : b < 1024 ** 2
-      ? `${(b / 1024).toFixed(1)} KB`
-      : `${(b / 1024 ** 2).toFixed(1)} MB`;
+        ? `${(b / 1024).toFixed(1)} KB`
+        : `${(b / 1024 ** 2).toFixed(1)} MB`;
 
   const iconClass = 'h-4 w-4 text-muted-foreground';
   const getFileIcon = (fn: string) => {
@@ -174,12 +187,12 @@ export function CodebasePreview({ sessionData }: CodebasePreviewProps) {
             style={{ paddingLeft }}
           >
             <div className="flex items-center gap-2">
-              {isExpanded ? 
-                <ChevronDown className="h-3 w-3 text-muted-foreground" /> : 
+              {isExpanded ?
+                <ChevronDown className="h-3 w-3 text-muted-foreground" /> :
                 <ChevronRight className="h-3 w-3 text-muted-foreground" />
               }
-              {isExpanded ? 
-                <FolderOpen className={iconClass} /> : 
+              {isExpanded ?
+                <FolderOpen className={iconClass} /> :
                 <Folder className={iconClass} />
               }
               <span className="truncate">{node.name}</span>
@@ -238,7 +251,7 @@ export function CodebasePreview({ sessionData }: CodebasePreviewProps) {
   return (
     <div className="flex flex-1 overflow-hidden">
       {/* File list panel */}
-      <div className="w-1/3 flex-shrink-0 bg-gray-50 dark:bg-gray-800 overflow-auto p-2 space-y-1">
+      <div className="w-1/4 flex-shrink-0 bg-gray-50 dark:bg-gray-800 overflow-auto p-2 space-y-1">
         {fileTree.map((node) => (
           <TreeNode key={node.path} node={node} depth={0} />
         ))}
@@ -250,34 +263,49 @@ export function CodebasePreview({ sessionData }: CodebasePreviewProps) {
           <>
             {/* _Your_ header bar at exactly one line of text */}
             <div
-              className="h-8 flex items-center justify-between px-2"
+              className="h-10 flex items-center justify-between px-4"
               style={{ lineHeight: '2rem' }}
             >
               <div className="flex items-center gap-2 text-xs font-medium">
                 {getFileIcon(selectedFile)}
-                <span className="truncate text-foreground">{selectedFile}</span>
+                <span className="truncate text-foreground font-medium">{selectedFile}</span>
                 <span className="ml-2 text-xs text-muted-foreground">
                   {fmtSize(parsedData.files[selectedFile].size)}
                 </span>
               </div>
               <div className="flex items-center gap-1">
                 <Button
-                  size="icon"
-                  variant="outline"
-                  className="p-0.5 h-6 w-6"
-                  onClick={() => handleCopy(parsedData.files[selectedFile].content)}
-                >
-                  <Copy className="h-3 w-3" />
-                </Button>
-                <Button
-                  size="icon"
-                  variant="outline"
-                  className="p-0.5 h-6 w-6"
+                  variant="ghost"
+                  size="xs"
+                  className="text-muted-foreground hover:text-foreground cursor-pointer"
+                  aria-label="Copy to clipboard"
                   onClick={() =>
-                    handleDownload(selectedFile, parsedData.files[selectedFile].content)
+                    handleCopy(parsedData.files[selectedFile].content)
                   }
                 >
-                  <Download className="h-3 w-3" />
+                  {justCopied ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="text-muted-foreground hover:text-foreground cursor-pointer"
+                  aria-label="Download file"
+                  onClick={() =>
+                    handleDownload(
+                      selectedFile,
+                      parsedData.files[selectedFile].content
+                    )
+                  }
+                >
+                  {justDownloaded ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
                 </Button>
               </div>
             </div>
