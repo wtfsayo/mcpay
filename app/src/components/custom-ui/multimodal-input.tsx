@@ -7,7 +7,7 @@ import { useScrollToBottom } from '@/hooks/use-scroll-to-bottom';
 import { SuggestedActions } from '@/components/custom-ui/suggested-actions';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { ArrowDown, ArrowUp, Ban } from 'lucide-react';
+import { ArrowDown, ArrowUp } from 'lucide-react';
 import { StopIcon } from './icons';
 import { toast } from 'sonner';
 import { ChatStatus } from 'ai';

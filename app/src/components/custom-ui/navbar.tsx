@@ -29,7 +29,7 @@ export default function Navbar() {
           : "bg-white/95 backdrop-blur border-gray-200"
       }`}
     >
-      <div className="max-w-7xl mx-auto px-4">
+      <div className="w-full px-2">
         <div className="flex items-center justify-between py-2">
           {/* Logo/Brand */}
           <div className="flex items-center">

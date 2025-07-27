@@ -10,7 +10,7 @@ import { CodebasePreview } from './code-preview';
 export interface ChatWithPreviewProps {
   id: string;
   messages: UIMessage[];
-  status: ChatStatus
+  status: ChatStatus;
   isReadonly?: boolean;
   onSendMessage: (text: string) => void;
   onStop?: () => void;
@@ -49,35 +49,50 @@ export default function ChatWithPreview({
 
         {/* Preview/Code pane */}
         <div className="hidden md:flex flex-col w-2/3 border-l border-gray-200 bg-background">
-          <div className="flex space-x-2 p-2 border-b border-muted-background">
-            <Button
-              variant="ghost"
-              size="sm"
-              className={`px-2 transition-opacity ${activeTab === 'preview' ? 'opacity-100 bg-accent' : 'opacity-50'
+          {/* Navbar: Tabs and Deploy button */}
+          <div className="flex items-center justify-between p-2 border-b border-muted-background">
+            <div className="flex space-x-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`px-2 transition-opacity ${
+                  activeTab === 'preview' ? 'opacity-100 bg-accent' : 'opacity-50'
                 }`}
-              onClick={() => setActiveTab('preview')}
-            >
-              Preview
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className={`px-2 transition-opacity ${activeTab === 'code' ? 'opacity-100 bg-accent' : 'opacity-50'
+                onClick={() => setActiveTab('preview')}
+              >
+                Preview
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`px-2 transition-opacity ${
+                  activeTab === 'code' ? 'opacity-100 bg-accent' : 'opacity-50'
                 }`}
-              onClick={() => setActiveTab('code')}
-            >
-              Code
+                onClick={() => setActiveTab('code')}
+              >
+                Code
+              </Button>
+            </div>
+            <Button variant="default" size="sm">
+              Deploy
             </Button>
           </div>
+
           <div className="flex-1 flex overflow-hidden">
             {activeTab === 'preview' ? (
-              previewUrl
-                ? <McpPreview url={previewUrl} userWalletAddress={userWalletAddress} />
-                : <div className="p-4 text-center text-muted-foreground/80">
-                  No preview available.
+              previewUrl ? (
+                <McpPreview url={previewUrl} userWalletAddress={userWalletAddress} />
+              ) : (
+                <div className="p-4 text-center text-muted-foreground/80">
+                  No preview available. Try creating an MCP Server.
                 </div>
-            ) : (
+              )
+            ) : codebase ? (
               <CodebasePreview sessionData={codebase} />
+            ) : (
+              <div className="p-4 text-center text-muted-foreground/80">
+                No code available.
+              </div>
             )}
           </div>
         </div>
