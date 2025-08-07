@@ -1,1 +1,0 @@
-ALTER TABLE "analytics" ADD COLUMN "revenue_by_currency" jsonb;
