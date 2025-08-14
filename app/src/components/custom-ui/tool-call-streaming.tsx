@@ -2,7 +2,7 @@
 
 import { Card, CardContent } from '@/components/ui/card';
 import { ToolUIPart } from "ai";
-import { Loader2 } from 'lucide-react';
+import { Loader2, TriangleAlert } from 'lucide-react';
 import { CheckCircleIcon } from './icons';
 import { motion } from 'motion/react';
 import { FC } from 'react';
@@ -28,10 +28,10 @@ export const ToolCall: FC<ToolCallProps> = ({ step }) => {
       <CardContent className="flex items-center gap-2 text-sm font-medium">
         {/* icon */}
         <div className="flex-shrink-0">
-        {isDone ? (
+          {isDone ? (
             <CheckCircleIcon className="h-4 w-4 text-teal-600 dark:text-teal-400" />
           ) : isError ? (
-            <span className="inline-block h-4 w-4 text-red-500">Error</span>
+            <TriangleAlert className="h-4 w-4 text-red-500" />
           ) : (
             <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
           )}
@@ -44,6 +44,7 @@ export const ToolCall: FC<ToolCallProps> = ({ step }) => {
           className={isDone ? 'text-muted-foreground' : 'text-foreground'}
         >
           {label}
+          {isError && <span className="ml-2 text-red-500">Error</span>}
         </motion.span>
       </CardContent>
     </Card>
