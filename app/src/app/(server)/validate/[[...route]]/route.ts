@@ -1,41 +1,14 @@
 // Service that validates payment headers by checking the database
 
-import { Hono, type Context, type Next } from "hono";
+import { Hono } from "hono";
 import { cors } from 'hono/cors';
 import { handle } from 'hono/vercel';
-import { extractApiKeyFromHeaders, hashApiKey } from "@/lib/gateway/auth-utils";
-import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
+import { withTransaction } from "@/lib/gateway/db/actions";
 import { z } from "zod";
 
 export const runtime = 'nodejs'
 
-// Define user type that matches what we get from API key validation
-type ApiKeyUser = {
-    id: string;
-    name: string | null;
-    email: string | null;
-    displayName: string | null;
-    avatarUrl: string | null;
-    image: string | null;
-};
 
-// Define extended context type for validation middleware with API key info
-type ValidationAppContext = {
-    Variables: {
-        user: ApiKeyUser;
-        apiKeyInfo?: {
-            id: string;
-            userId: string;
-            keyHash: string;
-            name: string;
-            permissions: string[];
-            createdAt: Date;
-            expiresAt: Date | null;
-            lastUsedAt: Date | null;
-            active: boolean;
-        };
-    };
-};
 
 // Define input validation schemas
 const PaymentValidationRequestSchema = z.object({
@@ -54,7 +27,7 @@ interface PaymentValidationResponse {
   metadata?: Record<string, unknown>;
 }
 
-const app = new Hono<ValidationAppContext>({
+const app = new Hono({
     strict: false,
 }).basePath('/validate')
 
@@ -79,54 +52,7 @@ app.onError((err, c) => {
     }, 500)
 })
 
-// API key authentication middleware for validation requests
-const validationAuthMiddleware = async (c: Context<ValidationAppContext>, next: Next) => {
-    try {
-        // Extract API key from headers
-        const apiKey = extractApiKeyFromHeaders(c.req.raw.headers);
 
-        if (!apiKey) {
-            return c.json({
-                status: 'error',
-                message: 'API key required. Please provide a valid API key in X-API-KEY header or Authorization: Bearer header.',
-                timestamp: new Date().toISOString(),
-                service: 'mcpay-validate'
-            }, 401);
-        }
-
-        // Validate API key
-        const keyHash = hashApiKey(apiKey);
-        const apiKeyResult = await withTransaction(async (tx) => {
-            return await txOperations.validateApiKey(keyHash)(tx);
-        });
-
-        if (!apiKeyResult?.user) {
-            return c.json({
-                status: 'error',
-                message: 'Invalid or expired API key.',
-                timestamp: new Date().toISOString(),
-                service: 'mcpay-validate'
-            }, 401);
-        }
-
-        console.log(`[${new Date().toISOString()}] User authenticated via API key: ${apiKeyResult.user.id}`);
-
-        // Add user to context with proper typing
-        c.set('user', apiKeyResult.user);
-        // Store API key info in context
-        c.set('apiKeyInfo', apiKeyResult.apiKey);
-
-        await next();
-    } catch (error) {
-        console.error('Validation auth middleware error:', error);
-        return c.json({
-            status: 'error',
-            message: 'Authentication failed',
-            timestamp: new Date().toISOString(),
-            service: 'mcpay-validate'
-        }, 401);
-    }
-};
 
 // Add GET endpoint for health checks
 app.get('/', async (c) => {
@@ -142,11 +68,10 @@ app.get('/', async (c) => {
 });
 
 // Add POST endpoint for payment validation
-app.post('/', validationAuthMiddleware, async (c) => {
+app.post('/', async (c) => {
     try {
         c.header('Content-Type', 'application/json')
         
-        const user = c.get('user');
         const body = await c.req.json();
         
         // Validate the request body
@@ -161,7 +86,7 @@ app.post('/', validationAuthMiddleware, async (c) => {
 
         const { payment: paymentHeader } = validationResult.data;
 
-        console.log(`[${new Date().toISOString()}] Validating payment header for user: ${user.id}`);
+        console.log(`[${new Date().toISOString()}] Validating payment header`);
 
         // Check if payment exists in database by signature
         const existingPayment = await withTransaction(async (tx) => {

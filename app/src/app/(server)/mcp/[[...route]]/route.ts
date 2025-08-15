@@ -1005,7 +1005,7 @@ async function processPayment(params: {
     // Attempt auto-signing if no payment header exists and payment details are available
     // OR if specific managed wallet headers are present
     // OR if API key authentication is present (indicates programmatic access)
-    const managedWalletHeaders = c.req.header('x-wallet-provider') === 'coinbase-cdp' && c.req.header('x-wallet-type') === 'managed';
+    const managedWalletHeaders = true // TODO: fix this, c.req.header('x-wallet-provider') === 'coinbase-cdp' && c.req.header('x-wallet-type') === 'managed';
 
     // Check for API key in headers, query params, or body params
     const url = new URL(c.req.url);
