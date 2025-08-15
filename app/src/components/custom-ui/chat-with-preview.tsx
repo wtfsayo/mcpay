@@ -55,7 +55,7 @@ export default function ChatWithPreview({
               <Button
                 variant="ghost"
                 size="sm"
-                className={`px-2 transition-opacity ${
+                className={`px-2 cursor-pointer rounded-sm transition-opacity ${
                   activeTab === 'preview' ? 'opacity-100 bg-accent' : 'opacity-50'
                 }`}
                 onClick={() => setActiveTab('preview')}
@@ -65,7 +65,7 @@ export default function ChatWithPreview({
               <Button
                 variant="ghost"
                 size="sm"
-                className={`px-2 transition-opacity ${
+                className={`px-2 cursor-pointer rounded-sm transition-opacity ${
                   activeTab === 'code' ? 'opacity-100 bg-accent' : 'opacity-50'
                 }`}
                 onClick={() => setActiveTab('code')}
@@ -73,7 +73,7 @@ export default function ChatWithPreview({
                 Code
               </Button>
             </div>
-            <Button variant="default" size="sm">
+            <Button variant="default" className="cursor-pointer rounded-sm" size="sm">
               Deploy
             </Button>
           </div>
