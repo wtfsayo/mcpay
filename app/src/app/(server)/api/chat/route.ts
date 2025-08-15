@@ -145,7 +145,7 @@ export async function POST(req: Request) {
     console.log('Chat API: Session ID:', sessionId);
 
     // TODO: remove the hardcoded API key
-    const mcpUrl = `${DEPLOYMENT_URL}/mcp/73b54493-048d-4433-8687-fdf2dc1ebf4d`;
+    const mcpUrl = `${DEPLOYMENT_URL}/mcp/23e2ab26-7808-4984-855c-ec6a7dc97c3a`;
 
     const { prompts, tools } = await getCachedMcpData(mcpUrl, req.headers);
 
