@@ -1,16 +1,17 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { urlUtils } from "@/lib/client/utils"
+import { apiCall } from "@/lib/client/utils"
+import { ComprehenstiveAnalytics } from "@/types/mcp"
+import { easeOut } from "motion"
 import {
-  motion,
   AnimatePresence,
+  motion,
   useReducedMotion,
   type Variants,
 } from "motion/react"
-import { easeOut } from "motion"
+import { useEffect, useMemo, useState } from "react"
 
 export default function HeroStats() {
   const [liveServers, setLiveServers] = useState<number | null>(null)
@@ -20,10 +21,8 @@ export default function HeroStats() {
     let mounted = true
     const fetchAnalytics = async () => {
       try {
-        const res = await fetch(urlUtils.getApiUrl("/analytics/usage"))
-        if (!res.ok) throw new Error(`status ${res.status}`)
-        const data = await res.json()
-        if (mounted) setLiveServers(Number(data?.totalServers ?? 0))
+        const analytics = await apiCall<ComprehenstiveAnalytics>("/analytics/usage")
+        if (mounted) setLiveServers(Number(analytics?.totalServers ?? 0))
       } catch {
         if (mounted) setLiveServers(0)
       }

@@ -1,6 +1,6 @@
 import { PricingEntry } from "@/types"
 import { type ApiError } from "@/types/api"
-import { DailyServerAnalytics, McpServerWithStats, ServerCreateData, ServerRegistrationData, ServerSummaryAnalytics } from "@/types/mcp"
+import { McpServerWithStats, ServerCreateData, ServerRegistrationData, ServerSummaryAnalytics, DailyServerAnalytics, ComprehenstiveAnalytics } from "@/types/mcp"
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 
@@ -161,7 +161,7 @@ export const api = {
   },
 
   // Get server by ID
-  getServer: async (serverId: string): Promise<McpServerWithStats & { dailyAnalytics: DailyServerAnalytics, summaryAnalytics: ServerSummaryAnalytics }> => {
+  getServer: async (serverId: string): Promise<McpServerWithStats & { dailyAnalytics: DailyServerAnalytics[], summaryAnalytics: ServerSummaryAnalytics }> => {
     return apiCall(`/servers/${serverId}`)
   },
 

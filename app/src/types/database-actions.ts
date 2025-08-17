@@ -103,7 +103,6 @@ export type CreateWebhookInput = TxOperationInput<'createWebhook'>;
 // ANALYTICS OPERATION INPUT TYPES
 // =============================================================================
 
-export type GetComprehensiveAnalyticsInput = TxOperationInput<'getComprehensiveAnalytics'>;
 export type GetProofStatsInput = TxOperationInput<'getProofStats'>;
 export type ListProofsInput = TxOperationInput<'listProofs'>;
 

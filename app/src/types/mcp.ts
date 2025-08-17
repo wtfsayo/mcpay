@@ -1,22 +1,90 @@
 import { txOperations } from "@/lib/gateway/db/actions";
-import { mcpTools } from "@/lib/gateway/db/schema";
+import { mcpTools, RevenueDetails } from "@/lib/gateway/db/schema";
 import { experimental_createMCPClient } from "ai";
 import type { MCPToolWithPayments } from '@/lib/gateway/inspect-mcp';
+import { getComprehensiveAnalytics } from "@/lib/gateway/analytics";
 
 export type McpServerList = Awaited<ReturnType<ReturnType<typeof txOperations.listMcpServers>>>;
 export type McpServerWithRelations = McpServerList[number];
 export type McpServerWithActivity = Awaited<ReturnType<ReturnType<typeof txOperations.listMcpServersByActivity>>>[number];
 export type McpServerWithStats = Awaited<ReturnType<ReturnType<typeof txOperations.getMcpServerWithStats>>>
-export type DailyServerAnalytics = Awaited<ReturnType<ReturnType<typeof txOperations.getDailyServerAnalytics>>>;
 export type ToolFromMcpServerWithStats = NonNullable<McpServerWithStats>['tools'][number]
-
-export type ServerSummaryAnalytics = Awaited<ReturnType<ReturnType<typeof txOperations.getServerSummaryAnalytics>>>;
 
 export type ServerRegistrationData = Awaited<ReturnType<ReturnType<typeof txOperations.getServerRegistrationData>>>;
 export type ServerCreateData = Awaited<ReturnType<ReturnType<typeof txOperations.createServer>>>;
 
 export type MCPClient = Awaited<ReturnType<typeof experimental_createMCPClient>>
 export type MCPToolsCollection = Record<string, unknown>
+
+export type ComprehenstiveAnalytics = Awaited<ReturnType<typeof getComprehensiveAnalytics>>
+
+// Analytics result types
+export interface DailyServerAnalytics {
+  serverId: string;
+  date: string;
+  totalRequests: number;
+  uniqueUsers: number;
+  errorCount: number;
+  avgResponseTime: number;
+  revenueDetails: RevenueDetails;
+  totalPayments: number;
+}
+
+export interface ServerSummaryAnalytics {
+  serverId: string;
+  serverName: string;
+  totalRequests: number;
+  totalTools: number;
+  monetizedTools: number;
+  uniqueUsers: number;
+  totalPayments: number;
+  errorCount: number;
+  avgResponseTime: number;
+  successRate: number;
+  revenueDetails: RevenueDetails;
+  recentRequests: number;
+  recentPayments: number;
+  lastActivity: string;
+}
+
+export interface GlobalAnalytics {
+  totalServers: number;
+  activeServers: number;
+  totalTools: number;
+  monetizedTools: number;
+  totalRequests: number;
+  successfulRequests: number;
+  uniqueUsers: number;
+  totalPayments: number;
+  avgResponseTime: number;
+  revenueDetails: RevenueDetails;
+  totalProofs: number;
+  consistentProofs: number;
+}
+
+export interface ToolAnalytics {
+  toolId: string;
+  toolName: string;
+  serverId: string;
+  isMonetized: boolean;
+  totalRequests: number;
+  successfulRequests: number;
+  uniqueUsers: number;
+  avgResponseTime: number;
+  totalPayments: number;
+  revenueDetails: RevenueDetails;
+  lastUsed: string;
+  recentRequests: number;
+}
+
+export interface DailyActivity {
+  date: string;
+  totalRequests: number;
+  uniqueUsers: number;
+  totalPayments: number;
+  avgResponseTime: number;
+  revenueDetails: RevenueDetails;
+}
 
 
 // Enhanced metadata type for server registration

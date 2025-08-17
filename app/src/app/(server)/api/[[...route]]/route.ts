@@ -9,6 +9,7 @@ import { getBlockchainArchitecture, getBlockchainsForArchitecture, getMainnetNet
 import { CDP, createCDPAccount } from "@/lib/gateway/3rd-parties/cdp";
 import { createOneClickBuyUrl, getSupportedAssets, getSupportedNetworks } from "@/lib/gateway/3rd-parties/onramp";
 import { VLayer, type ExecutionContext } from "@/lib/gateway/3rd-parties/vlayer";
+import { getComprehensiveAnalytics, getDailyServerAnalytics, getServerSummaryAnalytics } from "@/lib/gateway/analytics";
 import { auth } from "@/lib/gateway/auth";
 import { generateApiKey } from "@/lib/gateway/auth-utils";
 import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
@@ -212,8 +213,8 @@ app.get('/servers/:id', async (c) => {
                 return [null, null]
             }
 
-            const summaryAnalytics = await txOperations.getServerSummaryAnalytics(server.id)(tx);
-            const analytics = await txOperations.getDailyServerAnalytics(server.id)(tx);
+            const summaryAnalytics = await getServerSummaryAnalytics(server.id);
+            const analytics = await getDailyServerAnalytics(server.id);
             return [server, analytics, summaryAnalytics];
         });
 
@@ -405,15 +406,13 @@ app.get('/analytics/usage', optionalAuthMiddleware, async (c) => {
     try {
         const { startDate, endDate, toolId, userId, serverId } = c.req.query();
 
-        const analytics = await withTransaction(async (tx) => {
-            return await txOperations.getComprehensiveAnalytics({
+        const analytics = await getComprehensiveAnalytics({
                 startDate: startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Default to last 30 days
                 endDate: endDate ? new Date(endDate) : new Date(),
                 toolId,
                 userId,
                 serverId
-            })(tx);
-        });
+            });
 
         return c.json(analytics);
     } catch (error) {

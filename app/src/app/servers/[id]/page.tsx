@@ -19,7 +19,7 @@ import {
 import { RevenueDetail } from "@/lib/gateway/db/schema"
 import { PricingEntry } from "@/types"
 import { type Network } from "@/types/blockchain"
-import { DailyServerAnalytics, type McpServerWithStats, type ServerSummaryAnalytics, type ToolFromMcpServerWithStats } from "@/types/mcp"
+import { type McpServerWithStats, type ServerSummaryAnalytics, type ToolFromMcpServerWithStats, type DailyServerAnalytics } from "@/types/mcp"
 import {
   Activity,
   AlertCircle,
@@ -49,7 +49,7 @@ import { toast } from "sonner"
 export default function ServerDashboard() {
   const params = useParams()
   const serverId = params.id as string
-  const [serverData, setServerData] = useState<McpServerWithStats & { dailyAnalytics: DailyServerAnalytics, summaryAnalytics: ServerSummaryAnalytics } | null>(null)
+  const [serverData, setServerData] = useState<McpServerWithStats & { dailyAnalytics: DailyServerAnalytics[], summaryAnalytics: ServerSummaryAnalytics } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedTool, setSelectedTool] = useState<ToolFromMcpServerWithStats | null>(null)
@@ -204,7 +204,7 @@ await client.connect(transport)
         setError(null)
 
         const data = await api.getServer(serverId)
-        setServerData(data as McpServerWithStats & { dailyAnalytics: DailyServerAnalytics, summaryAnalytics: ServerSummaryAnalytics })
+        setServerData(data as McpServerWithStats & { dailyAnalytics: DailyServerAnalytics[], summaryAnalytics: ServerSummaryAnalytics })
       } catch (err) {
         console.error('Error fetching server data:', err)
         setError(err instanceof Error ? err.message : 'Failed to fetch server data')
