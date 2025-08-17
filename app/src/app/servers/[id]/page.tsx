@@ -505,7 +505,7 @@ await client.connect(transport)
                       <p className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                         Total Usage
                       </p>
-                      <div className="text-base font-bold mt-0.5">{(serverData.summaryAnalytics.totalRequests || 0).toLocaleString()}</div>
+                      <div className="text-base font-bold mt-0.5">{(serverData.stats.totalUsage || 0).toLocaleString()}</div>
                       <p className={`text-xs mt-0.5 ${isDark ? "text-gray-500" : "text-gray-500"}`}>
                         {safeNumber(serverData.summaryAnalytics.avgResponseTime).toFixed(0)}ms avg
                       </p>
@@ -524,7 +524,7 @@ await client.connect(transport)
                       <p className={`text-xs font-medium ${isDark ? "text-gray-400" : "text-gray-600"}`}>
                         Unique Users
                       </p>
-                      <div className="text-base font-bold mt-0.5">{serverData.summaryAnalytics.uniqueUsers || 0}</div>
+                      <div className="text-base font-bold mt-0.5">{serverData.stats.activeUsers || 0}</div>
                       <p className={`text-xs mt-0.5 ${isDark ? "text-gray-500" : "text-gray-500"}`}>
                         Active users
                       </p>
@@ -1086,24 +1086,24 @@ await client.connect(transport)`}
                           </TableCell>
                           <TableCell>
                             <div className="text-sm">
-                              <div>{(tool.usage || []).length} uses</div>
+                              <div>{tool.totalUsage || 0} uses</div>
                               <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                                {(tool.payments || []).length} payments
+                                {tool.totalPayments || 0} payments
                               </div>
                             </div>
                           </TableCell>
                           <TableCell className="text-right">
-                            {(tool.proofs || []).length > 0 ? (
+                            {(tool.totalProofs || 0) > 0 ? (
                               <div className="flex items-center justify-end gap-2 text-xs">
-                                <div className={`flex items-center gap-1 ${(tool.proofs || []).filter(p => p.isConsistent).length > 0 ? "text-green-500" : "text-red-500"
+                                <div className={`flex items-center gap-1 ${(tool.consistentProofs || 0) > 0 ? "text-green-500" : "text-red-500"
                                   }`}>
-                                  {(tool.proofs || []).filter(p => p.isConsistent).length > 0 ? (
+                                  {(tool.consistentProofs || 0) > 0 ? (
                                     <CheckCircle className="h-3 w-3" />
                                   ) : (
                                     <XCircle className="h-3 w-3" />
                                   )}
                                   <span>
-                                    {(tool.proofs || []).filter(p => p.isConsistent).length}/{(tool.proofs || []).length}
+                                    {tool.consistentProofs || 0}/{tool.totalProofs || 0}
                                   </span>
                                 </div>
                               </div>

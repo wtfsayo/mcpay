@@ -49,7 +49,7 @@ import {
 } from "@/lib/gateway/db/schema";
 import { PricingEntry } from '@/types/payments';
 import { type CDPNetwork } from '@/types/wallet';
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, count, sum, avg, sql, gte, lt, exists, or } from "drizzle-orm";
 
 // Define proper transaction type
 export type TransactionType = Parameters<Parameters<typeof db['transaction']>[0]>[0];
@@ -2537,6 +2537,7 @@ export const txOperations = {
     },
 
     getMcpServerWithStats: (serverId: string) => async (tx: TransactionType) => {
+        // Get basic server info first
         const server = await tx.query.mcpServers.findFirst({
             where: eq(mcpServers.serverId, serverId),
             columns: {
@@ -2577,6 +2578,7 @@ export const txOperations = {
                         name: true,
                         description: true,
                         inputSchema: true,
+                        outputSchema: true,
                         isMonetized: true,
                         pricing: true,
                         status: true,
@@ -2610,7 +2612,7 @@ export const txOperations = {
                                 }
                             },
                             orderBy: [desc(payments.createdAt)],
-                            limit: 50
+                            limit: 10
                         },
                         usage: {
                             columns: {
@@ -2633,7 +2635,7 @@ export const txOperations = {
                                 }
                             },
                             orderBy: [desc(toolUsage.timestamp)],
-                            limit: 100
+                            limit: 20
                         },
                         proofs: {
                             columns: {
@@ -2655,12 +2657,39 @@ export const txOperations = {
                                 }
                             },
                             orderBy: [desc(proofs.createdAt)],
-                            limit: 50
+                            limit: 10
                         }
                     },
                     orderBy: [mcpTools.name]
                 },
-                // Analytics will be computed from views
+                proofs: {
+                    columns: {
+                        id: true,
+                        isConsistent: true,
+                        confidenceScore: true,
+                        status: true,
+                        verificationType: true,
+                        createdAt: true,
+                        webProofPresentation: true
+                    },
+                    with: {
+                        tool: {
+                            columns: {
+                                id: true,
+                                name: true
+                            }
+                        },
+                        user: {
+                            columns: {
+                                id: true,
+                                walletAddress: true,
+                                displayName: true
+                            }
+                        }
+                    },
+                    orderBy: [desc(proofs.createdAt)],
+                    limit: 10
+                },
                 ownership: {
                     where: eq(serverOwnership.active, true),
                     columns: {
@@ -2699,85 +2728,459 @@ export const txOperations = {
                         createdAt: true,
                         updatedAt: true
                     }
-                },
-                proofs: {
-                    columns: {
-                        id: true,
-                        isConsistent: true,
-                        confidenceScore: true,
-                        status: true,
-                        verificationType: true,
-                        createdAt: true,
-                        webProofPresentation: true
-                    },
-                    with: {
-                        tool: {
-                            columns: {
-                                id: true,
-                                name: true
-                            }
-                        },
-                        user: {
-                            columns: {
-                                id: true,
-                                walletAddress: true,
-                                displayName: true
-                            }
-                        }
-                    },
-                    orderBy: [desc(proofs.createdAt)],
-                    limit: 50
-                }, 
+                }
             }
         });
 
         if (!server) return null;
 
-        // Calculate aggregate statistics
-        const stats = {
-            totalTools: server.tools.length,
-            monetizedTools: server.tools.filter(t => t.isMonetized).length,
-            totalPayments: server.tools.reduce((sum, tool) => sum + tool.payments.length, 0),
-            totalRevenue: server.tools.reduce((sum, tool) => 
-                sum + tool.payments
-                    .filter(p => p.status === 'completed')
-                    .reduce((toolSum, payment) => toolSum + parseFloat(payment.amountRaw), 0), 0
-            ),
-            totalUsage: server.tools.reduce((sum, tool) => sum + tool.usage.length, 0),
-            totalProofs: server.proofs.length,
-            consistentProofs: server.proofs.filter(p => p.isConsistent).length,
-            proofsWithWebProof: server.proofs.filter(p => p.webProofPresentation).length,
-            uniqueUsers: new Set([
-                ...server.tools.flatMap(t => t.payments.map(p => p.user?.id).filter(Boolean)),
-                ...server.tools.flatMap(t => t.usage.map(u => u.user?.id).filter(Boolean)),
-                ...server.proofs.map(p => p.user?.id).filter(Boolean)
-            ]).size,
-            avgResponseTime: (() => {
-                const allUsage = server.tools.flatMap(t => t.usage);
-                const timesWithExecution = allUsage.filter(u => u.executionTimeMs !== null);
-                return timesWithExecution.length > 0 
-                    ? timesWithExecution.reduce((sum, u) => sum + (u.executionTimeMs || 0), 0) / timesWithExecution.length
-                    : 0;
-            })(),
-            reputationScore: (() => {
-                if (server.proofs.length === 0) return 0;
-                const consistencyRate = server.proofs.filter(p => p.isConsistent).length / server.proofs.length;
-                const avgConfidence = server.proofs.reduce((sum, p) => sum + parseFloat(p.confidenceScore), 0) / server.proofs.length;
-                const webProofBonus = server.proofs.filter(p => p.webProofPresentation).length / server.proofs.length * 0.2;
+        // Calculate date boundaries
+        const now = new Date();
+        const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+        // Get total counts for each tool using $count
+        const toolCountPromises = server.tools.map(async (tool) => {
+            const [totalPayments, completedPayments, totalUsage, totalProofs, consistentProofs] = await Promise.all([
+                tx.$count(payments, eq(payments.toolId, tool.id)),
+                tx.$count(payments, and(eq(payments.toolId, tool.id), eq(payments.status, 'completed'))),
+                tx.$count(toolUsage, eq(toolUsage.toolId, tool.id)),
+                tx.$count(proofs, eq(proofs.toolId, tool.id)),
+                tx.$count(proofs, and(eq(proofs.toolId, tool.id), eq(proofs.isConsistent, true)))
+            ]);
+
+            return {
+                ...tool,
+                totalPayments,
+                completedPayments,
+                totalUsage,
+                totalProofs,
+                consistentProofs
+            };
+        });
+
+        const toolsWithCounts = await Promise.all(toolCountPromises);
+
+        // Get tools count and breakdown using $count
+        const [totalTools, monetizedTools] = await Promise.all([
+            tx.$count(mcpTools, eq(mcpTools.serverId, server.id)),
+            tx.$count(mcpTools, and(eq(mcpTools.serverId, server.id), eq(mcpTools.isMonetized, true)))
+        ]);
+
+        // Get payment statistics using $count
+        const serverToolsCondition = and(
+            eq(payments.toolId, mcpTools.id),
+            eq(mcpTools.serverId, server.id)
+        );
+
+        const [
+            totalPayments,
+            completedPayments,
+            pendingPayments,
+            failedPayments,
+            recentPayments,
+            weeklyPayments
+        ] = await Promise.all([
+            tx.$count(payments, exists(
+                tx.select().from(mcpTools).where(and(
+                    eq(payments.toolId, mcpTools.id),
+                    eq(mcpTools.serverId, server.id)
+                ))
+            )),
+            tx.$count(payments, and(
+                eq(payments.status, 'completed'),
+                exists(
+                    tx.select().from(mcpTools).where(and(
+                        eq(payments.toolId, mcpTools.id),
+                        eq(mcpTools.serverId, server.id)
+                    ))
+                )
+            )),
+            tx.$count(payments, and(
+                eq(payments.status, 'pending'),
+                exists(
+                    tx.select().from(mcpTools).where(and(
+                        eq(payments.toolId, mcpTools.id),
+                        eq(mcpTools.serverId, server.id)
+                    ))
+                )
+            )),
+            tx.$count(payments, and(
+                eq(payments.status, 'failed'),
+                exists(
+                    tx.select().from(mcpTools).where(and(
+                        eq(payments.toolId, mcpTools.id),
+                        eq(mcpTools.serverId, server.id)
+                    ))
+                )
+            )),
+            tx.$count(payments, and(
+                gte(payments.createdAt, thirtyDaysAgo),
+                exists(
+                    tx.select().from(mcpTools).where(and(
+                        eq(payments.toolId, mcpTools.id),
+                        eq(mcpTools.serverId, server.id)
+                    ))
+                )
+            )),
+            tx.$count(payments, and(
+                gte(payments.createdAt, sevenDaysAgo),
+                exists(
+                    tx.select().from(mcpTools).where(and(
+                        eq(payments.toolId, mcpTools.id),
+                        eq(mcpTools.serverId, server.id)
+                    ))
+                )
+            ))
+        ]);
+
+        // Get usage statistics using $count
+        const [
+            totalUsage,
+            successfulUsage,
+            failedUsage,
+            recentUsage,
+            weeklyUsage
+        ] = await Promise.all([
+            tx.$count(toolUsage, exists(
+                tx.select().from(mcpTools).where(and(
+                    eq(toolUsage.toolId, mcpTools.id),
+                    eq(mcpTools.serverId, server.id)
+                ))
+            )),
+            tx.$count(toolUsage, and(
+                gte(toolUsage.responseStatus, '200'),
+                lt(toolUsage.responseStatus, '300'),
+                exists(
+                    tx.select().from(mcpTools).where(and(
+                        eq(toolUsage.toolId, mcpTools.id),
+                        eq(mcpTools.serverId, server.id)
+                    ))
+                )
+            )),
+            tx.$count(toolUsage, and(
+                or(
+                    isNull(toolUsage.responseStatus),
+                    gte(toolUsage.responseStatus, '400')
+                ),
+                exists(
+                    tx.select().from(mcpTools).where(and(
+                        eq(toolUsage.toolId, mcpTools.id),
+                        eq(mcpTools.serverId, server.id)
+                    ))
+                )
+            )),
+            tx.$count(toolUsage, and(
+                gte(toolUsage.timestamp, thirtyDaysAgo),
+                exists(
+                    tx.select().from(mcpTools).where(and(
+                        eq(toolUsage.toolId, mcpTools.id),
+                        eq(mcpTools.serverId, server.id)
+                    ))
+                )
+            )),
+            tx.$count(toolUsage, and(
+                gte(toolUsage.timestamp, sevenDaysAgo),
+                exists(
+                    tx.select().from(mcpTools).where(and(
+                        eq(toolUsage.toolId, mcpTools.id),
+                        eq(mcpTools.serverId, server.id)
+                    ))
+                )
+            ))
+        ]);
+
+        // Get additional stats that need aggregation (revenue, averages, distinct counts)
+        const [revenueData, avgResponseTimeData, uniqueUsersData] = await Promise.all([
+            // Revenue calculations
+            tx
+                .select({
+                    totalRevenue: sum(sql`CAST(${payments.amountRaw} AS NUMERIC)`),
+                    recentRevenue: sum(sql`CASE WHEN ${payments.createdAt} > ${thirtyDaysAgo} THEN CAST(${payments.amountRaw} AS NUMERIC) ELSE 0 END`),
+                    weeklyRevenue: sum(sql`CASE WHEN ${payments.createdAt} > ${sevenDaysAgo} THEN CAST(${payments.amountRaw} AS NUMERIC) ELSE 0 END`)
+                })
+                .from(payments)
+                .innerJoin(mcpTools, eq(payments.toolId, mcpTools.id))
+                .where(and(
+                    eq(mcpTools.serverId, server.id),
+                    eq(payments.status, 'completed')
+                ))
+                .then(rows => rows[0] || { totalRevenue: '0', recentRevenue: '0', weeklyRevenue: '0' }),
+            
+            // Average response time
+            tx
+                .select({
+                    avgResponseTime: avg(toolUsage.executionTimeMs)
+                })
+                .from(toolUsage)
+                .innerJoin(mcpTools, eq(toolUsage.toolId, mcpTools.id))
+                .where(eq(mcpTools.serverId, server.id))
+                .then(rows => rows[0] || { avgResponseTime: '0' }),
+            
+            // Unique users counts
+            tx
+                .select({
+                    uniquePayingUsers: sql<number>`COUNT(DISTINCT ${payments.userId})`,
+                    uniqueActiveUsers: sql<number>`COUNT(DISTINCT ${toolUsage.userId})`
+                })
+                .from(mcpTools)
+                .leftJoin(payments, eq(payments.toolId, mcpTools.id))
+                .leftJoin(toolUsage, eq(toolUsage.toolId, mcpTools.id))
+                .where(eq(mcpTools.serverId, server.id))
+                .then(rows => rows[0] || { uniquePayingUsers: 0, uniqueActiveUsers: 0 })
+        ]);
+
+        // Combine the stats
+        const toolStats = {
+            totalTools,
+            monetizedTools,
+            freeTools: totalTools - monetizedTools
+        };
+
+        const paymentStats = {
+            totalPayments,
+            completedPayments,
+            pendingPayments,
+            failedPayments,
+            totalRevenue: revenueData.totalRevenue || '0',
+            uniquePayingUsers: uniqueUsersData.uniquePayingUsers,
+            recentPayments,
+            weeklyPayments,
+            recentRevenue: revenueData.recentRevenue || '0',
+            weeklyRevenue: revenueData.weeklyRevenue || '0'
+        };
+
+        const usageStats = {
+            totalUsage,
+            successfulUsage,
+            failedUsage,
+            avgResponseTime: avgResponseTimeData.avgResponseTime || '0',
+            uniqueActiveUsers: uniqueUsersData.uniqueActiveUsers,
+            recentUsage,
+            weeklyUsage
+        };
+
+        // Get proof statistics using aggregation (both server-level and tool-level proofs)
+        const [serverProofStats, toolProofStats] = await Promise.all([
+            // Server-level proofs
+            tx
+                .select({
+                    serverProofs: count(),
+                    serverConsistentProofs: count(sql`CASE WHEN ${proofs.isConsistent} = true THEN 1 END`),
+                    serverProofsWithWebProof: count(sql`CASE WHEN ${proofs.webProofPresentation} IS NOT NULL THEN 1 END`),
+                    serverAvgConfidence: avg(sql`CAST(${proofs.confidenceScore} AS NUMERIC)`),
+                    uniqueProvingUsers: sql<number>`COUNT(DISTINCT ${proofs.userId})`
+                })
+                .from(proofs)
+                .where(eq(proofs.serverId, server.id))
+                .then(rows => rows[0] || {
+                    serverProofs: 0,
+                    serverConsistentProofs: 0,
+                    serverProofsWithWebProof: 0,
+                    serverAvgConfidence: '0',
+                    uniqueProvingUsers: 0
+                }),
+            
+            // Tool-level proofs  
+            tx
+                .select({
+                    toolProofs: count(),
+                    toolConsistentProofs: count(sql`CASE WHEN ${proofs.isConsistent} = true THEN 1 END`),
+                    toolProofsWithWebProof: count(sql`CASE WHEN ${proofs.webProofPresentation} IS NOT NULL THEN 1 END`),
+                    toolAvgConfidence: avg(sql`CAST(${proofs.confidenceScore} AS NUMERIC)`)
+                })
+                .from(proofs)
+                .innerJoin(mcpTools, eq(proofs.toolId, mcpTools.id))
+                .where(eq(mcpTools.serverId, server.id))
+                .then(rows => rows[0] || {
+                    toolProofs: 0,
+                    toolConsistentProofs: 0,
+                    toolProofsWithWebProof: 0,
+                    toolAvgConfidence: '0'
+                })
+        ]);
+
+        // Get revenue breakdown by currency/network
+        const revenueByNetwork = await tx
+            .select({
+                currency: payments.currency,
+                network: payments.network,
+                decimals: payments.tokenDecimals,
+                amount: sum(sql`CAST(${payments.amountRaw} AS NUMERIC)`),
+                count: count()
+            })
+            .from(payments)
+            .innerJoin(mcpTools, eq(payments.toolId, mcpTools.id))
+            .where(and(
+                eq(mcpTools.serverId, server.id),
+                eq(payments.status, 'completed')
+            ))
+            .groupBy(payments.currency, payments.network, payments.tokenDecimals);
+
+        // Get latest activity timestamp using SQL
+        const lastActivity = await tx
+            .select({
+                lastPayment: sql<Date | null>`MAX(${payments.createdAt})`,
+                lastUsage: sql<Date | null>`MAX(${toolUsage.timestamp})`,
+                lastServerProof: sql<Date | null>`MAX(${proofs.createdAt})`
+            })
+            .from(mcpTools)
+            .leftJoin(payments, eq(payments.toolId, mcpTools.id))
+            .leftJoin(toolUsage, eq(toolUsage.toolId, mcpTools.id))
+            .leftJoin(proofs, eq(proofs.serverId, server.id))
+            .where(eq(mcpTools.serverId, server.id))
+            .then(rows => {
+                const row = rows[0];
+                if (!row) return null;
+                
+                const dates = [row.lastPayment, row.lastUsage, row.lastServerProof]
+                    .filter(d => d !== null)
+                    .map(d => new Date(d!));
+                
+                return dates.length > 0 
+                    ? new Date(Math.max(...dates.map(d => d.getTime())))
+                    : null;
+            });
+
+        // Get top tools performance using SQL aggregation
+        const topTools = await tx
+            .select({
+                name: mcpTools.name,
+                isMonetized: mcpTools.isMonetized,
+                totalUsage: count(toolUsage.id),
+                totalPayments: count(payments.id),
+                totalRevenue: sum(sql`CASE WHEN ${payments.status} = 'completed' THEN CAST(${payments.amountRaw} AS NUMERIC) ELSE 0 END`),
+                avgResponseTime: avg(toolUsage.executionTimeMs)
+            })
+            .from(mcpTools)
+            .leftJoin(toolUsage, eq(toolUsage.toolId, mcpTools.id))
+            .leftJoin(payments, eq(payments.toolId, mcpTools.id))
+            .where(eq(mcpTools.serverId, server.id))
+            .groupBy(mcpTools.id, mcpTools.name, mcpTools.isMonetized)
+            .orderBy(desc(count(toolUsage.id)))
+            .limit(5);
+
+        // Calculate combined proof statistics
+        const totalProofs = serverProofStats.serverProofs + toolProofStats.toolProofs;
+        const consistentProofs = serverProofStats.serverConsistentProofs + toolProofStats.toolConsistentProofs;
+        const proofsWithWebProof = serverProofStats.serverProofsWithWebProof + toolProofStats.toolProofsWithWebProof;
+        
+        // Calculate reputation score
+        const reputationScore = (() => {
+            if (totalProofs === 0) return 0;
+            
+            const consistencyRate = consistentProofs / totalProofs;
+            const serverConfidence = parseFloat(serverProofStats.serverAvgConfidence || '0');
+            const toolConfidence = parseFloat(toolProofStats.toolAvgConfidence || '0');
+            const avgConfidence = serverProofStats.serverProofs > 0 && toolProofStats.toolProofs > 0 
+                ? (serverConfidence + toolConfidence) / 2 
+                : serverConfidence + toolConfidence;
+            const webProofBonus = proofsWithWebProof / totalProofs * 0.2;
+            
                 return Math.min(1, consistencyRate * 0.6 + avgConfidence * 0.3 + webProofBonus);
-            })(),
-            lastActivity: (() => {
-                const dates = [
-                    ...server.tools.flatMap(t => t.payments.map(p => p.createdAt)),
-                    ...server.tools.flatMap(t => t.usage.map(u => u.timestamp)),
-                    ...server.proofs.map(p => p.createdAt)
-                ];
-                return dates.length > 0 ? new Date(Math.max(...dates.map(d => d.getTime()))) : null;
-            })()
+        })();
+
+        // Calculate success rates
+        const paymentSuccessRate = paymentStats.totalPayments > 0 ? paymentStats.completedPayments / paymentStats.totalPayments : 0;
+        const usageSuccessRate = usageStats.totalUsage > 0 ? usageStats.successfulUsage / usageStats.totalUsage : 0;
+        const proofConsistencyRate = totalProofs > 0 ? consistentProofs / totalProofs : 0;
+
+        const stats = {
+            // Basic totals
+            totalTools: toolStats.totalTools,
+            monetizedTools: toolStats.monetizedTools,
+            freeTools: toolStats.freeTools,
+            
+            // Payment totals and breakdowns
+            totalPayments: paymentStats.totalPayments,
+            completedPayments: paymentStats.completedPayments,
+            pendingPayments: paymentStats.pendingPayments,
+            failedPayments: paymentStats.failedPayments,
+            paymentSuccessRate,
+            
+            // Revenue totals
+            totalRevenue: parseFloat(paymentStats.totalRevenue || '0'),
+            revenueByNetwork: revenueByNetwork.map(r => ({
+                currency: r.currency,
+                network: r.network,
+                decimals: r.decimals,
+                amount: parseFloat(r.amount || '0'),
+                count: r.count
+            })),
+            
+            // Usage totals and metrics
+            totalUsage: usageStats.totalUsage,
+            successfulUsage: usageStats.successfulUsage,
+            failedUsage: usageStats.failedUsage,
+            usageSuccessRate,
+            avgResponseTime: parseFloat(usageStats.avgResponseTime || '0'),
+            
+            // Proof totals
+            totalProofs,
+            consistentProofs,
+            inconsistentProofs: totalProofs - consistentProofs,
+            proofsWithWebProof,
+            proofConsistencyRate,
+            
+            // User engagement metrics
+            totalUniqueUsers: Math.max(
+                paymentStats.uniquePayingUsers, 
+                usageStats.uniqueActiveUsers,
+                serverProofStats.uniqueProvingUsers
+            ),
+            payingUsers: paymentStats.uniquePayingUsers,
+            activeUsers: usageStats.uniqueActiveUsers,
+            provingUsers: serverProofStats.uniqueProvingUsers,
+            
+            // Time-based metrics (last 30 days)
+            recentPayments: paymentStats.recentPayments,
+            recentUsage: usageStats.recentUsage,
+            recentRevenue: parseFloat(paymentStats.recentRevenue || '0'),
+            
+            // Time-based metrics (last 7 days)
+            weeklyPayments: paymentStats.weeklyPayments,
+            weeklyUsage: usageStats.weeklyUsage,
+            weeklyRevenue: parseFloat(paymentStats.weeklyRevenue || '0'),
+            
+            // Tool performance insights
+            topTools: topTools.map(t => ({
+                name: t.name,
+                isMonetized: t.isMonetized,
+                totalUsage: t.totalUsage,
+                totalPayments: t.totalPayments,
+                totalRevenue: parseFloat(t.totalRevenue || '0'),
+                successRate: 0, // Would need more complex query
+                avgResponseTime: parseFloat(t.avgResponseTime || '0')
+            })),
+            mostProfitableTools: topTools
+                .filter(t => t.isMonetized)
+                .sort((a, b) => parseFloat(b.totalRevenue || '0') - parseFloat(a.totalRevenue || '0'))
+                .slice(0, 5)
+                .map(t => ({
+                    name: t.name,
+                    isMonetized: t.isMonetized,
+                    totalUsage: t.totalUsage,
+                    totalPayments: t.totalPayments,
+                    totalRevenue: parseFloat(t.totalRevenue || '0'),
+                    successRate: 0, // Would need more complex query
+                    avgResponseTime: parseFloat(t.avgResponseTime || '0')
+                })),
+            
+            // Server health metrics
+            reputationScore,
+            
+            // Activity tracking
+            lastActivity,
+            
+            // Server configuration
+            totalOwners: server.ownership.length,
+            activeWebhooks: server.webhooks.filter(w => w.active).length,
+            totalWebhooks: server.webhooks.length
         };
 
         return {
             ...server,
+            tools: toolsWithCounts,
             stats
         };
     },

@@ -18,12 +18,13 @@ import {
   fromBaseUnits
 } from '@/lib/commons';
 import db from "@/lib/gateway/db";
+import { txOperations } from "@/lib/gateway/db/actions";
 import {
   type RevenueDetails,
 } from "@/lib/gateway/db/schema";
 import { getKVConfig } from '@/lib/gateway/env';
 import { type RevenueByCurrency } from '@/types/blockchain';
-import { type DailyActivity, type DailyServerAnalytics, type GlobalAnalytics, type ServerSummaryAnalytics, type ToolAnalytics } from "@/types/mcp";
+import { type DailyActivity, type DailyServerAnalytics, type GlobalAnalytics, type McpServerWithStats, type ServerSummaryAnalytics, type ToolAnalytics } from "@/types/mcp";
 import { createClient } from '@vercel/kv';
 import { createHash } from 'crypto';
 import { sql } from "drizzle-orm";
@@ -50,6 +51,9 @@ const CACHE_CONFIG = {
   
   // Comprehensive analytics cache
   COMPREHENSIVE_ANALYTICS: 1200, // 20 minutes
+  
+  // Detailed server analytics with stats
+  SERVER_DETAILED_ANALYTICS: 900, // 15 minutes
   
   // Cache key prefix
   PREFIX: 'analytics:v1:',
@@ -562,6 +566,21 @@ const getTopToolsAnalytics = async (limit: number = 10): Promise<ToolAnalytics[]
 };
 
 /**
+ * Get detailed server analytics with comprehensive stats (cached version of getMcpServerWithStats)
+ * Combines server info, tools with counts, and comprehensive statistics
+ */
+const indexServerDetailedAnalytics = async (serverId: string): Promise<McpServerWithStats | null> => {
+  const cacheKey = getCacheKey('server_detailed', serverId);
+  
+  return withCache(cacheKey, CACHE_CONFIG.SERVER_DETAILED_ANALYTICS, async () => {
+    // Use the existing transaction-based operation
+    return await db.transaction(async (tx) => {
+      return await txOperations.getMcpServerWithStats(serverId)(tx);
+    });
+  });
+};
+
+/**
  * Get comprehensive analytics for landing page and dashboard
  * Combines multiple analytics sources with smart caching
  * Replaces getComprehensiveAnalytics from actions.ts
@@ -757,6 +776,7 @@ const invalidateCache = {
     const keys = [
       getCacheKey('daily_server', serverId),
       getCacheKey('server_summary', serverId),
+      getCacheKey('server_detailed', serverId),
       getCacheKey('global'),
       getCacheKey('daily_activity', '30'), // Default limit
       getCacheKey('comprehensive'), // Add comprehensive analytics to server invalidation
@@ -788,7 +808,8 @@ const invalidateCache = {
     if (serverId) {
       keys.push(
         getCacheKey('daily_server', serverId),
-        getCacheKey('server_summary', serverId)
+        getCacheKey('server_summary', serverId),
+        getCacheKey('server_detailed', serverId)
       );
     }
     
@@ -856,7 +877,11 @@ const getDailyActivity = async (limit: number = 30) => {
   return await indexDailyActivity(limit);
 }
 
+const getServerDetailedAnalytics = async (serverId: string) => {
+  return await indexServerDetailedAnalytics(serverId);
+}
+
 export {
-  getComprehensiveAnalytics, getDailyActivity, getDailyServerAnalytics, getGlobalAnalytics, getServerSummaryAnalytics, getToolAnalytics, invalidateCache
+  getComprehensiveAnalytics, getDailyActivity, getDailyServerAnalytics, getGlobalAnalytics, getServerDetailedAnalytics, getServerSummaryAnalytics, getToolAnalytics, invalidateCache
 };
 

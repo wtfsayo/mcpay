@@ -9,7 +9,7 @@ import { getBlockchainArchitecture, getBlockchainsForArchitecture, getMainnetNet
 import { CDP, createCDPAccount } from "@/lib/gateway/3rd-parties/cdp";
 import { createOneClickBuyUrl, getSupportedAssets, getSupportedNetworks } from "@/lib/gateway/3rd-parties/onramp";
 import { VLayer, type ExecutionContext } from "@/lib/gateway/3rd-parties/vlayer";
-import { getComprehensiveAnalytics, getDailyServerAnalytics, getServerSummaryAnalytics } from "@/lib/gateway/analytics";
+import { getComprehensiveAnalytics, getDailyServerAnalytics, getServerDetailedAnalytics, getServerSummaryAnalytics } from "@/lib/gateway/analytics";
 import { auth } from "@/lib/gateway/auth";
 import { generateApiKey } from "@/lib/gateway/auth-utils";
 import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
@@ -207,21 +207,17 @@ app.get('/servers/:id', async (c) => {
     const serverId = c.req.param('id')
 
     try {
-        const [server, dailyAnalytics, summaryAnalytics] = await withTransaction(async (tx) => {
-            const server = await txOperations.getMcpServerWithStats(serverId)(tx);
-            if (!server) {
-                return [null, null]
-            }
-
-            const summaryAnalytics = await getServerSummaryAnalytics(server.id);
-            const analytics = await getDailyServerAnalytics(server.id);
-            return [server, analytics, summaryAnalytics];
-        });
-
+        // Use cached analytics for better performance
+        const server = await getServerDetailedAnalytics(serverId);
+        
         if (!server) {
             return c.json({ error: 'Server not found' }, 404)
         }
 
+        const [dailyAnalytics, summaryAnalytics] = await Promise.all([
+            getDailyServerAnalytics(server.id), // Already cached
+            getServerSummaryAnalytics(server.id) // Already cached
+        ]);
 
         return c.json({
             ...server,
