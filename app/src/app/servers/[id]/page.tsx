@@ -566,7 +566,7 @@ export default function ServerDashboard() {
                       Tools ({serverData.summaryAnalytics.totalTools})
                     </CardTitle>
                     <CardDescription className="mt-2">
-                      {serverData.summaryAnalytics.monetizedTools || 0} monetized • {(serverData.summaryAnalytics.totalTools || 0) - (serverData.summaryAnalytics.monetizedTools || 0)} free • Hover or click "Paid" badges to see pricing details
+                      {serverData.summaryAnalytics.monetizedTools || 0} monetized • {(serverData.summaryAnalytics.totalTools || 0) - (serverData.summaryAnalytics.monetizedTools || 0)} free • Hover or click &quot;Paid&quot; badges to see pricing details
                     </CardDescription>
                   </div>
                   <Button
