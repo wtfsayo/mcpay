@@ -44,7 +44,7 @@ interface IntegrationSection {
   id: string
   title: string
   description: string
-  icon: React.ComponentType<any>
+  icon: React.ComponentType<{ className?: string }>
   content: IntegrationContentItem[]
 }
 
@@ -63,7 +63,7 @@ interface LinkItem {
   text: string
   href?: string
   variant?: 'primary' | 'secondary' | 'external' | 'internal' | 'cursor'
-  icon?: React.ComponentType<any> | string
+  icon?: React.ComponentType<{ className?: string }> | string
   onClick?: () => void
 }
 
