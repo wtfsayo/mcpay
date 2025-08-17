@@ -615,23 +615,9 @@ const getComprehensiveAnalytics = async (filters?: {
     avgResponseTime: number;
   }>;
   
-  // Period info
-  periodStart: string;
-  periodEnd: string;
-  periodDays: number;
 }> => {
-  const startDate = filters?.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const endDate = filters?.endDate || new Date();
   
-  // Create cache key based on filters
-  const filterKey = JSON.stringify({
-    startDate: startDate.toISOString(),
-    endDate: endDate.toISOString(),
-    ...filters
-  });
-  const cacheKey = getCacheKey('comprehensive', createHash('md5').update(filterKey).digest('hex').slice(0, 8));
-  
-  return withCache(cacheKey, CACHE_CONFIG.COMPREHENSIVE_ANALYTICS, async () => {
+  return withCache('comprehensive', CACHE_CONFIG.COMPREHENSIVE_ANALYTICS, async () => {
     console.log('Fetching comprehensive analytics with filters:', filters);
 
     // Fetch all analytics data in parallel for efficiency
@@ -667,9 +653,6 @@ const getComprehensiveAnalytics = async (filters?: {
         topToolsByRevenue: [],
         topServersByActivity: [],
         dailyActivity: [],
-        periodStart: startDate.toISOString(),
-        periodEnd: endDate.toISOString(),
-        periodDays: Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
       };
     }
 
@@ -761,11 +744,6 @@ const getComprehensiveAnalytics = async (filters?: {
       
       // Time series data for charts
       dailyActivity: processedDailyActivity,
-      
-      // Period info
-      periodStart: startDate.toISOString(),
-      periodEnd: endDate.toISOString(),
-      periodDays: Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
     };
   });
 };
