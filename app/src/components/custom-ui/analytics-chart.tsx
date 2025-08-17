@@ -120,7 +120,7 @@ export function AnalyticsChart({ dailyAnalytics, isDark = false }: AnalyticsChar
             <BarChart3 className="h-5 w-5" />
             Analytics Overview
           </CardTitle>
-          <CardDescription>Visual representation of your server's performance</CardDescription>
+          <CardDescription>Visual representation of your server&apos;s performance</CardDescription>
         </CardHeader>
         <CardContent>
           <div className={`text-center py-12 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
