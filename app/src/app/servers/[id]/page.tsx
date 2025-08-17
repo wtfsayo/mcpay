@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { getExplorerName, openExplorer } from "@/lib/client/blockscout"
 import { api, urlUtils } from "@/lib/client/utils"
 import {
@@ -52,6 +53,8 @@ export default function ServerDashboard() {
   const [selectedTool, setSelectedTool] = useState<ToolFromMcpServerWithStats | null>(null)
   const [showToolModal, setShowToolModal] = useState(false)
   const [activeTab, setActiveTab] = useState("overview")
+  const [openTooltips, setOpenTooltips] = useState<Record<string, boolean>>({})
+  const [showAllPricing, setShowAllPricing] = useState(false)
   const { isDark } = useTheme()
 
   // Initialize tab from URL hash
@@ -102,6 +105,23 @@ export default function ServerDashboard() {
   const handleToolExecution = (tool: ToolFromMcpServerWithStats) => {
     setSelectedTool(tool)
     setShowToolModal(true)
+  }
+
+  // Handle tooltip open/close
+  const handleTooltipOpenChange = (toolId: string, open: boolean) => {
+    setOpenTooltips(prev => ({
+      ...prev,
+      [toolId]: open
+    }))
+  }
+
+  const toggleTooltip = (toolId: string, event: React.MouseEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setOpenTooltips(prev => ({
+      ...prev,
+      [toolId]: !prev[toolId]
+    }))
   }
 
   // Helper function to safely convert to number
@@ -539,13 +559,26 @@ export default function ServerDashboard() {
           <TabsContent value="tools" className="space-y-6">
             <Card className={`${isDark ? "bg-gray-800 border-gray-700" : ""}`}>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Wrench className="h-5 w-5" />
-                  Tools ({serverData.summaryAnalytics.totalTools})
-                </CardTitle>
-                <CardDescription>
-                  {serverData.summaryAnalytics.monetizedTools || 0} monetized • {(serverData.summaryAnalytics.totalTools || 0) - (serverData.summaryAnalytics.monetizedTools || 0)} free
-                </CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Wrench className="h-5 w-5" />
+                      Tools ({serverData.summaryAnalytics.totalTools})
+                    </CardTitle>
+                    <CardDescription className="mt-2">
+                      {serverData.summaryAnalytics.monetizedTools || 0} monetized • {(serverData.summaryAnalytics.totalTools || 0) - (serverData.summaryAnalytics.monetizedTools || 0)} free • Hover or click "Paid" badges to see pricing details
+                    </CardDescription>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAllPricing(!showAllPricing)}
+                    className={`${isDark ? "border-gray-600 text-gray-300 hover:bg-gray-700" : ""}`}
+                  >
+                    <DollarSign className="h-4 w-4 mr-2" />
+                    {showAllPricing ? 'Hide' : 'Show'} All Pricing
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="rounded-md border">
@@ -554,8 +587,7 @@ export default function ServerDashboard() {
                       <TableRow>
                         <TableHead className="w-[300px]">Tool</TableHead>
                         <TableHead>Type</TableHead>
-                        <TableHead>Price</TableHead>
-                        <TableHead>Network</TableHead>
+                        {showAllPricing && <TableHead>Pricing Details</TableHead>}
                         <TableHead>Usage</TableHead>
                         <TableHead className="text-right">Verification</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
@@ -573,49 +605,128 @@ export default function ServerDashboard() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            {(() => {
-                              const activePricing = getActivePricing(tool.pricing as PricingEntry[])
-                              return activePricing.length > 0 ? (
-                                <Badge variant="secondary" className={`text-xs ${isDark ? "bg-gray-600 text-gray-200" : ""}`}>
-                                  Paid
-                                </Badge>
-                              ) : (
-                                <Badge variant="outline" className={`text-xs ${isDark ? "border-gray-500 text-gray-300" : ""}`}>
-                                  Free
-                                </Badge>
-                              )
-                            })()}
-                          </TableCell>
-                          <TableCell>
-                            {(() => {
-                              const activePricing = getActivePricing(tool.pricing as PricingEntry[])
-                              return activePricing.length > 0 && activePricing[0] ? (
-                                <TokenDisplay
-                                  currency={activePricing[0]?.assetAddress}
-                                  network={activePricing[0]?.network}
-                                  amount={activePricing[0]?.maxAmountRequiredRaw && typeof activePricing[0]?.maxAmountRequiredRaw === 'string' && activePricing[0]?.maxAmountRequiredRaw.trim() !== ''
-                                    ? fromBaseUnits(activePricing[0]?.maxAmountRequiredRaw, activePricing[0]?.tokenDecimals || 0)
-                                    : '0'}
-                                />
-                              ) : ( 
-                                <span className={isDark ? "text-gray-400" : "text-gray-500"}>Free</span>
-                              )
-                            })()}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col gap-1">
+                            <TooltipProvider>
                               {(() => {
                                 const activePricing = getActivePricing(tool.pricing as PricingEntry[])
-                                return activePricing.length > 0 && activePricing[0]?.network ? (
-                                  <Badge variant="outline" className={`text-xs ${isDark ? "border-gray-500 text-gray-300" : ""}`}>
-                                    {activePricing[0].network}
-                                  </Badge>
-                                ) : (
-                                  <span className={isDark ? "text-gray-400" : "text-gray-500"}>-</span>
-                                )
+                                const isPaid = activePricing.length > 0
+                                
+                                if (isPaid && activePricing[0]) {
+                                  return (
+                                    <Tooltip 
+                                      open={openTooltips[tool.id] || false}
+                                      onOpenChange={(open) => handleTooltipOpenChange(tool.id, open)}
+                                    >
+                                      <TooltipTrigger asChild>
+                                        <Badge 
+                                          variant="secondary" 
+                                          className={`text-xs cursor-pointer select-none ${isDark ? "bg-gray-600 text-gray-200 hover:bg-gray-500" : "hover:bg-gray-200"}`}
+                                          onClick={(e) => toggleTooltip(tool.id, e)}
+                                        >
+                                          Paid
+                                        </Badge>
+                                      </TooltipTrigger>
+                                      <TooltipContent 
+                                        side="right" 
+                                        className={`max-w-xs p-3 ${
+                                          isDark 
+                                            ? "bg-gray-800 border-gray-700 text-gray-100" 
+                                            : "bg-white border-gray-200 text-gray-900"
+                                        }`}
+                                      >
+                                        <div className="space-y-2">
+                                          <div className={`text-xs font-medium ${
+                                            isDark ? "text-gray-300" : "text-gray-600"
+                                          }`}>
+                                            {activePricing.length === 1 ? 'Pricing' : `Pricing (${activePricing.length} options)`}
+                                          </div>
+                                          <div className="space-y-1.5">
+                                            {activePricing.map((pricing, index) => (
+                                              <div 
+                                                key={index}
+                                                className={`flex items-center justify-between py-1.5 px-2 rounded ${
+                                                  isDark ? "bg-gray-700/50" : "bg-gray-50"
+                                                }`}
+                                              >
+                                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                  <TokenDisplay
+                                                    currency={pricing?.assetAddress}
+                                                    network={pricing?.network}
+                                                    amount={pricing?.maxAmountRequiredRaw && typeof pricing.maxAmountRequiredRaw === 'string' && pricing.maxAmountRequiredRaw.trim() !== ''
+                                                      ? fromBaseUnits(pricing.maxAmountRequiredRaw, pricing.tokenDecimals || 0)
+                                                      : '0'}
+                                                  />
+                                                </div>
+                                                <Badge 
+                                                  variant="outline" 
+                                                  className={`text-xs ml-2 shrink-0 ${
+                                                    isDark 
+                                                      ? "border-gray-600 text-gray-300 bg-gray-800" 
+                                                      : "border-gray-300 text-gray-600 bg-white"
+                                                  }`}
+                                                >
+                                                  {pricing.network}
+                                                </Badge>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  )
+                                } else {
+                                  return (
+                                    <Badge variant="outline" className={`text-xs ${isDark ? "border-gray-500 text-gray-300" : ""}`}>
+                                      Free
+                                    </Badge>
+                                  )
+                                }
                               })()}
-                            </div>
+                            </TooltipProvider>
                           </TableCell>
+                          {showAllPricing && (
+                            <TableCell className="w-[120px]">
+                              {(() => {
+                                const activePricing = getActivePricing(tool.pricing as PricingEntry[])
+                                if (activePricing.length > 0) {
+                                  // Get unique prices and show them compactly
+                                  const uniquePrices = [...new Set(activePricing.map(p => 
+                                    p?.maxAmountRequiredRaw && typeof p.maxAmountRequiredRaw === 'string' && p.maxAmountRequiredRaw.trim() !== ''
+                                      ? fromBaseUnits(p.maxAmountRequiredRaw, p.tokenDecimals || 0)
+                                      : '0'
+                                  ))]
+                                  
+                                  return (
+                                    <div className="text-sm font-medium">
+                                      {uniquePrices.length === 1 ? (
+                                        <span>{formatCurrency(uniquePrices[0], activePricing[0]?.assetAddress || '', activePricing[0]?.network)}</span>
+                                      ) : (
+                                        <div className="space-y-0.5">
+                                          {uniquePrices.slice(0, 3).map((price, index) => (
+                                            <div key={index} className="text-xs">
+                                              {formatCurrency(price, activePricing.find(p => 
+                                                fromBaseUnits(p.maxAmountRequiredRaw || '0', p.tokenDecimals || 0) === price
+                                              )?.assetAddress || '', activePricing[0]?.network)}
+                                            </div>
+                                          ))}
+                                          {uniquePrices.length > 3 && (
+                                            <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                                              +{uniquePrices.length - 3} more
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )
+                                } else {
+                                  return (
+                                    <div className={`text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                                      Free
+                                    </div>
+                                  )
+                                }
+                              })()}
+                            </TableCell>
+                          )}
                           <TableCell>
                             <div className="text-sm">
                               <div>{tool.totalUsage || 0} uses</div>
@@ -757,7 +868,7 @@ export default function ServerDashboard() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead></TableHead>
+                        <TableHead className="w-[60px]">Status</TableHead>
                         <TableHead>Amount</TableHead>
                         <TableHead>User</TableHead>
                         <TableHead>Date</TableHead>
@@ -771,18 +882,16 @@ export default function ServerDashboard() {
                         .sort((a, b) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime())
                         .slice(0, 10).map((payment) => (
                           <TableRow key={payment.id}>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${payment.status === 'completed'
-                                  ? 'bg-green-100 text-green-600 dark:bg-green-900 dark:text-green-400'
-                                  : 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900 dark:text-yellow-400'
-                                  }`}>
-                                  {payment.status === 'completed' ? (
-                                    <CheckCircle className="h-3 w-3" />
-                                  ) : (
-                                    <Clock className="h-3 w-3" />
-                                  )}
-                                </div>
+                            <TableCell className="w-[60px]">
+                              <div className={`w-6 h-6 rounded-full flex items-center justify-center ${payment.status === 'completed'
+                                ? 'bg-green-100 text-green-600 dark:bg-green-900 dark:text-green-400'
+                                : 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900 dark:text-yellow-400'
+                                }`}>
+                                {payment.status === 'completed' ? (
+                                  <CheckCircle className="h-3 w-3" />
+                                ) : (
+                                  <Clock className="h-3 w-3" />
+                                )}
                               </div>
                             </TableCell>
                             <TableCell className="font-medium">
@@ -809,47 +918,40 @@ export default function ServerDashboard() {
                                 )}
                                 {payment.user?.displayName || payment.user?.name || "No name"}
                               </div>
-
                             </TableCell>
                             <TableCell>
-                              <div>
-                                <div className="text-sm">{formatDate(payment.createdAt ? (typeof payment.createdAt === 'string' ? payment.createdAt : payment.createdAt.toISOString()) : '')}</div>
-                                {payment.settledAt && (
+                              <div className="text-sm">{formatDate(payment.createdAt ? (typeof payment.createdAt === 'string' ? payment.createdAt : payment.createdAt.toISOString()) : '')}</div>
+                              {payment.settledAt && (
+                                <div className={`text-xs mt-1 ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                                  Settled: {formatDate(typeof payment.settledAt === 'string' ? payment.settledAt : payment.settledAt.toISOString())}
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {payment?.network ? (
+                                <>
+                                  <Badge variant="outline" className="text-xs w-fit mb-1">
+                                    {payment.network}
+                                  </Badge>
                                   <div className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                                    Settled: {formatDate(typeof payment.settledAt === 'string' ? payment.settledAt : payment.settledAt.toISOString())}
+                                    {getExplorerName(payment.network as Network)}
                                   </div>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-col gap-1">
-                                {payment?.network ? (
-                                  <>
-                                    <Badge variant="outline" className="text-xs w-fit">
-                                      {payment.network}
-                                    </Badge>
-                                    <span className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                                      {getExplorerName(payment.network as Network)}
-                                    </span>
-                                  </>
-                                ) : (
-                                  <span className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                                    Unknown network
-                                  </span>
-                                )}
-                              </div>
+                                </>
+                              ) : (
+                                <span className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+                                  Unknown network
+                                </span>
+                              )}
                             </TableCell>
                             <TableCell className="text-right">
                               {payment?.transactionHash && payment?.network ? (
-                                <div className="flex items-center justify-end">
-                                  <TransactionLink
-                                    txHash={payment.transactionHash}
-                                    network={payment.network as Network}
-                                    variant="button"
-                                    showCopyButton={true}
-                                    className="text-xs"
-                                  />
-                                </div>
+                                <TransactionLink
+                                  txHash={payment.transactionHash}
+                                  network={payment.network as Network}
+                                  variant="button"
+                                  showCopyButton={true}
+                                  className="text-xs"
+                                />
                               ) : (
                                 <span className={`text-xs ${isDark ? "text-gray-400" : "text-gray-500"}`}>
                                   {payment?.transactionHash ? 'Unknown network' : 'Pending'}
