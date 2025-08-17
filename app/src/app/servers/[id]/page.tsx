@@ -1,6 +1,7 @@
 "use client"
 
 import { TransactionLink } from "@/components/custom-ui/explorer-link"
+import { AnalyticsChart } from "@/components/custom-ui/analytics-chart"
 import { ToolExecutionModal } from "@/components/custom-ui/tool-execution-modal"
 import { useTheme } from "@/components/providers/theme-context"
 import { Badge } from "@/components/ui/badge"
@@ -1135,31 +1136,13 @@ await client.connect(transport)`}
 
           {/* Analytics & Payments Tab */}
           <TabsContent value="analytics" className="space-y-6">
+            {/* Analytics Chart */}
+            <AnalyticsChart 
+              dailyAnalytics={serverData.dailyAnalytics || []} 
+              isDark={isDark} 
+            />
+            
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className={isDark ? "bg-gray-800 border-gray-700" : ""}>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <BarChart3 className="h-5 w-5" />
-                    Analytics
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {(serverData.dailyAnalytics || []).map((item) => (
-                      <div key={item.date} className="flex items-center justify-between">
-                        <span className={`text-sm ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                          {new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                        </span>
-                        <div className="flex items-center gap-4 text-sm">
-                          <span>{item.totalRequests || 0} requests</span>
-                          <span className="text-green-500">${formatDailyRevenue(item.revenueDetails)}</span>
-                          <span>{item.uniqueUsers || 0} users</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
 
               <Card className={isDark ? "bg-gray-800 border-gray-700" : ""}>
                 <CardHeader>
