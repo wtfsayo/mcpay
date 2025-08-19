@@ -214,6 +214,48 @@ export async function POST(req: Request) {
           onFinish: async ({ toolResults, toolCalls, usage, finishReason }) => {
             console.log('Chat API: Finish reason:', finishReason);
             console.log('Chat API: Session ID:', _sessionId, sessionId);
+            
+            // Call preview tool
+            if (tools && tools["preview"] && tools["preview"].execute && (_sessionId || sessionId)) {
+              console.log('Chat API: Executing preview tool with session ID:', _sessionId || sessionId);
+              const previewResult = await tools["preview"].execute({
+                sessionId: _sessionId || sessionId,
+              }, { toolCallId: "", messages: [] });
+
+              console.log('Chat API: Preview tool result:', previewResult);
+
+              // Parse the preview data from the content
+              if (previewResult.content && previewResult.content[0] && previewResult.content[0].text) {
+                try {
+                  console.log('Chat API: Extracting URL from preview content:', previewResult.content[0].text);
+                  const result = await generateObject({
+                    model: "openai/gpt-4o-mini",
+                    schema: z.object({
+                      url: z.string().min(1).describe("The URL of the preview")
+                    }),
+                    prompt: `Extract the preview URL from the tool result: ${JSON.stringify(previewResult.content[0].text, null, 2)}`,
+                  });
+
+                  console.log('Chat API: Extracted preview URL:', result.object.url);
+                  writer.write({
+                    type: 'data-preview',
+                    data: { url: result.object.url },
+                  });
+
+                  writer.write({
+                    type: 'data-payment',
+                    data: { paid: true },
+                  });
+                } catch (error) {
+                  console.error('Error parsing preview result:', error);
+                }
+              } else {
+                console.log('Chat API: No valid preview content found in tool result');
+              }
+            } else {
+              console.log('Chat API: Preview tool not available or no session ID');
+            }
+            
             if (tools && tools["get_all_codebase"] && tools["get_all_codebase"].execute && (_sessionId || sessionId)) {
               const codebaseResult = await tools["get_all_codebase"].execute({
                 sessionId: _sessionId || sessionId,
