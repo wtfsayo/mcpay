@@ -291,47 +291,33 @@ export function extractPaymentFromAnnotations(annotations: unknown, userWalletAd
       const currency = paymentOption.currency || 'USD'
       const network = (paymentOption.network || 'base-sepolia') as UnifiedNetwork
 
-      // For USD prices, convert to USDC base units
+      // For USD prices, always return both base-sepolia and sei-testnet USDC options
       if (currency === 'USD' || currency === 'usd') {
-        const targetToken = resolveTokenForCurrency('USDC', network)
-        if (!targetToken) {
-          console.warn(`USDC not available on network ${network}, falling back to base-sepolia`)
-          const fallbackToken = resolveTokenForCurrency('USDC', 'base-sepolia')
-          const fallbackToken2 = resolveTokenForCurrency('USDC', 'sei-testnet')
-          if (!fallbackToken || !fallbackToken2) {
-            throw new Error('USDC not available on fallback network')
-          }
-
-          return [{
-            id: nanoid(),
-            active: true,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            assetAddress: fallbackToken.address || getDefaultUSDCAddress(network),
-            network,
-            maxAmountRequiredRaw: toBaseUnits(String(price || 0), fallbackToken.decimals),
-            tokenDecimals: fallbackToken.decimals,
-          }, {
-            id: nanoid(),
-            active: true,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            assetAddress: fallbackToken2.address || getDefaultUSDCAddress(network),
-            network,
-            maxAmountRequiredRaw: toBaseUnits(String(price || 0), fallbackToken2.decimals),
-            tokenDecimals: fallbackToken2.decimals,
-          }]
+        const baseSepolia = resolveTokenForCurrency('USDC', 'base-sepolia')
+        const seiTestnet = resolveTokenForCurrency('USDC', 'sei-testnet')
+        
+        if (!baseSepolia || !seiTestnet) {
+          throw new Error('USDC not available on required networks (base-sepolia and sei-testnet)')
         }
 
         return [{
           id: nanoid(),
-          assetAddress: targetToken.address || getDefaultUSDCAddress(network),
-          network,
-          maxAmountRequiredRaw: toBaseUnits(String(price || 0), targetToken.decimals),
-          tokenDecimals: targetToken.decimals,
           active: true,
           createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
+          updatedAt: new Date().toISOString(),
+          assetAddress: baseSepolia.address || getDefaultUSDCAddress('base-sepolia'),
+          network: 'base-sepolia',
+          maxAmountRequiredRaw: toBaseUnits(String(price || 0), baseSepolia.decimals),
+          tokenDecimals: baseSepolia.decimals,
+        }, {
+          id: nanoid(),
+          active: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          assetAddress: seiTestnet.address || getDefaultUSDCAddress('sei-testnet'),
+          network: 'sei-testnet',
+          maxAmountRequiredRaw: toBaseUnits(String(price || 0), seiTestnet.decimals),
+          tokenDecimals: seiTestnet.decimals,
         }]
       }
 
@@ -366,6 +352,37 @@ export function extractPaymentFromAnnotations(annotations: unknown, userWalletAd
         throw new AmountConversionError(`Invalid rawAmount format: ${rawAmount}`)
       }
 
+      // For USDC, always return both base-sepolia and sei-testnet options
+      if (tokenSymbol.toUpperCase() === 'USDC') {
+        const baseSepolia = resolveTokenForCurrency('USDC', 'base-sepolia')
+        const seiTestnet = resolveTokenForCurrency('USDC', 'sei-testnet')
+        
+        if (!baseSepolia || !seiTestnet) {
+          throw new Error('USDC not available on required networks (base-sepolia and sei-testnet)')
+        }
+
+        return [{
+          id: nanoid(),
+          active: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          assetAddress: baseSepolia.address || getDefaultUSDCAddress('base-sepolia'),
+          network: 'base-sepolia',
+          maxAmountRequiredRaw: rawAmount,
+          tokenDecimals: baseSepolia.decimals,
+        }, {
+          id: nanoid(),
+          active: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          assetAddress: seiTestnet.address || getDefaultUSDCAddress('sei-testnet'),
+          network: 'sei-testnet',
+          maxAmountRequiredRaw: rawAmount,
+          tokenDecimals: seiTestnet.decimals,
+        }]
+      }
+
+      // For other tokens, use the specified network
       const token = resolveTokenForCurrency(tokenSymbol, network)
       if (!token) {
         console.warn(`Token ${tokenSymbol} not found on network ${network}`)
