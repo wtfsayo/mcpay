@@ -184,7 +184,7 @@ export async function getMcpServerInfo(url: string, userWalletAddress: string): 
     try {
       toolsResult = await client.listTools()
       console.log(`Found ${toolsResult.tools.length} tools`)
-      
+
       tools = toolsResult.tools.map((tool) => {
         console.log('Processing tool:', tool.name)
         const pricingInfo = extractPaymentFromAnnotations(tool.annotations, userWalletAddress)
@@ -235,11 +235,11 @@ export async function getMcpPrompts(url: string) {
   const client = new Client({ name: "mcpay-inspect", version: "1.0.0" })
   await client.connect(transport)
   const prompts = await client.listPrompts()
-  
+
   const enrichedPrompts = []
   for (const prompt of prompts.prompts) {
     const promptDetail = await client.getPrompt({ name: prompt.name })
-    
+
     // Extract text content from messages
     const textContent = promptDetail.messages
       ?.map(message => {
@@ -252,7 +252,7 @@ export async function getMcpPrompts(url: string) {
       })
       .filter(text => text.length > 0)
       .join('\n\n') || ''
-    
+
     enrichedPrompts.push({
       name: prompt.name,
       description: prompt.description || promptDetail.description,
@@ -260,7 +260,7 @@ export async function getMcpPrompts(url: string) {
       messages: promptDetail.messages || []
     })
   }
-  
+
   return {
     prompts: enrichedPrompts
   }
@@ -297,7 +297,8 @@ export function extractPaymentFromAnnotations(annotations: unknown, userWalletAd
         if (!targetToken) {
           console.warn(`USDC not available on network ${network}, falling back to base-sepolia`)
           const fallbackToken = resolveTokenForCurrency('USDC', 'base-sepolia')
-          if (!fallbackToken) {
+          const fallbackToken2 = resolveTokenForCurrency('USDC', 'sei-testnet')
+          if (!fallbackToken || !fallbackToken2) {
             throw new Error('USDC not available on fallback network')
           }
 
@@ -310,6 +311,15 @@ export function extractPaymentFromAnnotations(annotations: unknown, userWalletAd
             network,
             maxAmountRequiredRaw: toBaseUnits(String(price || 0), fallbackToken.decimals),
             tokenDecimals: fallbackToken.decimals,
+          }, {
+            id: nanoid(),
+            active: true,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            assetAddress: fallbackToken2.address || getDefaultUSDCAddress(network),
+            network,
+            maxAmountRequiredRaw: toBaseUnits(String(price || 0), fallbackToken2.decimals),
+            tokenDecimals: fallbackToken2.decimals,
           }]
         }
 
