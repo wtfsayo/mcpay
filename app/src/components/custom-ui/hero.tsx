@@ -104,8 +104,6 @@ export default function Hero({
                 animate={{ opacity: 1, filter: "blur(0px) saturate(1)" }}
                 transition={{ duration: prefersReduced ? 0 : 0.8, ease: easeOut }}
               >
-                Tool–Call Based
-                <br className="hidden sm:block" />{" "}
                 <span className="sm:ml-1">Payments for MCPs</span>
               </motion.h1>
             </div>
