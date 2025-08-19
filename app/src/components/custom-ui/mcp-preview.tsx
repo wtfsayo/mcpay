@@ -233,7 +233,7 @@ export function McpPreview({ url, userWalletAddress }: McpPreviewProps) {
             setSelectedTool(null);
           }}
           tool={selectedTool}
-          url={url as string}
+          url={`https://corsproxy.io/?${encodeURIComponent(url as string)}`}
         />
       )}
     </>
