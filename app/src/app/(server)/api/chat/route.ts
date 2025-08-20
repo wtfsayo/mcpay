@@ -158,12 +158,19 @@ export async function POST(req: Request) {
       execute: ({ writer }) => {
 
         let _sessionId = "";
+        let previewRanDuringStream = false;
         const result = streamText({
           system: systemPrompt?.content || "You are a helpful assistant.",
           model: "openai/gpt-4o",
           messages: modelMessages,
           tools,
           onStepFinish: async ({ toolResults, toolCalls, usage, finishReason }) => {
+            if (Array.isArray(toolCalls)) {
+              const previewCalledThisStep = toolCalls.some((call: { toolName?: string }) => call?.toolName === 'preview');
+              if (previewCalledThisStep) {
+                previewRanDuringStream = true;
+              }
+            }
             toolResults.forEach(async (toolResult) => {
               if (toolResult.toolName === 'create_session') {
                 const result = await generateObject({
@@ -188,6 +195,7 @@ export async function POST(req: Request) {
                 _sessionId = result.object.sessionId;
               }
               if (toolResult.toolName === 'preview') {
+                previewRanDuringStream = true;
                 const result = await generateObject({
                   model: "openai/gpt-4o-mini",
                   schema: z.object({
@@ -219,7 +227,7 @@ export async function POST(req: Request) {
 
             if (currentSessionId) {
               const previewTool = tools?.["preview"];
-              if (previewTool && typeof previewTool.execute === 'function') {
+              if (!previewRanDuringStream && previewTool && typeof previewTool.execute === 'function') {
                 parallelTasks.push((async () => {
                   try {
                     console.log('Chat API: Executing preview tool with session ID:', currentSessionId);
@@ -261,6 +269,8 @@ export async function POST(req: Request) {
                     console.error('Error parsing preview result:', error);
                   }
                 })());
+              } else if (previewRanDuringStream) {
+                console.log('Chat API: Skipping preview execution in onFinish because it already ran during stream');
               } else {
                 console.log('Chat API: Preview tool not available');
               }

@@ -194,7 +194,8 @@ export default function ChatWithPreview({
           codebase,
           repoName: 'mcpay-app',
           isPrivate: true,
-          env: requiredEnvKeys,
+          // Always include MCPAY essentials in the env list sent to the deploy system
+          env: Array.from(new Set([...requiredEnvKeys, 'MCPAY_API_KEY', 'MCPAY_API_URL'])),
           projectName: 'mcpay-app',
           redirectPath: '/build?deployed=1'
         }),
