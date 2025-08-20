@@ -71,9 +71,10 @@ export default function ChatWithPreview({
   }
 
   const requiredEnvKeys = useMemo(() => {
-    const fallback = ['MCPAY_API_KEY', 'MCPAY_API_URL'];
+    // Always require MCPAY essentials
+    const mustHave = ['MCPAY_API_KEY', 'MCPAY_API_URL'];
     try {
-      if (!codebase) return fallback;
+      if (!codebase) return mustHave;
       const parsed = JSON.parse(codebase) as CodebasePayload;
       const files = parsed?.files || {};
       const candidates = Object.keys(files).filter((p) => {
@@ -88,17 +89,18 @@ export default function ChatWithPreview({
         );
       });
 
-      const allKeys = new Set<string>();
+      const discoveredKeys = new Set<string>();
       for (const filePath of candidates) {
         const content = files[filePath]?.content || '';
-        for (const k of extractEnvKeysFromContent(content)) allKeys.add(k);
+        for (const k of extractEnvKeysFromContent(content)) discoveredKeys.add(k);
       }
 
-      const deduped = Array.from(allKeys);
-      if (deduped.length === 0) return fallback;
-      return deduped;
+      const deduped = Array.from(discoveredKeys);
+      // Merge discovered keys with required MCPAY keys (MCPAY first for UX)
+      const merged = Array.from(new Set<string>([...mustHave, ...deduped]));
+      return merged;
     } catch (_err) {
-      return fallback;
+      return mustHave;
     }
   }, [codebase]);
   const [envValues, setEnvValues] = useState<Record<string, string>>({});

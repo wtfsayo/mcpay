@@ -186,22 +186,25 @@ async function putFileViaContentsApi(token: string, owner: string, repo: string,
 }
 
 export async function deployWithGitHub(input: DeployRequestInput, userId: string, userLogin?: string): Promise<DeployResult> {
+  // Ensure MCPAY keys are always included in env list passed to Vercel
+  const ensuredEnv = Array.from(new Set<string>([...(input?.env || []), 'MCPAY_API_KEY', 'MCPAY_API_URL']));
+  const safeInput: DeployRequestInput = { ...input, env: ensuredEnv };
   // If repositoryUrl is provided, import existing repo into Vercel directly
-  if (input?.repositoryUrl) {
-    const repositoryUrl = input.repositoryUrl;
+  if (safeInput?.repositoryUrl) {
+    const repositoryUrl = safeInput.repositoryUrl;
 
     // Build Vercel import URL (/new/import uses 's' for source URL)
     const params = new URLSearchParams();
     params.set('s', repositoryUrl);
-    params.set('project-name', input.projectName || 'mcpay-app');
-    params.set('framework', input.framework || 'hono');
-    if (input.teamSlug) params.set('teamSlug', input.teamSlug);
-    if (input.repoName) params.set('repo-name', input.repoName);
-    if (input.env && input.env.length > 0) {
-      params.set('env', input.env.join(','));
+    params.set('project-name', safeInput.projectName || 'mcpay-app');
+    params.set('framework', safeInput.framework || 'hono');
+    if (safeInput.teamSlug) params.set('teamSlug', safeInput.teamSlug);
+    if (safeInput.repoName) params.set('repo-name', safeInput.repoName);
+    if (safeInput.env && safeInput.env.length > 0) {
+      params.set('env', safeInput.env.join(','));
     }
-    if (input.envDescription) params.set('envDescription', input.envDescription);
-    if (input.envLink) params.set('envLink', input.envLink);
+    if (safeInput.envDescription) params.set('envDescription', safeInput.envDescription);
+    if (safeInput.envLink) params.set('envLink', safeInput.envLink);
 
     // Attempt to parse owner/repo (GitHub only) for return payload
     let owner = '';
@@ -223,14 +226,14 @@ export async function deployWithGitHub(input: DeployRequestInput, userId: string
     return { owner, repo, repositoryUrl, vercelDeployUrl };
   }
 
-  if (!input?.codebase) {
+  if (!safeInput?.codebase) {
     throw new Error('Missing codebase or repositoryUrl');
   }
 
   // Parse codebase JSON
   let parsed: CodebasePayload;
   try {
-    parsed = JSON.parse(input.codebase) as CodebasePayload;
+    parsed = JSON.parse(safeInput.codebase) as CodebasePayload;
     if (!parsed || typeof parsed !== 'object' || !parsed.files) {
       throw new Error('Invalid codebase format');
     }
@@ -253,16 +256,16 @@ export async function deployWithGitHub(input: DeployRequestInput, userId: string
   }
 
   // Determine owner
-  const ownerLogin = input.organization || userLogin || (await getGitHubOwnerLogin(token));
-  const desiredName = input.repoName || 'mcpay-app';
+  const ownerLogin = safeInput.organization || userLogin || (await getGitHubOwnerLogin(token));
+  const desiredName = safeInput.repoName || 'mcpay-app';
   const name = await ensureUniqueRepoName(token, desiredName, ownerLogin, Boolean(input.organization));
 
   // Create repository (auto-initialize with README so default branch exists)
   const created = await createRepository(token, {
     name,
     // If only public_repo, force public repo creation
-    privateRepo: hasRepoScope ? (input.isPrivate !== false) : false,
-    organization: input.organization,
+    privateRepo: hasRepoScope ? (safeInput.isPrivate !== false) : false,
+    organization: safeInput.organization,
     description: 'Created by MCPay Build',
   });
 
@@ -284,15 +287,15 @@ export async function deployWithGitHub(input: DeployRequestInput, userId: string
   // Build Vercel import URL (/new/import uses 's' for source URL)
   const params = new URLSearchParams();
   params.set('s', repositoryUrl);
-  params.set('project-name', input.projectName || repo);
-  params.set('framework', input.framework || 'hono');
-  if (input.teamSlug) params.set('teamSlug', input.teamSlug);
-  if (input.repoName) params.set('repo-name', input.repoName);
-  if (input.env && input.env.length > 0) {
-    params.set('env', input.env.join(','));
+  params.set('project-name', safeInput.projectName || repo);
+  params.set('framework', safeInput.framework || 'hono');
+  if (safeInput.teamSlug) params.set('teamSlug', safeInput.teamSlug);
+  if (safeInput.repoName) params.set('repo-name', safeInput.repoName);
+  if (safeInput.env && safeInput.env.length > 0) {
+    params.set('env', safeInput.env.join(','));
   }
-  if (input.envDescription) params.set('envDescription', input.envDescription);
-  if (input.envLink) params.set('envLink', input.envLink);
+  if (safeInput.envDescription) params.set('envDescription', safeInput.envDescription);
+  if (safeInput.envLink) params.set('envLink', safeInput.envLink);
 
   // Use Vercel Import flow to deploy the repository directly
   const vercelDeployUrl = `https://vercel.com/new/import?${params.toString()}`;
