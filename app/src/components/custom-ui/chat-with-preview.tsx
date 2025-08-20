@@ -54,8 +54,53 @@ export default function ChatWithPreview({
   const completedCount = useMemo(() => steps.filter(s => s.status === 'success').length, [steps]);
   const totalCount = steps.length;
   const progressValue = Math.round((completedCount / totalCount) * 100);
+  // Infer required env keys from provided codebase (.env, .env.example, env.example)
+  type CodebaseFileEntry = { content: string; lastModified?: number; size?: number; lastModifiedISO?: string };
+  type CodebasePayload = { files: Record<string, CodebaseFileEntry> };
 
-  const requiredEnvKeys = useMemo(() => ['MCPAY_API_KEY', 'MCPAY_API_URL'], []);
+  function extractEnvKeysFromContent(content: string): string[] {
+    const keys = new Set<string>();
+    const lines = content.split(/\r?\n/);
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('#')) continue;
+      const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=/);
+      if (match && match[1]) keys.add(match[1]);
+    }
+    return Array.from(keys);
+  }
+
+  const requiredEnvKeys = useMemo(() => {
+    const fallback = ['MCPAY_API_KEY', 'MCPAY_API_URL'];
+    try {
+      if (!codebase) return fallback;
+      const parsed = JSON.parse(codebase) as CodebasePayload;
+      const files = parsed?.files || {};
+      const candidates = Object.keys(files).filter((p) => {
+        const name = p.split('/').pop() || p;
+        // common env filenames
+        return (
+          name === '.env' ||
+          name === '.env.example' ||
+          name === 'env.example' ||
+          name === 'env' ||
+          /^\.env\./.test(name) // .env.local, .env.production, etc.
+        );
+      });
+
+      const allKeys = new Set<string>();
+      for (const filePath of candidates) {
+        const content = files[filePath]?.content || '';
+        for (const k of extractEnvKeysFromContent(content)) allKeys.add(k);
+      }
+
+      const deduped = Array.from(allKeys);
+      if (deduped.length === 0) return fallback;
+      return deduped;
+    } catch (_err) {
+      return fallback;
+    }
+  }, [codebase]);
   const [envValues, setEnvValues] = useState<Record<string, string>>({});
   const [envCopied, setEnvCopied] = useState<Record<string, boolean>>({});
   const allEnvCopied = requiredEnvKeys.every((k) => envCopied[k]);
@@ -99,14 +144,17 @@ export default function ChatWithPreview({
     setVercelUrl(null);
     setRepoUrl(null);
     // Prepare env values for the user to copy in Vercel
-    const preparedEnv: Record<string, string> = {
-      MCPAY_API_KEY: generateClientApiKey(),
-      MCPAY_API_URL: deriveApiUrl(),
-    };
+    const preparedEnv: Record<string, string> = {};
+    // Provide sensible defaults for known keys
+    for (const key of requiredEnvKeys) {
+      if (key === 'MCPAY_API_KEY') preparedEnv[key] = generateClientApiKey();
+      else if (key === 'MCPAY_API_URL') preparedEnv[key] = deriveApiUrl();
+      else preparedEnv[key] = '';
+    }
 
     // If user is authenticated, create a real API key via our API
     try {
-      if (session?.user?.id) {
+      if (session?.user?.id && requiredEnvKeys.includes('MCPAY_API_KEY')) {
         const resp = await api.createApiKey(session.user.id, {
           name: 'Deploy Button Key',
           permissions: ['read', 'write', 'execute'],
@@ -144,7 +192,7 @@ export default function ChatWithPreview({
           codebase,
           repoName: 'mcpay-app',
           isPrivate: true,
-          env: ['MCPAY_API_KEY', 'MCPAY_API_URL'],
+          env: requiredEnvKeys,
           projectName: 'mcpay-app',
           redirectPath: '/build?deployed=1'
         }),
