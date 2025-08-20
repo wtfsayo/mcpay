@@ -214,65 +214,88 @@ export async function POST(req: Request) {
           onFinish: async ({ toolResults, toolCalls, usage, finishReason }) => {
             console.log('Chat API: Finish reason:', finishReason);
             console.log('Chat API: Session ID:', _sessionId, sessionId);
-            
-            // Call preview tool
-            if (tools && tools["preview"] && tools["preview"].execute && (_sessionId || sessionId)) {
-              console.log('Chat API: Executing preview tool with session ID:', _sessionId || sessionId);
-              const previewResult = await tools["preview"].execute({
-                sessionId: _sessionId || sessionId,
-              }, { toolCallId: "", messages: [] });
+            const currentSessionId = _sessionId || sessionId;
+            const parallelTasks: Promise<void>[] = [];
 
-              console.log('Chat API: Preview tool result:', previewResult);
+            if (currentSessionId) {
+              const previewTool = tools?.["preview"];
+              if (previewTool && typeof previewTool.execute === 'function') {
+                parallelTasks.push((async () => {
+                  try {
+                    console.log('Chat API: Executing preview tool with session ID:', currentSessionId);
+                    const previewResult = await previewTool.execute?.({
+                      sessionId: currentSessionId,
+                    }, { toolCallId: "", messages: [] });
 
-              // Parse the preview data from the content
-              if (previewResult.content && previewResult.content[0] && previewResult.content[0].text) {
-                try {
-                  console.log('Chat API: Extracting URL from preview content:', previewResult.content[0].text);
-                  const result = await generateObject({
-                    model: "openai/gpt-4o-mini",
-                    schema: z.object({
-                      url: z.string().min(1).describe("The URL of the preview")
-                    }),
-                    prompt: `Extract the preview URL from the tool result: ${JSON.stringify(previewResult.content[0].text, null, 2)}`,
-                  });
+                    if (!previewResult) {
+                      console.log('Chat API: Preview tool returned no result');
+                      return;
+                    }
 
-                  console.log('Chat API: Extracted preview URL:', result.object.url);
-                  writer.write({
-                    type: 'data-preview',
-                    data: { url: result.object.url },
-                  });
+                    console.log('Chat API: Preview tool result:', previewResult);
 
-                  writer.write({
-                    type: 'data-payment',
-                    data: { paid: true },
-                  });
-                } catch (error) {
-                  console.error('Error parsing preview result:', error);
-                }
+                    if (previewResult.content && previewResult.content[0] && previewResult.content[0].text) {
+                      console.log('Chat API: Extracting URL from preview content:', previewResult.content[0].text);
+                      const result = await generateObject({
+                        model: "openai/gpt-4o-mini",
+                        schema: z.object({
+                          url: z.string().min(1).describe("The URL of the preview")
+                        }),
+                        prompt: `Extract the preview URL from the tool result: ${JSON.stringify(previewResult.content[0].text, null, 2)}`,
+                      });
+
+                      console.log('Chat API: Extracted preview URL:', result.object.url);
+                      writer.write({
+                        type: 'data-preview',
+                        data: { url: result.object.url },
+                      });
+
+                      writer.write({
+                        type: 'data-payment',
+                        data: { paid: true },
+                      });
+                    } else {
+                      console.log('Chat API: No valid preview content found in tool result');
+                    }
+                  } catch (error) {
+                    console.error('Error parsing preview result:', error);
+                  }
+                })());
               } else {
-                console.log('Chat API: No valid preview content found in tool result');
+                console.log('Chat API: Preview tool not available');
+              }
+
+              const codebaseTool = tools?.["get_all_codebase"];
+              if (codebaseTool && typeof codebaseTool.execute === 'function') {
+                parallelTasks.push((async () => {
+                  try {
+                    const codebaseResult = await codebaseTool.execute?.({
+                      sessionId: currentSessionId,
+                    }, { toolCallId: "", messages: [] });
+
+                    if (!codebaseResult) {
+                      console.log('Chat API: Codebase tool returned no result');
+                      return;
+                    }
+
+                    if (codebaseResult.content && codebaseResult.content[0] && codebaseResult.content[0].text) {
+                      const codebase = codebaseResult.content[0].text;
+                      writer.write({
+                        type: 'data-codebase',
+                        data: { codebase },
+                      });
+                    }
+                  } catch (error) {
+                    console.error('Error parsing codebase result:', error);
+                  }
+                })());
+              }
+
+              if (parallelTasks.length > 0) {
+                await Promise.allSettled(parallelTasks);
               }
             } else {
-              console.log('Chat API: Preview tool not available or no session ID');
-            }
-            
-            if (tools && tools["get_all_codebase"] && tools["get_all_codebase"].execute && (_sessionId || sessionId)) {
-              const codebaseResult = await tools["get_all_codebase"].execute({
-                sessionId: _sessionId || sessionId,
-              }, { toolCallId: "", messages: [] });
-
-              // Parse the codebase data from the content text
-              if (codebaseResult.content && codebaseResult.content[0] && codebaseResult.content[0].text) {
-                try {
-                  const codebase = codebaseResult.content[0].text;
-                  writer.write({
-                    type: 'data-codebase',
-                    data: { codebase },
-                  });
-                } catch (error) {
-                  console.error('Error parsing codebase result:', error);
-                }
-              }
+              console.log('Chat API: No session ID for executing tools');
             }
           },
         });
