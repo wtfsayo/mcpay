@@ -99,7 +99,7 @@ export default function ChatWithPreview({
     setVercelUrl(null);
     setRepoUrl(null);
     // Prepare env values for the user to copy in Vercel
-    let preparedEnv: Record<string, string> = {
+    const preparedEnv: Record<string, string> = {
       MCPAY_API_KEY: generateClientApiKey(),
       MCPAY_API_URL: deriveApiUrl(),
     };
