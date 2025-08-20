@@ -12,7 +12,7 @@ import Footer from "@/components/custom-ui/footer"
 import { useTheme } from "@/components/providers/theme-context"
 import { api } from "@/lib/client/utils"
 import { getExplorerUrl } from "@/lib/client/blockscout"
-import { formatAmount } from "@/lib/commons"
+import { formatAmount, isNetworkSupported, type UnifiedNetwork } from "@/lib/commons"
 import type { PaymentListItem } from "@/types/payments"
 import { TokenIcon } from "@/components/custom-ui/token-icon"
 import {
@@ -71,11 +71,10 @@ function formatRelativeShort(iso: string, now = Date.now()) {
 }
 
 function safeTxUrl(network: string, hash: string) {
-  try {
-    return getExplorerUrl(hash, network as unknown as any, 'tx')
-  } catch {
-    return `https://etherscan.io/tx/${hash}`
+  if (isNetworkSupported(network)) {
+    return getExplorerUrl(hash, network as UnifiedNetwork, 'tx')
   }
+  return `https://etherscan.io/tx/${hash}`
 }
 
 // No dummy rows; we now use real API
