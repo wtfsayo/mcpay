@@ -1,7 +1,6 @@
 import db from '@/lib/gateway/db';
 import * as schema from '@/lib/gateway/db/schema';
 import { and, eq } from 'drizzle-orm';
-import { DEPLOYMENT_URL } from 'vercel-url';
 
 type CodebaseFileEntry = {
   content: string;

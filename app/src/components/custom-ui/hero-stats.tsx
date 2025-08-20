@@ -13,8 +13,8 @@ import {
 } from "motion/react"
 import { useEffect, useMemo, useState } from "react"
 
-export default function HeroStats() {
-  const [liveServers, setLiveServers] = useState<number | null>(null)
+export default function HeroStats() { 
+  const [stats, setStats] = useState<ComprehenstiveAnalytics | null>(null)
   const prefersReduced = useReducedMotion()
 
   useEffect(() => {
@@ -22,9 +22,9 @@ export default function HeroStats() {
     const fetchAnalytics = async () => {
       try {
         const analytics = await apiCall<ComprehenstiveAnalytics>("/analytics/usage")
-        if (mounted) setLiveServers(Number(analytics?.totalServers ?? 0))
+        if (mounted) setStats(analytics)
       } catch {
-        if (mounted) setLiveServers(0)
+        if (mounted) setStats(null)
       }
     }
     fetchAnalytics()
@@ -58,7 +58,7 @@ export default function HeroStats() {
     [prefersReduced]
   )
 
-  const isLoading = liveServers === null
+  const isLoading = stats === null
 
   const Stat = ({
     label,
@@ -128,9 +128,9 @@ export default function HeroStats() {
       initial="hidden"
       animate="visible" // animate immediately on mount
     >
-      <Stat label="Live Servers" value={liveServers} loading={isLoading} />
-      <Stat label="Tools" value={1293} loading={isLoading} />
-      <Stat label="Transactions" value={218} loading={isLoading} />
+      <Stat label="Live Servers" value={stats?.activeServers ?? 0} loading={isLoading} />
+      <Stat label="Tools" value={stats?.totalTools ?? 0} loading={isLoading} />
+      <Stat label="Transactions" value={stats?.totalRequests ?? 0} loading={isLoading} />
     </motion.div>
   )
 }
