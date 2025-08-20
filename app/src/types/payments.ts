@@ -40,3 +40,24 @@ export function getActivePricing(pricing: PricingEntry[] | null): PricingEntry |
 export function hasActivePricing(pricing: PricingEntry[] | null): boolean {
     return getActivePricing(pricing) !== null;
 }
+
+// Explorer/latest payments API types
+export type PaymentListItem = {
+    id: string;
+    status: 'success' | 'pending' | 'failed';
+    serverId?: string;
+    serverName?: string;
+    tool?: string;
+    amountRaw: string;
+    tokenDecimals: number;
+    currency: string;
+    network: string;
+    user: string;
+    timestamp: string;
+    txHash: string;
+};
+
+export interface LatestPaymentsResponse {
+    items: PaymentListItem[];
+    total: number;
+}

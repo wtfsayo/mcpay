@@ -1,15 +1,8 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import Image from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
-import {
-  CheckCircle2,
-  Clock,
-  XCircle,
-  ExternalLink,
-  Copy,
-} from "lucide-react"
+import { CheckCircle2, ExternalLink, Copy } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -17,7 +10,11 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import Footer from "@/components/custom-ui/footer"
 import { useTheme } from "@/components/providers/theme-context"
-import { urlUtils } from "@/lib/client/utils"
+import { api } from "@/lib/client/utils"
+import { getExplorerUrl } from "@/lib/client/blockscout"
+import { formatAmount } from "@/lib/commons"
+import type { PaymentListItem } from "@/types/payments"
+import { TokenIcon } from "@/components/custom-ui/token-icon"
 import {
   Pagination,
   PaginationContent,
@@ -28,38 +25,28 @@ import {
   PaginationEllipsis,
 } from "@/components/ui/pagination"
 
-/* ---------------- Types (API-ready) ---------------- */
+/* ---------------- Types used by UI ---------------- */
 type PaymentStatus = "success" | "pending" | "failed"
-
-export interface ExplorerPayment {
+type ExplorerRow = {
   id: string
   status: PaymentStatus
-  serverId: string
-  serverName: string
-  tool: string
-  amountUSDC: number
-  network: "base-sepolia" | "base" | string
+  serverName?: string
+  tool?: string
+  amountFormatted: string
+  currency?: string
+  network: string
   user: string
   timestamp: string
   txHash: string
 }
-type ApiArrayResponse = ExplorerPayment[]
-type ApiObjectResponse = { items: ExplorerPayment[]; total: number }
 
 /* 24 rows per page */
 const PAGE_SIZE = 24
+const POLL_INTERVAL_MS = 10000
 
 /* ---------------- Helpers ---------------- */
-const formatUSDC = (n: number) => `$${n.toFixed(2)}`
 const truncateHash = (h: string, left = 6, right = 7) =>
   h.length > left + right + 3 ? `${h.slice(0, left)}...${h.slice(-right)}` : h
-
-const txExplorers: Record<string, (hash: string) => string> = {
-  "base-sepolia": (h) => `https://sepolia.basescan.org/tx/${h}`,
-  base: (h) => `https://basescan.org/tx/${h}`,
-}
-const getTxUrl = (network: string, hash: string) =>
-  txExplorers[network]?.(hash) ?? `https://etherscan.io/tx/${hash}`
 
 /* relative time with short units (secs, mins, hrs, days…) */
 function formatRelativeShort(iso: string, now = Date.now()) {
@@ -83,19 +70,15 @@ function formatRelativeShort(iso: string, now = Date.now()) {
   return `${value.n} ${value.u} ${diffMs <= 0 ? "ago" : "from now"}`
 }
 
-/* Dummy data until API is ready */
-const DUMMY_ROWS: ExplorerPayment[] = Array.from({ length: 120 }).map((_, i) => ({
-  id: `row-${i + 1}`,
-  status: "success",
-  serverId: "mcpay-build",
-  serverName: "MCPay Build",
-  tool: "create_session",
-  amountUSDC: 0.01,
-  network: "base-sepolia",
-  user: "Luís Freitas",
-  timestamp: "2025-08-20T13:04:00.000Z",
-  txHash: `0xf98dd4a0d4ca1b66c12a76b9a118c04a0b5c9f23${(1000 + i).toString(16)}`,
-}))
+function safeTxUrl(network: string, hash: string) {
+  try {
+    return getExplorerUrl(hash, network as unknown as any, 'tx')
+  } catch {
+    return `https://etherscan.io/tx/${hash}`
+  }
+}
+
+// No dummy rows; we now use real API
 
 export default function ClientExplorerPage() {
   const { isDark } = useTheme()
@@ -105,11 +88,12 @@ export default function ClientExplorerPage() {
   const pageFromQuery = Number(searchParams.get("page") || "1")
   const [page, setPage] = useState<number>(Number.isFinite(pageFromQuery) && pageFromQuery > 0 ? pageFromQuery : 1)
 
-  const [rows, setRows] = useState<ExplorerPayment[]>([])
+  const [rows, setRows] = useState<ExplorerRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [hasNext, setHasNext] = useState(false)
   const [totalCount, setTotalCount] = useState<number | null>(null)
+  const [tick, setTick] = useState(0)
 
   const totalPages = useMemo(() => {
     if (totalCount != null) return Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
@@ -132,49 +116,50 @@ export default function ClientExplorerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageFromQuery])
 
-  /* fetch (or dummy) */
+  /* polling timer */
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), POLL_INTERVAL_MS)
+    return () => clearInterval(id)
+  }, [page])
+
+  /* fetch */
   useEffect(() => {
     const controller = new AbortController()
     const fetchRows = async () => {
-      setLoading(true)
+      const isPoll = tick > 0
+      if (!isPoll) setLoading(true)
       setError(null)
-      const USE_DUMMY = true
 
       try {
         const offset = (page - 1) * PAGE_SIZE
-        if (USE_DUMMY) {
-          setRows(DUMMY_ROWS.slice(offset, offset + PAGE_SIZE))
-          setTotalCount(DUMMY_ROWS.length)
-          setHasNext(offset + PAGE_SIZE < DUMMY_ROWS.length)
-        } else {
-          const res = await fetch(
-            urlUtils.getApiUrl(`/payments?limit=${PAGE_SIZE}&offset=${offset}`),
-            { signal: controller.signal }
-          )
-          if (!res.ok) throw new Error(`Failed to fetch payments: ${res.status}`)
-          const data: ApiArrayResponse | ApiObjectResponse = await res.json()
-          if (Array.isArray(data)) {
-            setRows(data)
-            setTotalCount(null)
-            setHasNext(data.length === PAGE_SIZE)
-          } else {
-            setRows(data.items)
-            setTotalCount(data.total)
-            setHasNext(offset + data.items.length < data.total)
-          }
-        }
+        const { items, total } = await api.getLatestPayments(PAGE_SIZE, offset, 'completed')
+        const mapped: ExplorerRow[] = items.map((p: PaymentListItem) => ({
+          id: p.id,
+          status: p.status as PaymentStatus,
+          serverName: p.serverName,
+          tool: p.tool,
+          amountFormatted: formatAmount(String(p.amountRaw), Number(p.tokenDecimals), { precision: 2, showSymbol: false, symbol: p.currency }),
+          currency: p.currency,
+          network: p.network,
+          user: p.user,
+          timestamp: p.timestamp,
+          txHash: p.txHash,
+        }))
+        setRows(mapped)
+        setTotalCount(total)
+        setHasNext(offset + mapped.length < total)
       } catch (e: unknown) {
         if (e instanceof Error && e.name !== "AbortError") setError(e.message)
         else if (!(e instanceof Error)) setError("Failed to fetch payments")
         setRows([])
       } finally {
-        setLoading(false)
+        if (!isPoll) setLoading(false)
       }
     }
 
     fetchRows()
     return () => controller.abort()
-  }, [page])
+  }, [page, tick])
 
   const go = (p: number) => setPage(Math.max(1, p))
   const goPrev = () => go(page - 1)
@@ -249,7 +234,7 @@ export default function ClientExplorerPage() {
                       </TableRow>
                     ))
                     : rows.map((r) => {
-                      const txUrl = getTxUrl(r.network, r.txHash)
+                      const txUrl = safeTxUrl(r.network, r.txHash)
                       const fullDate = new Date(r.timestamp).toLocaleString(undefined, {
                         year: "numeric",
                         month: "short",
@@ -273,7 +258,7 @@ export default function ClientExplorerPage() {
                                     <CheckCircle2 className="h-4 w-4" />
                                   </div>
                                 </TooltipTrigger>
-                                <TooltipContent>Success</TooltipContent>
+                                <TooltipContent>{r.status === 'success' ? 'Success' : r.status === 'pending' ? 'Pending' : 'Failed'}</TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
                           </TableCell>
@@ -288,23 +273,16 @@ export default function ClientExplorerPage() {
                             {r.tool}
                           </TableCell>
 
-                          {/* Amount + USDC tooltip */}
+                          {/* Amount + currency tooltip with token icon */}
                           <TableCell className={`${td} font-mono`}>
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <div className="flex items-center gap-2 text-xs sm:text-sm">
-                                    <Image
-                                      src="/USDC_Icon_transparent.svg"
-                                      alt="USDC"
-                                      width={16}
-                                      height={16}
-                                      className="h-4 w-4"
-                                    />
-                                    <span className="text-foreground">{formatUSDC(r.amountUSDC)}</span>
+                                    <TokenIcon currencyOrAddress={r.currency} network={r.network} size={16} />
+                                    <span className="text-foreground">{r.amountFormatted}</span>
                                   </div>
                                 </TooltipTrigger>
-                                <TooltipContent>USDC</TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
                           </TableCell>

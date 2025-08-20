@@ -68,14 +68,14 @@ export default function Navbar() {
             <Button
               asChild
               variant="link"
-              className={`${linkClasses} ${pathname === "/browse" ? activeLinkClasses : ""}`}
+              className={`${linkClasses} ${pathname === "/servers" ? activeLinkClasses : ""}`}
             >
               <Link href="/servers">BROWSE</Link>
             </Button>
             <Button
               asChild
               variant="link"
-              className={`${linkClasses} ${pathname === "/monetize" ? activeLinkClasses : ""}`}
+              className={`${linkClasses} ${pathname === "/register" ? activeLinkClasses : ""}`}
             >
               <Link href="/register">MONETIZE</Link>
             </Button>

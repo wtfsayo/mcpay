@@ -596,6 +596,24 @@ app.get('/servers/:serverId/proofs', async (c) => {
     }
 });
 
+// Latest payments (public explorer)
+app.get('/payments', async (c) => {
+    try {
+        const limit = c.req.query('limit') ? parseInt(c.req.query('limit') as string) : 24;
+        const offset = c.req.query('offset') ? parseInt(c.req.query('offset') as string) : 0;
+        const status = c.req.query('status') as string | undefined; // optional filter
+
+        const { items, total } = await withTransaction(async (tx) => {
+            return await txOperations.listLatestPayments(limit, offset, { status })(tx);
+        });
+
+        return c.json({ items, total });
+    } catch (error) {
+        console.error('Error fetching latest payments:', error);
+        return c.json({ error: (error as Error).message }, 500);
+    }
+});
+
 app.get('/users/:userId/proofs', async (c) => {
     try {
         const userId = c.req.param('userId');

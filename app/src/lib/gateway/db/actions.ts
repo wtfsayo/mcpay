@@ -1865,6 +1865,79 @@ export const txOperations = {
         });
     },
 
+    // Latest payments (for explorer)
+    listLatestPayments: (limit = 24, offset = 0, options?: { status?: string }) => async (tx: TransactionType) => {
+        const whereClause = options?.status ? eq(payments.status, options.status) : undefined;
+
+        const rows = await tx.query.payments.findMany({
+            where: whereClause,
+            columns: {
+                id: true,
+                amountRaw: true,
+                tokenDecimals: true,
+                currency: true,
+                network: true,
+                status: true,
+                transactionHash: true,
+                createdAt: true
+            },
+            with: {
+                tool: {
+                    columns: {
+                        id: true,
+                        name: true
+                    },
+                    with: {
+                        server: {
+                            columns: {
+                                id: true,
+                                serverId: true,
+                                name: true
+                            }
+                        }
+                    }
+                },
+                user: {
+                    columns: {
+                        id: true,
+                        displayName: true,
+                        name: true,
+                        walletAddress: true
+                    }
+                }
+            },
+            orderBy: [desc(payments.createdAt)],
+            limit,
+            offset
+        });
+
+        // Get total count matching the filter (for pagination)
+        let totalQuery = tx.select({ total: count() }).from(payments);
+        if (whereClause) {
+            // @ts-expect-error drizzle typing for conditional where is not trivial
+            totalQuery = totalQuery.where(whereClause);
+        }
+        const total = await totalQuery.then(rows => Number(rows?.[0]?.total || 0));
+
+        // Normalize shape for explorer clients
+        const items = rows.map(r => ({
+            id: r.id,
+            status: r.status === 'completed' ? 'success' : (r.status === 'pending' ? 'pending' : 'failed'),
+            serverId: r.tool?.server?.serverId,
+            serverName: r.tool?.server?.name,
+            tool: r.tool?.name,
+            amountRaw: r.amountRaw,
+            tokenDecimals: r.tokenDecimals,
+            currency: r.currency,
+            network: r.network,
+            user: r.user?.name || r.user?.displayName || r.user?.walletAddress || 'Anonymous',
+            timestamp: r.createdAt?.toISOString?.() || new Date(r.createdAt as unknown as string).toISOString(),
+            txHash: r.transactionHash || ''
+        }));
+
+        return { items, total };
+    },
+
     // API Keys
     validateApiKey: (keyHash: string) => async (tx: TransactionType) => {
         const apiKey = await tx.query.apiKeys.findFirst({

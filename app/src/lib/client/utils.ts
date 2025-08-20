@@ -1,4 +1,5 @@
 import { PricingEntry } from "@/types"
+import type { LatestPaymentsResponse } from "@/types/payments"
 import { type ApiError } from "@/types/api"
 import { McpServerWithStats, ServerCreateData, ServerRegistrationData, ServerSummaryAnalytics, DailyServerAnalytics, ComprehenstiveAnalytics } from "@/types/mcp"
 import { clsx, type ClassValue } from "clsx"
@@ -259,5 +260,12 @@ export const api = {
 
   getUserPaymentHistory: async (userId: string, limit = 50, offset = 0) => {
     return apiCall(`/users/${userId}/payments?limit=${limit}&offset=${offset}`)
+  },
+
+  // Explorer: latest payments
+  getLatestPayments: async (limit = 24, offset = 0, status?: 'completed' | 'pending' | 'failed'): Promise<LatestPaymentsResponse> => {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+    if (status) params.set('status', status)
+    return apiCall(`/payments?${params.toString()}`)
   }
 }
