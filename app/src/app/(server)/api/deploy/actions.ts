@@ -25,6 +25,8 @@ export type DeployRequestInput = {
   projectName?: string; // override project name in Vercel
   redirectPath?: string; // optional path on our app for redirect after deploy
   repositoryUrl?: string; // optionally deploy an existing repo directly
+  framework?: string; // optional framework hint for Vercel import flow (e.g. 'hono')
+  teamSlug?: string; // optional team slug for Vercel import flow
 };
 
 export type DeployResult = {
@@ -189,19 +191,18 @@ export async function deployWithGitHub(input: DeployRequestInput, userId: string
   if (input?.repositoryUrl) {
     const repositoryUrl = input.repositoryUrl;
 
-    // Build Vercel import URL
+    // Build Vercel import URL (/new/import uses 's' for source URL)
     const params = new URLSearchParams();
-    params.set('repository-url', repositoryUrl);
-    if (input.projectName) params.set('project-name', input.projectName);
+    params.set('s', repositoryUrl);
+    params.set('project-name', input.projectName || 'mcpay-app');
+    params.set('framework', input.framework || 'hono');
+    if (input.teamSlug) params.set('teamSlug', input.teamSlug);
     if (input.repoName) params.set('repo-name', input.repoName);
     if (input.env && input.env.length > 0) {
       params.set('env', input.env.join(','));
     }
     if (input.envDescription) params.set('envDescription', input.envDescription);
     if (input.envLink) params.set('envLink', input.envLink);
-    const redirectBase = DEPLOYMENT_URL || '';
-    const redirect = input.redirectPath && redirectBase ? `${redirectBase}${input.redirectPath}` : (redirectBase ? `${redirectBase}/build?deployed=1` : undefined);
-    if (redirect) params.set('redirect-url', redirect);
 
     // Attempt to parse owner/repo (GitHub only) for return payload
     let owner = '';
@@ -219,7 +220,7 @@ export async function deployWithGitHub(input: DeployRequestInput, userId: string
       // ignore parse errors
     }
 
-    const vercelDeployUrl = `https://vercel.com/new/clone?${params.toString()}`;
+    const vercelDeployUrl = `https://vercel.com/new/import?${params.toString()}`;
     return { owner, repo, repositoryUrl, vercelDeployUrl };
   }
 
@@ -281,22 +282,21 @@ export async function deployWithGitHub(input: DeployRequestInput, userId: string
 
   const repositoryUrl = `https://github.com/${owner}/${repo}`;
 
-  // Build Vercel deploy button URL
+  // Build Vercel import URL (/new/import uses 's' for source URL)
   const params = new URLSearchParams();
-  params.set('repository-url', repositoryUrl);
+  params.set('s', repositoryUrl);
   params.set('project-name', input.projectName || repo);
+  params.set('framework', input.framework || 'hono');
+  if (input.teamSlug) params.set('teamSlug', input.teamSlug);
   if (input.repoName) params.set('repo-name', input.repoName);
   if (input.env && input.env.length > 0) {
     params.set('env', input.env.join(','));
   }
   if (input.envDescription) params.set('envDescription', input.envDescription);
   if (input.envLink) params.set('envLink', input.envLink);
-  const redirectBase = DEPLOYMENT_URL || '';
-  const redirect = input.redirectPath && redirectBase ? `${redirectBase}${input.redirectPath}` : (redirectBase ? `${redirectBase}/build?deployed=1` : undefined);
-  if (redirect) params.set('redirect-url', redirect);
 
-  // Use Vercel Git import flow to deploy the repository directly (not cloning a template)
-  const vercelDeployUrl = `https://vercel.com/new/clone?${params.toString()}`;
+  // Use Vercel Import flow to deploy the repository directly
+  const vercelDeployUrl = `https://vercel.com/new/import?${params.toString()}`;
 
   return { owner, repo, repositoryUrl, vercelDeployUrl };
 }
