@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { CheckCircle2, ArrowUpRight, Copy } from "lucide-react"
 import { toast } from "sonner"
@@ -30,6 +31,7 @@ type PaymentStatus = "success" | "pending" | "failed"
 type ExplorerRow = {
   id: string
   status: PaymentStatus
+  serverId?: string
   serverName?: string
   tool?: string
   amountFormatted: string
@@ -135,6 +137,7 @@ export default function ClientExplorerPage() {
         const mapped: ExplorerRow[] = items.map((p: PaymentListItem) => ({
           id: p.id,
           status: p.status as PaymentStatus,
+          serverId: p.serverId,
           serverName: p.serverName,
           tool: p.tool,
           amountFormatted: formatAmount(String(p.amountRaw), Number(p.tokenDecimals), { precision: 2, showSymbol: false, symbol: p.currency }),
@@ -204,7 +207,7 @@ export default function ClientExplorerPage() {
           </div>
 
           {/* Horizontal scroll on mobile; slightly condensed min width */}
-          <div className="max-w-7xl mx-auto overflow-x-auto">
+          <div className="max-w-7xl lg:max-w-[1800px] mx-auto overflow-x-auto">
             <div className="min-w-[1100px]">
               <Table>
                 <TableHeader>
@@ -263,12 +266,24 @@ export default function ClientExplorerPage() {
 
                           {/* Server */}
                           <TableCell className={`${td}`}>
-                            <div className="text-sm whitespace-nowrap">{r.serverName}</div>
+                            {r.serverName && r.serverId ? (
+                              <Link
+                                href={`/servers/${r.serverId}`}
+                                className="text-[0.95rem] text-foreground/80 hover:text-indigo-500 hover:underline hover:decoration-dotted underline-offset-2 whitespace-nowrap transition-all duration-300"
+                              >
+                                {r.serverName}
+                              </Link>
+                            ) : (
+                              <span className="text-[0.95rem] text-muted-foreground italic">Unknown</span>
+                            )}
                           </TableCell>
 
+
                           {/* Tool */}
-                          <TableCell className={`${td} font-mono font-medium text-xs sm:text-sm text-foreground`}>
-                            {r.tool}
+                          <TableCell className={`${td}`}>
+                            <span className="font-mono text-sm bg-muted px-2 py-0.5 rounded text-foreground">
+                              {r.tool}
+                            </span>
                           </TableCell>
 
                           {/* Amount + currency tooltip with token icon */}
@@ -287,16 +302,18 @@ export default function ClientExplorerPage() {
 
                           {/* Network */}
                           <TableCell className={`${td} font-mono text-xs sm:text-sm text-muted-foreground`}>
-                            {r.network}
+                          <span className="font-mono text-sm border border-foreground-muted px-2 py-0.5 rounded text-foreground-muted">
+                              {r.network}
+                            </span>
                           </TableCell>
 
                           {/* User */}
                           <TableCell className={`${td}`}>
-                            <div className="text-sm whitespace-nowrap">{r.user}</div>
+                            <div className="text-[0.95rem] whitespace-nowrap">{r.user}</div>
                           </TableCell>
 
                           {/* Date: relative, tooltip shows full */}
-                          <TableCell className={`${td} text-xs sm:text-sm text-muted-foreground pr-1`}>
+                          <TableCell className={`${td} text-[0.95rem] sm:text-sm text-muted-foreground pr-1`}>
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger className="cursor-default">
