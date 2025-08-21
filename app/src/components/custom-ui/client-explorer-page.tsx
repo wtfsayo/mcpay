@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { CheckCircle2, ExternalLink, Copy } from "lucide-react"
+import { CheckCircle2, ArrowUpRight, Copy } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -209,7 +209,6 @@ export default function ClientExplorerPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="border-b border-border">
-                    {/* Status header removed visually but kept for a11y, fixed width */}
                     <TableHead className="w-[40px] pr-1 sr-only">Status</TableHead>
                     <TableHead className={`${th} font-mono`}>Server</TableHead>
                     <TableHead className={`${th} font-mono`}>Tool</TableHead>
@@ -310,43 +309,49 @@ export default function ClientExplorerPage() {
 
                           {/* Transaction: right-aligned, reduced left padding */}
                           <TableCell className={`${td} font-mono text-right pr-0 pl-1`}>
-                            <div className="flex items-center justify-end gap-2">
-                              <span className="text-xs sm:text-sm">{truncateHash(r.txHash)}</span>
+                            <div className="flex items-center justify-end gap-1">
+                              <span className="text-xs sm:text-sm mr-2">{truncateHash(r.txHash)}</span>
 
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <Button
                                       size="icon"
-                                      variant="outline"
-                                      className="h-6 w-6 rounded-sm"
-                                      onClick={() => onCopy(r.txHash, "Copied transaction hash")}
+                                      variant="ghost"
+                                      className="group h-7 w-7 rounded-sm"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        onCopy(r.txHash, "Copied transaction hash")
+                                      }}
                                     >
-                                      <Copy className="size-3 stroke-[2.5]" />
+                                      <Copy className="size-4 stroke-[2] text-muted-foreground group-hover:text-foreground transition-all duration-300" />
                                     </Button>
                                   </TooltipTrigger>
-                                  <TooltipContent>Copy hash</TooltipContent>
+                                  <TooltipContent>Copy</TooltipContent>
                                 </Tooltip>
+
 
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <a
-                                      href={txUrl}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      onClick={(e) => e.stopPropagation()}
+                                    <Button
+                                      asChild
+                                      size="icon"
+                                      variant="ghost"
+                                      className="group h-7 w-7 rounded-sm"
                                     >
-                                      <Button
-                                        size="icon"
-                                        variant="outline"
-                                        className="h-6 w-6 rounded-sm"
+                                      <a
+                                        href={txUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        onClick={(e) => e.stopPropagation()}
                                       >
-                                        <ExternalLink className="size-3 stroke-[2.5]" />
-                                      </Button>
-                                    </a>
+                                        <ArrowUpRight className="size-5 stroke-[2] text-muted-foreground/80 group-hover:text-foreground transition-all duration-300" />
+                                      </a>
+                                    </Button>
                                   </TooltipTrigger>
-                                  <TooltipContent>Open in explorer</TooltipContent>
+                                  <TooltipContent>Transaction Details</TooltipContent>
                                 </Tooltip>
+
                               </TooltipProvider>
                             </div>
                           </TableCell>
