@@ -39,8 +39,12 @@ export default function ContentCards() {
               />
 
               <div className="mt-6">
-                <Button variant="ghostCustomSecondary" className="cursor-pointer w-full">
-                  View All Servers
+                <Button
+                  asChild
+                  variant="ghostCustomSecondary"
+                  className="cursor-pointer w-full"
+                >
+                  <Link href="/servers">View All Servers</Link>
                 </Button>
               </div>
             </div>
