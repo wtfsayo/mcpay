@@ -239,25 +239,20 @@ export const txOperations = {
                 processedToolIds.add(existingTool.id);
                 
                 const existingPricing = (existingTool.pricing as PricingEntry[]) || [];
-                
-                // Smart pricing merge: remove duplicate entries and keep only unique combinations
-                let mergedPricing = [...existingPricing];
-                
-                if (toolData.pricing && toolData.pricing.length > 0) {
-                    // For each new pricing entry, remove any existing duplicates
-                    for (const newPricing of toolData.pricing) {
-                        // Remove existing entries with same network, assetAddress, tokenDecimals, and maxAmountRequiredRaw
-                        mergedPricing = mergedPricing.filter(existing => {
-                            const isDuplicate = existing.network === newPricing.network && 
-                                              existing.assetAddress === newPricing.assetAddress &&
-                                              existing.tokenDecimals === newPricing.tokenDecimals &&
-                                              existing.maxAmountRequiredRaw === newPricing.maxAmountRequiredRaw;
-                            return !isDuplicate; // Keep only non-duplicates
-                        });
-                    }
-                    
-                    // Add new pricing entries (they should be active by default)
-                    mergedPricing = [...mergedPricing, ...toolData.pricing];
+
+                // Authoritative pricing update from ping: replace prior pricing with incoming pricing.
+                // This ensures removed networks (e.g., base-sepolia) do not persist.
+                let mergedPricing: PricingEntry[] = existingPricing;
+
+                if (toolData.pricing !== undefined) {
+                    // Dedupe incoming pricing by a stable composite key
+                    const seen = new Set<string>();
+                    mergedPricing = (toolData.pricing || []).filter((p) => {
+                        const key = `${p.network}|${p.assetAddress}|${p.tokenDecimals}|${p.maxAmountRequiredRaw}`;
+                        if (seen.has(key)) return false;
+                        seen.add(key);
+                        return true;
+                    });
                 }
                 
                 const updatedTool = await tx.update(mcpTools)
