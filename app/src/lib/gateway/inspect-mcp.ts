@@ -289,7 +289,7 @@ export function extractPaymentFromAnnotations(annotations: unknown, userWalletAd
     if (isSimplePaymentOption(paymentOption)) {
       const price = paymentOption.price
       const currency = paymentOption.currency || 'USD'
-      const network = (paymentOption.network || 'base-sepolia') as UnifiedNetwork
+      const network = (paymentOption.network || 'sei-testnet') as UnifiedNetwork
 
       // For USD prices, always return both base-sepolia and sei-testnet USDC options
       if (currency === 'USD' || currency === 'usd') {
@@ -346,7 +346,7 @@ export function extractPaymentFromAnnotations(annotations: unknown, userWalletAd
     // Handle advanced payment format (rawAmount already in base units)
     if (isAdvancedPaymentOption(paymentOption)) {
       const tokenSymbol = paymentOption.tokenSymbol || paymentOption.currency || 'USDC'
-      const network = (paymentOption.network || 'base-sepolia') as UnifiedNetwork
+      const network = (paymentOption.network || 'sei-testnet') as UnifiedNetwork
       const rawAmount = String(paymentOption.rawAmount || 0)
       // const recipient = paymentOption.recipient || userWalletAddress
 
