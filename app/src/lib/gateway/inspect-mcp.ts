@@ -300,16 +300,19 @@ export function extractPaymentFromAnnotations(annotations: unknown, userWalletAd
           throw new Error('USDC not available on required networks (base-sepolia and sei-testnet)')
         }
 
-        return [{
-          id: nanoid(),
-          active: true,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          assetAddress: baseSepolia.address || getDefaultUSDCAddress('base-sepolia'),
-          network: 'base-sepolia',
-          maxAmountRequiredRaw: toBaseUnits(String(price || 0), baseSepolia.decimals),
-          tokenDecimals: baseSepolia.decimals,
-        }, {
+        // TODO: Uncomment this in the future.
+        return [
+        //   {
+        //   id: nanoid(),
+        //   active: true,
+        //   createdAt: new Date().toISOString(),
+        //   updatedAt: new Date().toISOString(),
+        //   assetAddress: baseSepolia.address || getDefaultUSDCAddress('base-sepolia'),
+        //   network: 'base-sepolia',
+        //   maxAmountRequiredRaw: toBaseUnits(String(price || 0), baseSepolia.decimals),
+        //   tokenDecimals: baseSepolia.decimals,
+        // }, 
+        {
           id: nanoid(),
           active: true,
           createdAt: new Date().toISOString(),

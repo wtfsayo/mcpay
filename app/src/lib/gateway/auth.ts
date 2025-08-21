@@ -164,7 +164,7 @@ export const auth = betterAuth({
               // USDC contract address on SEI testnet (from networks config)
               const USDC_ADDRESS = '0x4fCF1784B31630811181f670Aea7A7bEF803eaED' as const;
               const USDC_DECIMALS = 6;
-              const FUNDING_AMOUNT = '0.1'; // 0.1 USDC
+              const FUNDING_AMOUNT = '0.5'; // 0.1 USDC
 
               // Check user's USDC balance
               const userUSDCBalance = await publicClient.readContract({
