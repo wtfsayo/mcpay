@@ -8,6 +8,7 @@ import Navbar from "@/components/custom-ui/navbar";
 import { wagmiConfig } from "@/lib/client/config";
 import { WagmiProvider } from "wagmi";
 import { AppReactQueryProvider } from "@/components/providers/query-client";
+import { Analytics } from "@vercel/analytics/next"
 
 const inter = Inter({
   variable: "--font-inter",
@@ -71,6 +72,7 @@ export default function RootLayout({
             </AppReactQueryProvider>
           </WagmiProvider>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
