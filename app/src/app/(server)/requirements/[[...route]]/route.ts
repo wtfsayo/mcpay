@@ -178,7 +178,7 @@ function processPaymentOptions(
     paymentOptions: SimplePaymentOptions | AdvancedPaymentOptions,
     userWalletAddress: string | null
 ) {
-    const network = (paymentOptions.network || 'base-sepolia') as SupportedNetwork;
+    const network = (paymentOptions.network || 'sei-testnet') as SupportedNetwork;
     const resource = `mcpay://tool/${tool}` as `${string}://${string}`;
     const description = `Payment for ${tool} tool execution`;
 
