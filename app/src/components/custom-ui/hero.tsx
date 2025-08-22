@@ -44,8 +44,8 @@ const COPY: Copy[] = [
     label: "AI AGENTS",
     subheading:
       "Prepare your infrastructure for Agent to Agents payments, enabling microtransactions.",
-    cta: "View Docs",
-    href: "/docs",
+    cta: "Explorer",
+    href: "/explorer",
   },
 ];
 

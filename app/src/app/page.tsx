@@ -211,19 +211,23 @@ export default function MCPBrowser() {
           <HeroStats />
         </section>
 
-        <section className="mb-16">
+        <section className="mb-40">
           <div className="max-w-6xl px-4 md:px-6 mx-auto">
             <h2 className="text-3xl font-semibold font-host mb-10">Featured Servers</h2>
           </div>
           <ServersGrid servers={mcpServers} loading={loading} />
           <div className="text-center mt-10">
-            <Link href="/servers">
-              <Button variant="ghostCustom">
-                Browse Servers
-              </Button>
-            </Link>
+            <div className="inline-flex gap-4">
+              <Link href="/servers">
+                <Button variant="ghostCustom" className="min-w-[10rem]">Browse Servers</Button>
+              </Link>
+              <Link href="/explorer">
+                <Button variant="ghostCustomSecondary" className="min-w-[10rem]">Explorer</Button>
+              </Link>
+            </div>
           </div>
         </section>
+
 
         <section className="mb-40">
           <div className="max-w-6xl px-4 md:px-6 mx-auto">
