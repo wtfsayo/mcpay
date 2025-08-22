@@ -36,7 +36,6 @@ interface CachedMcpData {
   tools: ToolSet;
 }
 
-// Allow streaming responses up to 30 seconds
 export const maxDuration = 800;
 
 const CACHE_TTL = 300; // 5 minutes in seconds
@@ -161,7 +160,7 @@ export async function POST(req: Request) {
         let previewRanDuringStream = false;
         const result = streamText({
           system: systemPrompt?.content || "You are a helpful assistant.",
-          model: "openai/gpt-4o",
+          model: "anthropic/claude-sonnet-4",
           messages: modelMessages,
           tools,
           onStepFinish: async ({ toolResults, toolCalls, usage, finishReason }) => {
@@ -217,7 +216,7 @@ export async function POST(req: Request) {
             });
           },
           stopWhen: ({ steps }) => {
-            return steps.length === 10;
+            return steps.length > 20;
           },
           onFinish: async ({ toolResults, toolCalls, usage, finishReason }) => {
             console.log('Chat API: Finish reason:', finishReason);
