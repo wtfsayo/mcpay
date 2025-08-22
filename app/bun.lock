@@ -55,7 +55,7 @@
         "input-otp": "^1.4.2",
         "lucide-react": "^0.525.0",
         "mcp-handler": "^1.0.1",
-        "mcpay": "0.0.18",
+        "mcpay": "0.0.19",
         "motion": "^12.23.6",
         "next": "15.4.1",
         "next-themes": "^0.4.6",
@@ -1652,7 +1652,7 @@
 
     "mcp-handler": ["mcp-handler@1.0.1", "", { "dependencies": { "chalk": "^5.3.0", "commander": "^11.1.0", "redis": "^4.6.0" }, "peerDependencies": { "@modelcontextprotocol/sdk": "^1.12.0", "next": ">=13.0.0" }, "optionalPeers": ["next"], "bin": { "create-mcp-route": "dist/cli/index.js", "mcp-handler": "dist/cli/index.js", "mcp-adapter": "dist/cli/index.js" } }, "sha512-a4AB6eI8XdBrL9LYS68XLflh48lJI+nNPEPVj1FMI7CXZIsj/jOx4PbCeiWqrBJf2QRoCT1rxSXI8cN4AsdS4w=="],
 
-    "mcpay": ["mcpay@0.0.18", "", { "dependencies": { "@modelcontextprotocol/sdk": "^1.12.1", "commander": "^12.1.0", "dotenv": "^16.5.0", "mcp-handler": "1.0.1", "viem": "^2.30.5", "x402": "^0.3.7", "x402-fetch": "^0.3.3", "zod": "^3.25.42" }, "bin": { "mcpay": "dist/cli/index.js" } }, "sha512-mzujA6YQM4pTGA8vBDlhSazxSKZc+xlt9CMehMe5Qg5QbNonlhkT/h8NPv/E2ZgO2rQqgbAcwxzl897xL7Hekg=="],
+    "mcpay": ["mcpay@0.0.19", "", { "dependencies": { "@modelcontextprotocol/sdk": "^1.12.1", "commander": "^12.1.0", "dotenv": "^16.5.0", "mcp-handler": "1.0.1", "viem": "^2.30.5", "x402": "^0.3.7", "x402-fetch": "^0.3.3", "zod": "^3.25.42" }, "bin": { "mcpay": "dist/cli/index.js" } }, "sha512-KBMRn0WNoS5FX7xPgtoQrxEqrIMFBSFlKiOfg4xda51mJQd80GEVtR68Xa858UW7nKXTI5hhNLB10Y6uq7XvXQ=="],
 
     "md5": ["md5@2.3.0", "", { "dependencies": { "charenc": "0.0.2", "crypt": "0.0.2", "is-buffer": "~1.1.6" } }, "sha512-T1GITYmFaKuO91vxyoQMFETst+O71VUPEU3ze5GNzDm0OWdP8v1ziTaAEPUr/3kLsY3Sftgz242A1SetQiDL7g=="],
 

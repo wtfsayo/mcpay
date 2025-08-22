@@ -870,9 +870,20 @@ export function createPaidMcpHandler(
   serverOptions?: MCPayMcpServerOptions,
   config?: Config
 ): (request: Request) => Promise<Response> {
+  // Resolve MCPay config from provided options and environment defaults
+  const resolvedMcpayConfig: PaymentAuthConfig = {
+    mcpayApiUrl: serverOptions?.mcpay?.mcpayApiUrl || process.env.MCPAY_API_URL || 'https://mcpay.fun',
+    apiKey: serverOptions?.mcpay?.apiKey || process.env.MCPAY_API_KEY || '',
+    mcpayApiValidationPath: serverOptions?.mcpay?.mcpayApiValidationPath ?? process.env.MCPAY_API_VALIDATION_PATH ?? '/validate',
+    mcpayApiPingPath: serverOptions?.mcpay?.mcpayApiPingPath ?? process.env.MCPAY_API_PING_PATH ?? '/ping',
+    mcpayApiRequirementsPath: serverOptions?.mcpay?.mcpayApiRequirementsPath ?? process.env.MCPAY_API_REQUIREMENTS_PATH ?? '/requirements',
+    validationTimeout: serverOptions?.mcpay?.validationTimeout ?? 15000,
+    required: serverOptions?.mcpay?.required ?? true,
+    resourceMetadataPath: serverOptions?.mcpay?.resourceMetadataPath ?? '/.well-known/oauth-protected-resource',
+  };
 
-  // Create the payment verifier
-  const paymentVerifier = createPaymentVerifier(serverOptions?.mcpay);
+  // Create the payment verifier with resolved config
+  const paymentVerifier = createPaymentVerifier(resolvedMcpayConfig);
   
   // Create the base paid handler
   const paidHandler = _createPaidMcpHandler(initializeServer, serverOptions, config);
