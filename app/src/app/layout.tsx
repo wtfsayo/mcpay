@@ -29,7 +29,7 @@ const hostGrotesk = Host_Grotesk({
 
 export const metadata: Metadata = {
   title: "MCPay",
-  description: "MCPay - Build and Monetize MCP Servers with x402",
+  description: "MCPay - Build and Monetize MCP Servers",
   icons: {
     icon: [
       { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
@@ -43,6 +43,13 @@ export const metadata: Metadata = {
       { url: '/android-chrome-192x192.png', sizes: '192x192', type: 'image/png' },
       { url: '/android-chrome-512x512.png', sizes: '512x512', type: 'image/png' },
     ],
+  },
+  openGraph: {
+    images: ['/mcpay-hero-painting.png'],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    images: ['/mcpay-hero-painting.png'],
   },
   manifest: '/site.webmanifest',
 };
