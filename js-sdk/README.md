@@ -1,278 +1,277 @@
 # MCPay SDK & CLI
 
-A TypeScript SDK and CLI tool for connecting to MCP (Model Context Protocol) servers with payment capabilities using the x402 payment protocol.
+A TypeScript SDK and CLI for connecting to MCP (Model Context Protocol) servers with payment capabilities via the x402 protocol. It can:
 
-## Features
+- 🔌 Connect to multiple MCP servers at once (proxy)
+- 💳 Handle 402 Payment Required automatically (x402)
+- 📦 Provide programmatic APIs for clients and servers
 
-- 🔌 **MCP Server Integration**: Connect to multiple MCP servers simultaneously
-- 💳 **Payment Support**: Automatic handling of 402 Payment Required responses via x402 protocol
-- 🛠️ **CLI Tool**: Command-line interface for quick server setup
-- 📦 **SDK Library**: Programmatic API for integration into your applications
-- 🔄 **Proxy Functionality**: Act as a proxy between clients and payment-enabled MCP servers
+## Quick start
+
+Install the CLI globally or use `npx`:
+
+```bash
+npm i -g mcpay
+# or
+npx mcpay server -u "https://api.example.com/mcp" -a "<YOUR_API_KEY>"
+```
+
+Start a payment-aware stdio proxy to one or more MCP servers:
+
+```bash
+# Using a private key (Payment transport)
+mcpay server -u "https://api.example.com/mcp" -k 0x1234...
+
+# Using an API key only (HTTP transport)
+mcpay server -u "https://api.example.com/mcp" -a "$API_KEY"
+```
+
+Tip: You can pass multiple URLs: `-u "https://api1/mcp,https://api2/mcp"`.
 
 ## Installation
 
-### Global CLI Installation
+### SDK (project dependency)
 
 ```bash
-# Install globally to use the CLI
-npm install -g mcpay
+npm i mcpay
 # or
-pnpm install -g mcpay
-# or
-yarn global add mcpay
-```
-
-### SDK Usage in Projects
-
-```bash
-# Install as a dependency in your project
-npm install mcpay
-# or
-pnpm install mcpay
+pnpm i mcpay
 # or
 yarn add mcpay
 ```
 
-## CLI Usage
-
-The MCPay CLI provides an easy way to start MCP servers with payment capabilities.
+## CLI
 
 ### Commands
 
-#### Start a Payment-Enabled MCP Server
+- `mcpay server` – start an MCP stdio proxy to remote servers
+
+### Examples
 
 ```bash
-# Basic usage with environment variables
-mcpay server --urls "https://api.example.com/mcp"
+# Basic (env vars)
+export SERVER_URLS="https://api.example.com/mcp"
+export PRIVATE_KEY="0x1234..."
+mcpay server -u "$SERVER_URLS"
 
-# With explicit private key
-mcpay server --urls "https://api.example.com/mcp" --private-key "0x1234..."
-
-# Multiple servers
-mcpay server --urls "https://api1.example.com/mcp,https://api2.example.com/mcp"
-
-# Different transport types
-mcpay server --urls "https://api.example.com/mcp" --transport payment  # default
-mcpay server --urls "https://api.example.com/mcp" --transport http
-mcpay server --urls "https://api.example.com/mcp" --transport sse
+# Multiple servers + API key header forwarded to remotes
+mcpay server -u "https://api1/mcp,https://api2/mcp" -a "$API_KEY"
 ```
 
-#### Proxy Server (Alias)
-
-```bash
-# Same as server command
-mcpay proxy --urls "https://api.example.com/mcp"
-```
-
-### Environment Variables
-
-Set these environment variables or use CLI options:
-
-```bash
-export PRIVATE_KEY="0x1234567890abcdef..."  # Your wallet private key
-export SERVER_URLS="https://api.example.com/mcp"  # Comma-separated URLs
-```
-
-### CLI Options
+### Options
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `-u, --urls <urls>` | Comma-separated list of server URLs | Required |
-| `-k, --private-key <key>` | Private key for wallet (or use `PRIVATE_KEY` env var) | `PRIVATE_KEY` env var |
-| `-t, --transport <type>` | Transport type: `payment`, `http`, `sse` | `payment` |
+| `-u, --urls <urls>` | Comma-separated list of MCP server URLs | Required |
+| `-k, --private-key <key>` | EVM private key used to sign x402 payments | `PRIVATE_KEY` env |
+| `-a, --api-key <key>` | API key forwarded as `Authorization: Bearer ...` | `API_KEY` env |
 
-## SDK Usage
+Behavior:
+- If `--private-key` is provided, the proxy uses Payment transport (x402) and can settle 402 challenges automatically.
+- If only `--api-key` is provided, the proxy uses standard HTTP transport and forwards the bearer token.
 
-Import and use the MCPay SDK in your TypeScript/JavaScript applications.
+## Financial Server Integration Guide
 
-### Basic Example
+### MCP Client Integration
 
-```typescript
-import { createPaymentTransport, startStdioServer, createServerConnections, ServerType } from 'mcpay';
+Connect to AI assistants like Claude, Cursor, and Windsurf.
+
+#### One-Click Install for Cursor
+
+If available on the website, use the "Install in Cursor" action to auto-generate an API key and configure your Cursor MCP settings.
+
+#### Manual Configuration with API Key (Recommended)
+
+Create an API key in your account settings and add this to your MCP client config (e.g., `claude_desktop_config.json`). Replace `mcpay_YOUR_API_KEY_HERE` with your real key.
+
+```json
+{
+  "mcpServers": {
+    "Financial Server": {
+      "command": "npx",
+      "args": [
+        "mcpay",
+        "server",
+        "--urls",
+        "https://mcpay.tech/mcp/d67aaf0d-fcc8-4136-948d-c470abe41ac0",
+        "--api-key",
+        "mcpay_YOUR_API_KEY_HERE"
+      ]
+    }
+  }
+}
+```
+
+#### Manual Configuration with Private Key (Alternative)
+
+Use a wallet private key instead of an API key. Replace with your own private key (handle securely).
+
+```json
+{
+  "mcpServers": {
+    "Financial Server": {
+      "command": "npx",
+      "args": [
+        "mcpay",
+        "server",
+        "--urls",
+        "https://mcpay.tech/mcp/d67aaf0d-fcc8-4136-948d-c470abe41ac0",
+        "--private-key",
+        "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+      ]
+    }
+  }
+}
+```
+
+### MCPay CLI (Direct Connection)
+
+```bash
+# Using API Key (recommended)
+npx mcpay server --urls https://mcpay.tech/mcp/d67aaf0d-fcc8-4136-948d-c470abe41ac0 --api-key mcpay_YOUR_API_KEY_HERE
+
+# Using Private Key (alternative)
+npx mcpay server --urls https://mcpay.tech/mcp/d67aaf0d-fcc8-4136-948d-c470abe41ac0 --private-key 0xYOUR_PRIVATE_KEY
+```
+
+### Direct API Integration (JavaScript/TypeScript SDK)
+
+```ts
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { createPaymentTransport } from 'mcpay'
+import { privateKeyToAccount } from 'viem/accounts'
+
+// Initialize account from private key
+const account = privateKeyToAccount('0x1234567890abcdef...')
+const url = new URL('https://mcpay.tech/mcp/d67aaf0d-fcc8-4136-948d-c470abe41ac0')
+
+// Create payment-enabled transport
+const transport = createPaymentTransport(url, account, {
+  maxPaymentValue: BigInt(0.1 * 10 ** 6), // 0.1 USDC max payment
+})
+
+// Initialize MCP client
+const client = new Client(
+  { name: 'my-mcp-client', version: '1.0.0' },
+  { capabilities: {} }
+)
+
+// Connect and use tools
+await client.connect(transport)
+const tools = await client.listTools()
+console.log('Available tools:', tools)
+```
+
+## SDK usage
+
+### Programmatic stdio proxy
+
+```ts
+import { startStdioServer, createServerConnections, ServerType } from 'mcpay';
 import { privateKeyToAccount } from 'viem/accounts';
 
-// Create account from private key
-const account = privateKeyToAccount('0x1234567890abcdef...');
-
-// Create server connections
+const account = privateKeyToAccount('0x123...');
 const serverConnections = createServerConnections(
   ['https://api.example.com/mcp'],
   ServerType.Payment
 );
 
-// Start the stdio server
-await startStdioServer({
-  serverConnections,
-  account,
-});
+await startStdioServer({ serverConnections, account });
 ```
 
-### PaymentTransport Usage
+### Client: PaymentTransport
 
-```typescript
+```ts
 import { createPaymentTransport } from 'mcpay';
 import { privateKeyToAccount } from 'viem/accounts';
-
-const account = privateKeyToAccount('0x1234567890abcdef...');
-const url = new URL('https://api.example.com/mcp');
-
-// Create payment transport
-const transport = createPaymentTransport(url, account, {
-  maxPaymentValue: BigInt(0.1 * 10 ** 6), // 0.1 USDC max payment
-});
-
-// Use with MCP Client
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 
-const client = new Client(
-  { name: 'my-app', version: '1.0.0' },
-  { capabilities: {} }
-);
+const account = privateKeyToAccount('0x123...');
+const transport = createPaymentTransport(new URL('https://api.example.com/mcp'), account, {
+  maxPaymentValue: BigInt(0.1 * 10 ** 6) // 0.10 USDC
+});
 
+const client = new Client({ name: 'my-app', version: '1.0.0' }, { capabilities: {} });
 await client.connect(transport);
 ```
 
-### Custom Server Setup
+### Protecting your MCP server with payments
 
-```typescript
-import { 
-  startStdioServer, 
-  createServerConnections, 
-  ServerType,
-  type ServerConnection 
-} from 'mcpay';
-import { privateKeyToAccount } from 'viem/accounts';
+Use `createPaidMcpHandler` to require a valid `X-PAYMENT` header (validated via MCPay) before your tools run. Works in serverless/edge-compatible runtimes.
 
-const account = privateKeyToAccount('0x1234567890abcdef...');
+```ts
+import { createPaidMcpHandler } from 'mcpay';
+import { z } from 'zod';
 
-// Create custom server connections
-const serverConnections: ServerConnection[] = [
-  {
-    url: 'https://api1.example.com/mcp',
-    serverType: ServerType.Payment,
-    transportOptions: {
-      maxPaymentValue: BigInt(0.05 * 10 ** 6), // 0.05 USDC
-    }
-  },
-  {
-    url: 'https://api2.example.com/mcp',
-    serverType: ServerType.HTTPStream,
+const handler = createPaidMcpHandler(async (server) => {
+  server.paidTool(
+    'hello',
+    { price: 0.05, currency: 'USD' },
+    { name: z.string().describe('Your name') },
+    async ({ name }) => ({ content: [{ type: 'text', text: `Hello, ${name}!` }] })
+  );
+}, {
+  mcpay: {
+    mcpayApiUrl: process.env.MCPAY_API_URL || 'https://mcpay.fun',
+    apiKey: process.env.MCPAY_API_KEY || ''
   }
-];
-
-// Start with custom configuration
-await startStdioServer({
-  serverConnections,
-  account,
 });
+
+// Next.js (route handlers)
+export { handler as GET, handler as POST, handler as DELETE };
 ```
 
-## API Reference
+Notes:
+- `server.paidTool` accepts either a simple price `{ price, currency, recipient? }` or advanced on-chain params `{ recipient, rawAmount, tokenDecimals, network, ... }`.
+- When no valid payment is provided, the handler returns structured payment requirements that clients (like `PaymentTransport`) can satisfy.
 
-### Types
+## Environment variables
 
-#### `ServerType`
-```typescript
-enum ServerType {
-  HTTPStream = "HTTPStream",
-  SSE = "SSE", 
-  Payment = "Payment"
-}
-```
+CLI:
+- `PRIVATE_KEY`: Hex private key for x402 signing
+- `SERVER_URLS`: Comma-separated MCP endpoints
+- `API_KEY`: Optional, forwarded as `Authorization: Bearer <API_KEY>` to remotes
 
-#### `PaymentTransportOptions`
-```typescript
-interface PaymentTransportOptions {
-  maxPaymentValue?: bigint;  // Max payment amount in base units
-  paymentRequirementsSelector?: PaymentRequirementsSelector;
-  // ... extends StreamableHTTPClientTransportOptions
-}
-```
+Server (payment auth):
+- `MCPAY_API_URL` (default `https://mcpay.fun`)
+- `MCPAY_API_KEY`
+- `MCPAY_API_VALIDATION_PATH` (default `/validate`)
+- `MCPAY_API_REQUIREMENTS_PATH` (default `/requirements`)
+- `MCPAY_API_PING_PATH` (default `/ping`)
 
-#### `ServerConnection`
-```typescript
-interface ServerConnection {
-  url: string;
-  serverType: ServerType;
-  transportOptions?: SSEClientTransportOptions | StreamableHTTPClientTransportOptions;
-  client?: Client;
-}
-```
+## Transports
 
-### Functions
+- `HTTPStream` – standard streaming HTTP transport
+- `Payment` – extends HTTP transport; automatically handles `402 Payment Required` using x402 and your wallet
 
-#### `createPaymentTransport(url, walletClient, options?)`
-Creates a PaymentTransport instance for handling 402 Payment Required responses.
+## Payment protocol (x402)
 
-#### `startStdioServer(config)`
-Starts an MCP stdio server that proxies to multiple remote servers.
+On a `402 Payment Required` response, MCPay will:
+1. Parse the server-provided requirements
+2. Create and sign an authorization with your wallet
+3. Retry the original request with `X-PAYMENT` header
 
-#### `createServerConnections(urls, serverType?, transportOptions?)`
-Helper function to create ServerConnection objects from URLs.
+Supported networks: Base Sepolia, Base (plus additional EVM testnets/mainnets as released). Default USDC addresses are built-in per chain.
 
-## Payment Protocol
+## Troubleshooting
 
-MCPay uses the [x402 payment protocol](https://github.com/x402/x402) to handle micropayments for API access. When a server responds with `402 Payment Required`, the SDK automatically:
-
-1. Parses payment requirements from the response
-2. Creates a payment transaction using your wallet
-3. Includes the payment proof in the retry request
-4. Continues with the original API call
-
-### Supported Networks
-
-- Base Sepolia (testnet)
-- Base (mainnet)
-
-### Supported Assets
-
-- USDC and other ERC-20 tokens
-- Payment amounts are specified in base units (e.g., 1 USDC = 1,000,000 base units)
+- "Payment amount exceeds maximum allowed": increase `maxPaymentValue` on `PaymentTransport`.
+- Wrong chain/network: ensure your wallet/client chain matches the server requirement (Base Sepolia by default).
+- Ping warnings at startup: set `ping: { enabled: false }` in `createPaidMcpHandler` options or ensure `MCPAY_API_URL` is reachable.
 
 ## Development
 
-### Building
-
 ```bash
-pnpm install
+pnpm i
 pnpm run build
-```
-
-### Local Development
-
-```bash
-# Watch mode for development
+# Dev watch
 pnpm run dev
 ```
 
-## Environment Setup
+## Security
 
-Create a `.env` file in your project:
-
-```env
-PRIVATE_KEY=0x1234567890abcdef...
-SERVER_URLS=https://api.example.com/mcp,https://api2.example.com/mcp
-```
-
-## Examples
-
-### CLI Examples
-
-```bash
-# Start with payment transport (default)
-mcpay server -u "https://api.example.com/mcp"
-
-# Start with multiple servers  
-mcpay server -u "https://api1.com/mcp,https://api2.com/mcp"
-
-# Use different transport
-mcpay server -u "https://api.example.com/mcp" -t http
-```
-
-### SDK Examples
-
-See the `examples/` directory for complete working examples.
+- Never commit private keys. Prefer environment variables and scoped, low-value keys for development.
+- Use the `maxPaymentValue` guard in clients and per-tool pricing in servers.
 
 ## License
 
@@ -280,8 +279,8 @@ MIT
 
 ## Contributing
 
-Contributions welcome! Please read our contributing guidelines and submit pull requests to our repository.
+Issues and PRs are welcome.
 
 ## Support
 
-For questions and support, please open an issue on our GitHub repository. 
+Please open an issue in the repository.
