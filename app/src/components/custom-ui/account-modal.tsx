@@ -792,9 +792,6 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'funds' }: AccountM
                           </div>
                           <div className="flex items-center gap-1.5 mt-1">
                             <Badge variant="outline" className="text-xs px-1.5 py-0">
-                              {wallet.blockchain}
-                            </Badge>
-                            <Badge variant="outline" className="text-xs px-1.5 py-0">
                               {wallet.walletType}
                             </Badge>
                             {wallet.provider && (
@@ -813,14 +810,6 @@ export function AccountModal({ isOpen, onClose, defaultTab = 'funds' }: AccountM
                           className="h-7 w-7 p-0"
                         >
                           <Copy className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openExplorer(wallet.walletAddress, 'base-sepolia')}
-                          className="h-7 w-7 p-0"
-                        >
-                          <ExternalLink className="h-3 w-3" />
                         </Button>
                         {!wallet.isPrimary && (
                           <Button
