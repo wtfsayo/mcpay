@@ -1,4 +1,4 @@
-# MCPay
+# [MCPay](https://mcpay.tech)
 
 ![](/assets/gh_cover.png)
 
