@@ -2,6 +2,10 @@
 
 ![](/assets/gh_cover.png)
 
+
+> Check out the MCPay Build server dashboard at [mcpay.tech/mcpay-build](https://mcpay.tech/servers/23e2ab26-7808-4984-855c-ec6a7dc97c3a)
+> The code lives at [github.com/microchipgnu/mcpay-build](https://github.com/microchipgnu/mcpay-build)
+
 **Payments for MCPs**. Pay-per-call, no subscriptions, agent‑ready.
 
 [Website](https://mcpay.tech) · [Browse Registry](https://mcpay.tech/servers) · [Build MCP](https://mcpay.tech/build) · [Register/Monetize](https://mcpay.tech/register)
