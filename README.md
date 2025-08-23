@@ -4,7 +4,7 @@
 
 **Payments for MCPs**. Pay-per-call, no subscriptions, agent‑ready.
 
-[Website](https://mcpay.tech) · [Browse Registry](https://mcpay.tech/browse) · [Build MCP](https://mcpay.tech/build) · [Register/Monetize](https://mcpay.tech/register)
+[Website](https://mcpay.tech) · [Browse Registry](https://mcpay.tech/servers) · [Build MCP](https://mcpay.tech/build) · [Register/Monetize](https://mcpay.tech/register)
 
 ---
 
@@ -69,7 +69,7 @@ Under the hood we:
 
 ### 1) Registry
 
-Discover MCP servers and their priced tools at **[mcpay.tech/browse](https://mcpay.tech/browse)**. Searchable, machine‑readable, agent‑friendly.
+Discover MCP servers and their priced tools at **[mcpay.tech/servers](https://mcpay.tech/servers)**. Searchable, machine‑readable, agent‑friendly.
 
 ### 2) Builder (MCPay Build)
 
