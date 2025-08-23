@@ -84,7 +84,7 @@ With MCPay Build you can:
 
 This lowers the barrier for developers who find MCP confusing or want to get started without boilerplate. The default template is a production-ready MCP server with free + paid tools side by side.
 
-GitHub Link: https://github.com/microchipgnu/mcpay-build
+The MCP code lives in https://github.com/microchipgnu/mcpay-build
 
 
 ### 3) Monetizer (Proxy)
@@ -182,6 +182,29 @@ Features:
 * Includes a **CLI** for local/prod proxying.
 
 See **[js-sdk/README.md](./js-sdk/README.md)** for API details.
+
+### Building monetized server (NextJS)
+
+```ts
+import { createPaidMcpHandler } from 'mcpay/handler';
+import { z } from 'zod';
+
+const handler = createPaidMcpHandler(async (server) => {
+  server.paidTool(
+    'hello',
+    { price: 0.05, currency: 'USD' },
+    { name: z.string().describe('Your name') },
+    async ({ name }) => ({ content: [{ type: 'text', text: `Hello, ${name}!` }] })
+  );
+}, {
+  mcpay: {
+    apiKey: process.env.MCPAY_API_KEY || ''
+  }
+});
+
+// Next.js (route handlers)
+export { handler as GET, handler as POST, handler as DELETE };
+```
 
 ---
 
