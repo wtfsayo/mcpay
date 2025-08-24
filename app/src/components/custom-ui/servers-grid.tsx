@@ -71,6 +71,7 @@ function ServerCard({ server }: { server: MCPServer }) {
               <TooltipContent>Number of tools</TooltipContent>
             </Tooltip>
 
+            {/* 
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="flex items-center gap-1 px-2 py-0.5 text-xs rounded-sm border font-mono text-muted-foreground transition-colors bg-transparent hover:border-red-400 border-foreground/20">
@@ -80,6 +81,7 @@ function ServerCard({ server }: { server: MCPServer }) {
               </TooltipTrigger>
               <TooltipContent>Hardcoded run count</TooltipContent>
             </Tooltip>
+            */}
           </div>
 
           {/* URL with label + copy */}
