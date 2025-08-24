@@ -1,15 +1,24 @@
-// app/src/app/build/page.tsx
 'use client';
 
 import ChatWithPreview from '@/components/custom-ui/chat-with-preview';
 import { useChat } from '@ai-sdk/react';
-import { Suspense, useState, useCallback } from 'react';
+import { Suspense, useState, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
+import { MonitorSmartphone } from 'lucide-react';
 
 export default function BuildPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [mcpUrl, setMcpUrl] = useState<string | null>(null);
   const [codebase, setCodebase] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Mobile detection
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const getSessionData = useCallback(() => ({
     sessionId,
@@ -25,42 +34,26 @@ export default function BuildPage() {
       if (data.type === 'data-payment' && data.data) {
         const paymentData = data.data as { paid?: boolean };
         if (paymentData.paid) {
-          console.log('Received payment from stream:', paymentData.paid);
-          toast.success('Payment successful'); 
+          toast.success('Payment successful');
         }
       }
-
-      // Handle session data if it comes directly in the data stream
       if (data.type === 'data-session' && data.data) {
         const sessionData = data.data as { sessionId?: string };
-        if (sessionData.sessionId) {
-          console.log('Received session ID from stream:', sessionData.sessionId);
-          setSessionId(sessionData.sessionId);
-        }
+        if (sessionData.sessionId) setSessionId(sessionData.sessionId);
       }
       if (data.type === 'data-preview' && data.data) {
         const previewData = data.data as { url?: string };
-        if (previewData.url) {
-          console.log('Received preview URL from stream:', previewData.url);
-          setMcpUrl(`${previewData.url}/mcp`);
-        }
+        if (previewData.url) setMcpUrl(`${previewData.url}/mcp`);
       }
       if (data.type === 'data-codebase' && data.data) {
         const codebaseData = data.data as { codebase?: string };
-        if (codebaseData.codebase) {
-          console.log('Received codebase from stream:', codebaseData.codebase);
-          setCodebase(codebaseData.codebase);
-        }
+        if (codebaseData.codebase) setCodebase(codebaseData.codebase);
       }
     },
     onFinish: (message) => {
       console.log('Chat finished:', { message });
     },
   });
-
-  // Add logging to track messages changes
-  console.log('🔄 BuildPage render - messages count:', messages.length, 'status:', status);
-  console.log('🔄 Last message parts:', messages[messages.length - 1]?.parts?.length || 0);
 
   const _sendMessage = (text: string) => {
     sendMessage({
@@ -71,6 +64,22 @@ export default function BuildPage() {
         sessionId: sessionId,
       }
     });
+  }
+
+  if (isMobile) {
+    return (
+      <div className="flex items-center justify-center h-full text-center p-4">
+        <div className="space-y-4 text-muted-foreground flex flex-col items-center">
+          <MonitorSmartphone className="w-8 h-8 text-muted-foreground/60 mb-6" />
+          <p className="text-lg font-semibold text-foreground font-mono uppercase mb-1">
+            Desktop only [for now]
+          </p>
+          <p className="text-md text-muted-foreground font-mono">
+            Please open this page on a larger screen. Mobile support is coming soon.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (

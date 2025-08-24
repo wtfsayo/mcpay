@@ -11,6 +11,7 @@ import { ArrowDown, ArrowUp } from 'lucide-react';
 import { StopIcon } from './icons';
 import { toast } from 'sonner';
 import { ChatStatus } from 'ai';
+import Link from 'next/link';
 
 interface MultimodalInputProps {
   chatId: string;
@@ -136,12 +137,12 @@ export function MultimodalInput({
         </p>
         <p>
           Run the{' '}
-          <a
+          <Link
             href="/servers/23e2ab26-7808-4984-855c-ec6a7dc97c3a"
             className="underline decoration-dotted text-primary hover:text-indigo-500 transition-colors"
           >
             MCPay Build Server
-          </a>{' '}
+          </Link>
         </p>
       </div>
 
