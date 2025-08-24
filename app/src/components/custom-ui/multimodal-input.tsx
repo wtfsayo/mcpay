@@ -120,6 +120,31 @@ export function MultimodalInput({
           </Button>
         )}
       </div>
+
+      {/* Footer text */}
+      <div className="text-xs text-center uppercase font-mono text-muted-foreground mt-1 leading-tight">
+        <p>
+          Powered by the{' '}
+          <a
+            href="https://sei.io"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline decoration-dotted text-primary hover:text-indigo-500 transition-colors"
+          >
+            Fastest Layer 1 EVM Blockchain – Sei
+          </a>
+        </p>
+        <p>
+          Run the{' '}
+          <a
+            href="/servers/23e2ab26-7808-4984-855c-ec6a7dc97c3a"
+            className="underline decoration-dotted text-primary hover:text-indigo-500 transition-colors"
+          >
+            MCPay Build Server
+          </a>{' '}
+        </p>
+      </div>
+
     </div>
   );
 }
