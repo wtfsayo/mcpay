@@ -132,7 +132,7 @@ export function MultimodalInput({
             rel="noopener noreferrer"
             className="underline decoration-dotted text-primary hover:text-indigo-500 transition-colors"
           >
-            Fastest Layer 1 EVM Blockchain – Sei
+            Fastest Layer 1 EVM Blockchain: Sei
           </a>
         </p>
         <p>

@@ -11,9 +11,9 @@ interface SuggestedActionsProps {
 
 const suggestedActions = [
   {
-    title: 'OpenAPI to MCP Converter',
-    label: 'Auto-generate from API specs',
-    action: 'Analyze the provided OpenAPI/Swagger specification and create an MCP server with individual tools for each endpoint. Each tool should wrap the corresponding API endpoint with proper parameter validation, request/response handling, and error management based on the spec definitions.',
+    title: 'General Structure',
+    label: 'Create the base structure of an MCP server',
+    action: `Create the base structure of an MCP server project with one simple example tool. Include the required files, folders, and metadata so it's ready to preview, deploy, and extend.`,
   },
   {
     title: 'OpenAPI to MCP Converter',
@@ -21,9 +21,9 @@ const suggestedActions = [
     action: 'Analyze the provided OpenAPI/Swagger specification and create an MCP server with individual tools for each endpoint. Each tool should wrap the corresponding API endpoint with proper parameter validation, request/response handling, and error management based on the spec definitions.',
   },
   {
-    title: 'OpenAPI to MCP Converter',
-    label: 'Auto-generate from API specs',
-    action: 'Analyze the provided OpenAPI/Swagger specification and create an MCP server with individual tools for each endpoint. Each tool should wrap the corresponding API endpoint with proper parameter validation, request/response handling, and error management based on the spec definitions.',
+    title: 'What can you do?',
+    label: 'Explain your capabilities',
+    action: 'What can you do?',
   },
 ];
 
