@@ -18,7 +18,8 @@
     "e2e:ui": "playwright test --ui",
     "e2e:show-report": "playwright show-report",
     "migrate": "node scripts/drizzle-migrate.cjs",
-    "account:generate": "tsx scripts/gen-accounts.ts"
+    "account:generate": "tsx scripts/gen-accounts.ts",
+    "account:add-managed": "tsx scripts/add-managed-and-fund.ts"
   },
   "dependencies": {
     "@ai-sdk/react": "^2.0.0-beta.27",
