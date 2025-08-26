@@ -86,10 +86,10 @@ program
         const privateKey = privateKeyString as Hex;
         account = privateKeyToAccount(privateKey);
         serverType = ServerType.Payment;
-        console.log('Using payment transport (private key provided)');
+        // console.log('Using payment transport (private key provided)');
       } else {
         serverType = ServerType.HTTPStream;
-        console.log('Using HTTP transport (no private key provided)');
+        // console.log('Using HTTP transport (no private key provided)');
       }
 
       const serverUrls = options.urls.split(',').map((url: string) => url.trim());
@@ -99,8 +99,8 @@ program
         process.exit(1);
       }
       
-      console.log(`Starting MCP server...`);
-      console.log(`Connecting to ${serverUrls.length} server(s): ${serverUrls.join(', ')}`);
+      //console.log(`Starting MCP server...`);
+      // console.log(`Connecting to ${serverUrls.length} server(s): ${serverUrls.join(', ')}`);
 
       // Prepare transport options with API key if provided
       const transportOptions = apiKey ? { 
@@ -118,7 +118,7 @@ program
         account,
       });
 
-      console.log(`Successfully connected to ${serverUrls.length} servers`);
+      // console.log(`Successfully connected to ${serverUrls.length} servers`);
     } catch (error) {
       console.error('Failed to start server:', error);
       process.exit(1);

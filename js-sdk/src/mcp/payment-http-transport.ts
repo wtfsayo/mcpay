@@ -86,7 +86,7 @@ export class PaymentTransport extends StreamableHTTPClientTransport {
             }
 
             // Handle 402 Payment Required response
-            console.log("[x402] Payment required response detected");
+            // console.log("[x402] Payment required response detected");
 
             // Parse payment requirements
             const { x402Version, accepts } = (await response.json()) as {
@@ -117,11 +117,11 @@ export class PaymentTransport extends StreamableHTTPClientTransport {
                            (walletClient as any).client?.chain?.id || 
                            84532; // fallback to Base Sepolia
 
-            console.log("[x402] Constructor payment fetch - Wallet client chain info:", {
-                walletChainId: (walletClient as any).chain?.id,
-                clientChainId: (walletClient as any).client?.chain?.id,
-                resolvedChainId: chainId
-            });
+            // console.log("[x402] Constructor payment fetch - Wallet client chain info:", {
+            //     walletChainId: (walletClient as any).chain?.id,
+            //     clientChainId: (walletClient as any).client?.chain?.id,
+            //     resolvedChainId: chainId
+            // });
 
             // Select appropriate payment requirements
             const selectedPaymentRequirements = this._paymentRequirementsSelector(
@@ -135,11 +135,11 @@ export class PaymentTransport extends StreamableHTTPClientTransport {
                 throw new Error(`Payment amount ${selectedPaymentRequirements.maxAmountRequired} exceeds maximum allowed ${this._maxPaymentValue}`);
             }
 
-            console.log("[x402] Constructor - About to create payment header with:", {
-                walletClient: walletClient,
-                x402Version,
-                selectedPaymentRequirements
-            });
+            // console.log("[x402] Constructor - About to create payment header with:", {
+            //     walletClient: walletClient,
+            //     x402Version,
+            //     selectedPaymentRequirements
+            // });
 
             // Create payment header
             const paymentHeader = await createPaymentHeader(
@@ -160,7 +160,7 @@ export class PaymentTransport extends StreamableHTTPClientTransport {
             };
 
             // Make the request with payment header
-            console.log("[x402] Retrying request with payment header");
+            // console.log("[x402] Retrying request with payment header");
             return fetch(input, newInit);
         };
         
@@ -169,19 +169,19 @@ export class PaymentTransport extends StreamableHTTPClientTransport {
             // Log the request with timestamp
             const timestamp = new Date().toISOString();
             const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url;
-            console.log(`[x402-log][${timestamp}] Request URL: ${url}`);
+            // console.log(`[x402-log][${timestamp}] Request URL: ${url}`);
             
             // Log HTTP method/verb
             const method = init?.method || 'GET';
-            console.log(`[x402-log][${timestamp}] HTTP Method: ${method}`);
+            // console.log(`[x402-log][${timestamp}] HTTP Method: ${method}`);
             
             if (init) {
                 // Log headers
-                console.log(`[x402-log][${timestamp}] Request Headers:`, init.headers);
+                // console.log(`[x402-log][${timestamp}] Request Headers:`, init.headers);
                 
                 // Log credentials mode
                 if (init.credentials) {
-                    console.log(`[x402-log][${timestamp}] Credentials Mode: ${init.credentials}`);
+                    // console.log(`[x402-log][${timestamp}] Credentials Mode: ${init.credentials}`);
                 }
                 
                 // Log payload if it exists
@@ -192,14 +192,14 @@ export class PaymentTransport extends StreamableHTTPClientTransport {
                             : typeof init.body === 'string' 
                                 ? init.body
                                 : JSON.stringify(init.body);
-                        console.log(`[x402-log][${timestamp}] Request Payload:`, bodyContent);
+                        // console.log(`[x402-log][${timestamp}] Request Payload:`, bodyContent);
                     } catch (e) {
-                        console.log(`[x402-log][${timestamp}] Request Payload: [Unable to stringify payload]`);
+                        // console.log(`[x402-log][${timestamp}] Request Payload: [Unable to stringify payload]`);
                     }
                 }
             }
             
-            console.log(`[x402-log][${timestamp}] Sending request...`);
+            // console.log(`[x402-log][${timestamp}] Sending request...`);
             
             // Measure request time
             const startTime = performance.now();
@@ -216,16 +216,16 @@ export class PaymentTransport extends StreamableHTTPClientTransport {
             const duration = (endTime - startTime).toFixed(2);
             
             // Log the response details
-            console.log(`[x402-log][${timestamp}] Response received in ${duration}ms`);
-            console.log(`[x402-log][${timestamp}] Response Status: ${response.status} ${response.statusText}`);
-            console.log(`[x402-log][${timestamp}] Response Type: ${response.type}`);
+            // console.log(`[x402-log][${timestamp}] Response received in ${duration}ms`);
+            // console.log(`[x402-log][${timestamp}] Response Status: ${response.status} ${response.statusText}`);
+            // console.log(`[x402-log][${timestamp}] Response Type: ${response.type}`);
             
             // Fix headers logging - cast headers to iterable for older TS versions
             const headerEntries: [string, string][] = [];
             response.headers.forEach((value, key) => {
                 headerEntries.push([key, value]);
             });
-            console.log(`[x402-log][${timestamp}] Response Headers:`, Object.fromEntries(headerEntries));
+            // console.log(`[x402-log][${timestamp}] Response Headers:`, Object.fromEntries(headerEntries));
             
             return response;
         };
@@ -289,7 +289,7 @@ export class PaymentTransport extends StreamableHTTPClientTransport {
                 // If we get a 402 error, retry with our payment-enabled fetch
                 const errorMessage = String(error);
                 if (errorMessage.includes("HTTP 402")) {
-                    console.log("[x402] Detected 402 Payment Required, handling payment...");
+                    // console.log("[x402] Detected 402 Payment Required, handling payment...");
                     
                     // Handle the payment required response
                     await this._handlePaymentRequired(message, errorMessage, options);
@@ -343,11 +343,11 @@ export class PaymentTransport extends StreamableHTTPClientTransport {
             const extractedReqs = this._extractPaymentRequirementsFromError(errorMessage);
 
             if (extractedReqs) {
-                console.log("[x402] Extracted payment requirements from error message");
+                // console.log("[x402] Extracted payment requirements from error message");
                 paymentRequirements = extractedReqs;
             } else {
                 // If extraction failed, fetch requirements from the API endpoint
-                console.log("[x402] Fetching payment requirements from endpoint...");
+                // console.log("[x402] Fetching payment requirements from endpoint...");
                 const response = await fetch(this._paymentUrl.toString(), {
                     method: "OPTIONS",
                     headers: {
@@ -362,7 +362,7 @@ export class PaymentTransport extends StreamableHTTPClientTransport {
                 paymentRequirements = await response.json() as PaymentRequirementsResponse;
             }
 
-            console.log("[x402] Payment requirements:", paymentRequirements);
+            // console.log("[x402] Payment requirements:", paymentRequirements);
 
             const { x402Version, accepts } = paymentRequirements;
 
@@ -390,12 +390,12 @@ export class PaymentTransport extends StreamableHTTPClientTransport {
                            (this._walletClient as any).client?.chain?.id || 
                            84532; // fallback to Base Sepolia
 
-            console.log("[x402] Wallet client chain info:", {
-                walletChainId: (this._walletClient as any).chain?.id,
-                clientChainId: (this._walletClient as any).client?.chain?.id,
-                resolvedChainId: chainId
-            });
-            console.log("[x402] Using chain ID:", chainId);
+            // console.log("[x402] Wallet client chain info:", {
+            //     walletChainId: (this._walletClient as any).chain?.id,
+            //     clientChainId: (this._walletClient as any).client?.chain?.id,
+            //     resolvedChainId: chainId
+            // });
+            // console.log("[x402] Using chain ID:", chainId);
 
             // Select appropriate payment requirements
             const selectedPaymentRequirements = this._paymentRequirementsSelector(
@@ -404,26 +404,26 @@ export class PaymentTransport extends StreamableHTTPClientTransport {
                 "exact",
             );
 
-            console.log("[x402] Selected payment requirements:", selectedPaymentRequirements);
+            // console.log("[x402] Selected payment requirements:", selectedPaymentRequirements);
 
             // Check if the payment amount exceeds the maximum allowed
             if (BigInt(selectedPaymentRequirements.maxAmountRequired) > this._maxPaymentValue) {
                 throw new Error(`Payment amount ${selectedPaymentRequirements.maxAmountRequired} exceeds maximum allowed ${this._maxPaymentValue}`);
             }
 
-            console.log("[x402] Wallet client details:", this._walletClient); 
-            console.log("[x402] Selected payment requirements for header creation:", selectedPaymentRequirements);
-            console.log("[x402] x402Version:", x402Version);
+            // console.log("[x402] Wallet client details:", this._walletClient); 
+            // console.log("[x402] Selected payment requirements for header creation:", selectedPaymentRequirements);
+            // console.log("[x402] x402Version:", x402Version);
             
             // Create payment header
-            console.log("[x402] Creating payment header...");
+            // console.log("[x402] Creating payment header...");
             const paymentHeader = await createPaymentHeader(
                 this._walletClient,
                 x402Version,
                 selectedPaymentRequirements,
             );
 
-            console.log("[x402] Payment header created");
+            // console.log("[x402] Payment header created");
 
             // Create a modified version of the requestInit with payment headers
             const requestInit = this._customRequestInit ? { ...this._customRequestInit } : {};
@@ -439,7 +439,7 @@ export class PaymentTransport extends StreamableHTTPClientTransport {
 
             // Instead of creating a new transport, modify the current one's request headers
             // and retry the request
-            console.log("[x402] Retrying request with payment header");
+            // console.log("[x402] Retrying request with payment header");
             
             // Store original requestInit
             const originalRequestInit = this._customRequestInit;
@@ -450,7 +450,7 @@ export class PaymentTransport extends StreamableHTTPClientTransport {
                 
                 // Retry the request with the same transport instance
                 await super.send(message, options);
-                console.log("[x402] Payment successful");
+                // console.log("[x402] Payment successful");
             } finally {
                 // Restore original requestInit
                 this._customRequestInit = originalRequestInit;

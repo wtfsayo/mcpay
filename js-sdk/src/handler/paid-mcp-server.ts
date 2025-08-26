@@ -34,7 +34,7 @@ interface NodeError extends Error {
 const debug = (namespace: string) => {
   return (...args: unknown[]) => {
     if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production') {
-      console.log(`[${namespace}]`, ...args);
+      // console.log(`[${namespace}]`, ...args);
     }
   };
 };
@@ -817,7 +817,7 @@ function _createPaidMcpHandler(
   serverOptions?: MCPayMcpServerOptions,
   config?: Config
 ): (request: Request) => Promise<Response> {
-  console.log('[mcpay] Creating paid MCP handler...', { serverOptions });
+  // console.log('[mcpay] Creating paid MCP handler...', { serverOptions });
   const processor = new PaymentProcessor(serverOptions);
 
   processor.pingServerWithRetry();
@@ -825,7 +825,7 @@ function _createPaidMcpHandler(
   return createMcpHandler(
     // Wrap the initialization to use ExtendedMcpServer
     async (server: McpServer) => {
-      console.log('[mcpay] Initializing MCP server with payment support...');
+      // console.log('[mcpay] Initializing MCP server with payment support...');
       
       // Create a proxy that adds the paidTool method while delegating everything else to the original server
       const extendedServer = new Proxy(server, {
@@ -840,7 +840,7 @@ function _createPaidMcpHandler(
       // Call the user's initialization function with the extended server
       await initializeServer(extendedServer);
       
-      console.log('[mcpay] Server initialized, triggering ping...');
+      // console.log('[mcpay] Server initialized, triggering ping...');
 
       // Ping the server asynchronously after initialization (don't await to avoid blocking)
       // Only ping here if pingOnCreate is disabled
@@ -850,7 +850,7 @@ function _createPaidMcpHandler(
           console.warn('Ping server error (non-blocking):', error);
         });
       } else {
-        console.log('[mcpay] Skipping server initialization ping (already pinged on create)');
+        // console.log('[mcpay] Skipping server initialization ping (already pinged on create)');
       }
     },
     serverOptions,

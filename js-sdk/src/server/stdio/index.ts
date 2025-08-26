@@ -21,7 +21,7 @@ const account = privateKeyToAccount(privateKey);
  */
 async function main() {
     try {
-        console.log(`Connecting to ${serverUrls.length} server(s)...`);
+        // console.log(`Connecting to ${serverUrls.length} server(s)...`);
         
         // Multi-server approach using PaymentTransport
         const serverConnections = createServerConnections(
@@ -34,7 +34,7 @@ async function main() {
                 account,
             });
             
-        console.log(`Connected to ${serverUrls.length} servers using payment transport`);
+        // console.log(`Connected to ${serverUrls.length} servers using payment transport`);
     } catch (error) {
         console.error("Failed to start server:", error);
         process.exit(1);

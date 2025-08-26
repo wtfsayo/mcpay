@@ -231,7 +231,7 @@ export async function scaffoldServer(options: ScaffoldOptions): Promise<void> {
         if (exampleDir) {
           const exampleServerPath = path.join(exampleDir, 'api', 'server.ts');
           serverContent = await fs.readFile(exampleServerPath, 'utf-8');
-          console.log(`📄 Using example implementation from ${template}`);
+          // console.log(`📄 Using example implementation from ${template}`);
           
           // Also copy additional files if they exist
           const additionalFiles = ['lib', 'scripts'];
@@ -240,7 +240,7 @@ export async function scaffoldServer(options: ScaffoldOptions): Promise<void> {
               const sourcePath = path.join(exampleDir, file);
               const destPath = path.join(projectDir, file);
               await copyDirectory(sourcePath, destPath);
-              console.log(`📁 Copied ${file} directory`);
+              // console.log(`📁 Copied ${file} directory`);
             } catch {
               // File doesn't exist, skip
             }
@@ -293,13 +293,13 @@ export async function scaffoldServer(options: ScaffoldOptions): Promise<void> {
       readmeTemplate(templateConfig.name, templateConfig.description, templateConfig.envVariables)
     );
 
-    console.log(`✅ Successfully scaffolded "${templateConfig.name}" project in ${name}/`);
-    console.log('\nNext steps:');
-    console.log(`1. cd ${name}`);
-    console.log('2. pnpm install');
-    console.log('3. cp env.example .env');
-    console.log('4. Edit .env with your API keys');
-    console.log('5. vercel dev');
+    // console.log(`✅ Successfully scaffolded "${templateConfig.name}" project in ${name}/`);
+    // console.log('\nNext steps:');
+    // console.log(`1. cd ${name}`);
+    // console.log('2. pnpm install');
+    // console.log('3. cp env.example .env');
+    // console.log('4. Edit .env with your API keys');
+    // console.log('5. vercel dev');
 
   } catch (error) {
     // Clean up on error
@@ -330,9 +330,9 @@ async function copyDirectory(src: string, dest: string): Promise<void> {
 }
 
 export function listTemplates(): void {
-  console.log('Available templates:\n');
+  // console.log('Available templates:\n');
   Object.entries(TEMPLATES).forEach(([key, config]) => {
-    console.log(`${key.padEnd(20)} - ${config.name}`);
-    console.log(`${' '.repeat(22)}${config.description}\n`);
+    // console.log(`${key.padEnd(20)} - ${config.name}`);
+    // console.log(`${' '.repeat(22)}${config.description}\n`);
   });
 } 
