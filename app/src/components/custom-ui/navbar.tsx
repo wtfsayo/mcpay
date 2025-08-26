@@ -166,7 +166,7 @@ export default function Navbar() {
                   </SheetClose>
                   <SheetClose asChild>
                     <Link
-                      href="/monetize"
+                      href="/register"
                       className="block font-mono tracking-wide text-lg text-muted-foreground hover:text-foreground"
                     >
                       MONETIZE
