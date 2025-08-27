@@ -48,6 +48,8 @@ import { PricingEntry, type AuthType, type MCPTool, type ToolCall, type UserWith
 import { settleResponseHeader, SupportedNetwork } from "@/types/x402";
 import { Hono, type Context } from "hono";
 import { handle } from "hono/vercel";
+import { VLayer } from "@/lib/gateway/3rd-parties/vlayer";
+import { parseWebProofHex } from "@/lib/gateway/3rd-parties/vlayer/web-proof-parser";
 
 export const runtime = 'nodejs'
 
@@ -460,7 +462,7 @@ const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer, metad
     // Add more realistic browser headers
     headers.set('accept', 'application/json, text/event-stream, text/plain, */*');
     headers.set('accept-language', 'en-US,en;q=0.9');
-    headers.set('accept-encoding', 'gzip, deflate, br');
+    // Intentionally omit accept-encoding to prefer plain responses for easier proof parsing
     headers.set('sec-fetch-dest', 'empty');
     headers.set('sec-fetch-mode', 'cors');
     headers.set('sec-fetch-site', 'cross-site');
@@ -533,6 +535,135 @@ const forwardRequest = async (c: Context, id?: string, body?: ArrayBuffer, metad
     }
 
     return response;
+}
+
+/**
+ * For paid requests (X-PAYMENT present), route via VLayer notary to generate a web proof
+ * and reconstruct the upstream HTTP response from the proof transcript.
+ */
+const forwardRequestViaVLayer = async (c: Context, id?: string, body?: ArrayBuffer, metadata?: { user?: UserWithWallet }) => {
+    let targetUpstream: URL | undefined = undefined;
+    let authHeaders: Record<string, unknown> | undefined = undefined;
+
+    if (id) {
+        const mcpConfig = await withTransaction(async (tx) => {
+            return await txOperations.internal_getMcpServerByServerId(id)(tx);
+        });
+
+        const mcpOrigin = mcpConfig?.mcpOrigin;
+        if (mcpOrigin) {
+            targetUpstream = new URL(mcpOrigin);
+        }
+
+        if (mcpConfig?.authHeaders && mcpConfig?.requireAuth) {
+            authHeaders = mcpConfig.authHeaders as Record<string, unknown>;
+        }
+    }
+
+    if (!targetUpstream) {
+        throw new Error("No target upstream found");
+    }
+
+    const url = new URL(c.req.url);
+    url.host = targetUpstream.host;
+    url.protocol = targetUpstream.protocol;
+    url.port = targetUpstream.port;
+
+    // Remove /mcp/:id from path when forwarding to upstream, keeping everything after /:id
+    const pathWithoutId = url.pathname.replace(/^\/mcp\/[^\/]+/, '')
+    url.pathname = targetUpstream.pathname + (pathWithoutId || '')
+
+    // Preserve all query parameters from the original mcpOrigin
+    if (targetUpstream.search) {
+        const targetParams = new URLSearchParams(targetUpstream.search);
+        targetParams.forEach((value, key) => {
+            url.searchParams.set(key, value);
+        });
+    }
+
+    const headers = new Headers();
+    c.req.raw.headers.forEach((v, k) => {
+        if (!shouldBlockHeader(k)) {
+            headers.set(k, v);
+        }
+    });
+    headers.set('host', targetUpstream.host);
+
+    // Add browser-like headers to avoid bot detection
+    if (!headers.has('user-agent')) {
+        headers.set('user-agent', getRandomUserAgent());
+    }
+    headers.set('accept', 'application/json, text/event-stream, text/plain, */*');
+    headers.set('accept-language', 'en-US,en;q=0.9');
+    headers.set('accept-encoding', 'gzip, deflate, br');
+    headers.set('sec-fetch-dest', 'empty');
+    headers.set('sec-fetch-mode', 'cors');
+    headers.set('sec-fetch-site', 'cross-site');
+    headers.set('referer', 'https://mcpay.fun');
+    headers.set('origin', 'https://mcpay.fun');
+
+    // set user information headers
+    const walletAddress = metadata?.user?.walletAddress || "";
+    headers.set("x-mcpay-wallet-address", walletAddress);
+
+    if (authHeaders) {
+        for (const [key, value] of Object.entries(authHeaders)) {
+            headers.set(key, value as string);
+        }
+    }
+
+    // Prepare VLayer web proof request
+    const method = c.req.raw.method.toUpperCase();
+    let data: string | undefined = undefined;
+    if (method !== 'GET') {
+        // Prefer provided body from inspectRequest to avoid stream re-consumption
+        if (body) {
+            data = new TextDecoder().decode(body);
+        } else if (c.req.raw.body) {
+            const cloned = c.req.raw.clone();
+            const arrayBuffer = await cloned.arrayBuffer();
+            data = new TextDecoder().decode(arrayBuffer);
+        }
+    }
+
+    const headerStrings: string[] = [];
+    headers.forEach((v, k) => {
+        const lower = k.toLowerCase();
+        if (lower === 'host' || lower === 'content-length') return;
+        headerStrings.push(`${k}: ${v}`);
+    });
+
+    const proof = await VLayer.generateWebProof({
+        url: url.toString(),
+        host: targetUpstream.host,
+        headers: headerStrings,
+        // Empty string allows VLayer client to fall back to DEFAULT_NOTARY
+        notary: '',
+        method: (method === 'GET' ? 'GET' : 'POST'),
+        data,
+    });
+
+    if (!proof?.presentation) {
+        throw new Error('Web proof generation returned empty presentation');
+    }
+
+    const parsed = parseWebProofHex(proof.presentation);
+    // Build response from parsed transcript
+    const statusCode = parsed.response?.statusCode || 200;
+    const statusText = parsed.response?.statusText || 'OK';
+    const responseHeaders = new Headers();
+    if (parsed.response?.headers) {
+        Object.entries(parsed.response.headers).forEach(([k, v]) => {
+            try { responseHeaders.set(k, v); } catch {}
+        });
+    }
+    const bodyText = parsed.response?.bodyText || '';
+
+    return new Response(bodyText, {
+        status: statusCode,
+        statusText: statusText,
+        headers: responseHeaders,
+    });
 }
 
 /**
@@ -1391,7 +1522,11 @@ verbs.forEach(verb => {
         // No need for fallback logic here since it's already covered
 
         console.log(`[${new Date().toISOString()}] Forwarding request to upstream with ID: ${id}`);
-        const upstream = await forwardRequest(c, id, body, { user: user || undefined });
+        // If payment header is present, route via VLayer to obtain a web proof-backed response
+        const hasPaymentHeader = !!c.req.header("X-PAYMENT");
+        const upstream = hasPaymentHeader
+            ? await forwardRequestViaVLayer(c, id, body, { user: user || undefined })
+            : await forwardRequest(c, id, body, { user: user || undefined });
         console.log(`[${new Date().toISOString()}] Received upstream response, mirroring back to client`);
 
         // Clone the response before any operations to avoid body locking issues

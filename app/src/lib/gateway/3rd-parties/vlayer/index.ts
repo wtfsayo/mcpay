@@ -36,6 +36,7 @@ export interface ExecutionContext {
 
 export interface WebProofRequest {
   url: string;
+  host?: string;
   headers: string[];
   notary: string;
   method: 'GET' | 'POST';
@@ -64,28 +65,68 @@ export interface VerificationResult {
 }
 
 export class VLayer {
-  private static readonly WEB_PROOF_API = 'https://web-proof-vercel.vercel.app/api/handler';
-  private static readonly DEFAULT_NOTARY = 'https://test-notary.vlayer.xyz';
+  // URL of the Hono server /proof endpoint. Example: http://localhost:8080/proof
+  private static readonly WEB_PROOF_SERVER_URL = 'http://vlayerserverwebproofs-container-k6vh3u-56952f-157-180-19-60.traefik.me/proof';
+  // Default notary can be overridden via env to pin a version, e.g. https://test-notary.vlayer.xyz/v0.1.0-alpha.11
+  private static readonly DEFAULT_NOTARY = process.env.VLAYER_NOTARY_URL || 'https://test-notary.vlayer.xyz/v0.1.0-alpha.11';
 
   /**
    * Generates a cryptographic web proof for a given URL request
    */
   static async generateWebProof(request: WebProofRequest): Promise<WebProofResponse> {
     try {
-      const response = await fetch(this.WEB_PROOF_API, {
+      // Map string[] headers like ["Key: Value"] into Record<string,string>
+      const headerRecord: Record<string, string> | undefined = Array.isArray(request.headers)
+        ? request.headers.reduce((acc, h) => {
+            const idx = h.indexOf(':');
+            if (idx > -1) {
+              const key = h.slice(0, idx).trim();
+              const value = h.slice(idx + 1).trim();
+              if (key) acc[key] = value;
+            }
+            return acc;
+          }, {} as Record<string, string>)
+        : undefined;
+
+      const urlHost = (() => {
+        try {
+          return new URL(request.url).host;
+        } catch {
+          return undefined;
+        }
+      })();
+
+      const payload = {
+        url: request.url,
+        host: request.host || urlHost,
+        notary: request.notary || this.DEFAULT_NOTARY,
+        headers: headerRecord,
+        // If data is provided we assume POST; otherwise GET is implied by the CLI
+        data: request.data,
+      } as const;
+
+      const response = await fetch(this.WEB_PROOF_SERVER_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(request),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
-        throw new Error(`Web proof generation failed: ${response.status} ${response.statusText}`);
+        let details: unknown;
+        try {
+          details = await response.json();
+        } catch {
+          // ignore
+        }
+        throw new Error(`Web proof generation failed: ${response.status} ${response.statusText}${details ? ` - ${JSON.stringify(details)}` : ''}`);
       }
 
-      const data = await response.json() as WebProofResponse;
-      return data;
+      // The Hono server returns { proof, debug } where proof contains { presentation, ... }
+      const json = await response.json() as { proof?: WebProofResponse } | WebProofResponse;
+      const proof = (json as any)?.proof ?? json;
+      return proof as WebProofResponse;
     } catch (error) {
       console.error('Error generating web proof:', error);
       throw error;
