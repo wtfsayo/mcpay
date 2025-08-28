@@ -57,6 +57,15 @@ export default function Footer() {
                                 variant="link"
                                 className="h-8 px-2 font-mono text-[13px] tracking-wide text-muted-foreground hover:text-foreground hover:underline hover:decoration-dotted underline-offset-2"
                             >
+                                <Link href="https://docs.mcpay.tech" target="_blank" rel="noreferrer">
+                                    DOCS
+                                </Link>
+                            </Button>
+                            <Button
+                                asChild
+                                variant="link"
+                                className="h-8 px-2 font-mono text-[13px] tracking-wide text-muted-foreground hover:text-foreground hover:underline hover:decoration-dotted underline-offset-2"
+                            >
                                 <Link href="https://github.com/microchipgnu/mcpay" target="_blank" rel="noreferrer">
                                     GITHUB
                                 </Link>

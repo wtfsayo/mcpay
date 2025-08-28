@@ -189,17 +189,22 @@ export default function Navbar() {
 
                     <nav className="flex items-center">
                       <Button asChild variant="link" className={linkClasses}>
-                        <Link href="https://github.com/your-org-or-user" target="_blank" rel="noreferrer">
+                        <Link href="https://docs.mcpay.tech" target="_blank" rel="noreferrer">
+                          DOCS
+                        </Link>
+                      </Button>
+                      <Button asChild variant="link" className={linkClasses}>
+                        <Link href="https://github.com/microchipgnu/mcpay" target="_blank" rel="noreferrer">
                           GITHUB
                         </Link>
                       </Button>
                       <Button asChild variant="link" className={linkClasses}>
-                        <Link href="https://t.me/your-handle" target="_blank" rel="noreferrer">
+                        <Link href="https://t.me/mcpay_tech" target="_blank" rel="noreferrer">
                           TELEGRAM
                         </Link>
                       </Button>
                       <Button asChild variant="link" className={linkClasses}>
-                        <Link href="https://x.com/your-handle" target="_blank" rel="noreferrer">
+                        <Link href="https://x.com/mcpaytech" target="_blank" rel="noreferrer">
                           X
                         </Link>
                       </Button>
