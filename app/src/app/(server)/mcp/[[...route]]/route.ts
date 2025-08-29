@@ -43,7 +43,9 @@ import { Hono } from "hono";
 import { handle } from "hono/vercel";
 import { authResolution, type AuthResolutionVariables } from "@/lib/gateway/mcp-proxy/middlewares/auth-resolution";
 import { inspectToolCall, type InspectToolCallVariables } from "@/lib/gateway/mcp-proxy/middlewares/inspect-tool-call";
-import { paymentGate } from "@/lib/gateway/mcp-proxy/middlewares/payment-gate";
+// Split payment into pre-authorization and capture phases
+import { paymentPreAuth } from "@/lib/gateway/mcp-proxy/middlewares/payment-preauth";
+import { paymentCapture } from "@/lib/gateway/mcp-proxy/middlewares/payment-capture";
 import { browserHeaders, type BrowserHeadersVariables } from "@/lib/gateway/mcp-proxy/middlewares/browser-headers";
 import { rateLimit } from "@/lib/gateway/mcp-proxy/middlewares/rate-limit";
 import { cacheRead, cacheWrite, type CacheVariables } from "@/lib/gateway/mcp-proxy/middlewares/cache";
@@ -53,6 +55,7 @@ import { upstream, type UpstreamVariables } from "@/lib/gateway/mcp-proxy/middle
 import { requestLogger } from "@/lib/gateway/mcp-proxy/middlewares/request-logger";
 import { requestTiming, type RequestTimingVariables } from "@/lib/gateway/mcp-proxy/middlewares/request-timing";
 import { analytics } from "@/lib/gateway/mcp-proxy/middlewares/analytics";
+import { jsonrpcAccept, type JsonRpcVariables } from "@/lib/gateway/mcp-proxy/middlewares/jsonrpc-accept";
 
 export const runtime = 'nodejs'
 
@@ -64,7 +67,7 @@ export const runtime = 'nodejs'
 
 // Retry/backoff is provided by retries middleware
 
-const app = new Hono<{ Bindings: AuthType, Variables: AuthResolutionVariables & InspectToolCallVariables & BrowserHeadersVariables & ForwardVariables & CacheVariables & RetriesVariables & UpstreamVariables & RequestTimingVariables }>({
+const app = new Hono<{ Bindings: AuthType, Variables: AuthResolutionVariables & InspectToolCallVariables & BrowserHeadersVariables & ForwardVariables & CacheVariables & RetriesVariables & UpstreamVariables & RequestTimingVariables & JsonRpcVariables }>({
     strict: false,
 }).basePath("/mcp")
 
@@ -75,27 +78,32 @@ app.use("*", authResolution);
 app.use("*", requestTiming);
 // Log incoming JSON payloads safely
 app.use("*", requestLogger);
+// Enforce minimal JSON-RPC Accept/batch/notification semantics
+app.use("*", jsonrpcAccept);
 // Inspect tool call – sets c.get('toolCall'), c.get('pickedPricing'), c.get('targetUpstream')
 app.use("*", inspectToolCall);
-// Payment gate for paid tool calls – verifies and settles before forwarding
-app.use("*", paymentGate);
 // Prepare browser-like upstream headers
 app.use("*", browserHeaders);
 // Build upstream URL and request init (no fetch)
 app.use("*", forward);
-// Read-through cache for GET requests using computed upstream URL
+// Read-through cache for GET requests using computed upstream URL (early)
 app.use("*", cacheRead);
 // Enforce token-bucket + min-delay per hostname
 app.use("*", rateLimit);
+// Pre-authorize payment (hold only), no capture yet
+app.use("*", paymentPreAuth);
 // Attach fetchWithRetry to context for 429-only exponential backoff
 app.use("*", retries);
 // Perform upstream request and mirror response
 app.use("*", upstream);
 // After upstream response, store successful GET responses in cache
 app.use("*", cacheWrite);
+// Capture/settle payment after successful upstream/cache write
+app.use("*", paymentCapture);
 // Capture analytics based on toolCall and upstream response
 app.use("*", analytics);
 
 export const GET = handle(app);
 export const POST = handle(app);
 export const DELETE = handle(app);
+
