@@ -14,6 +14,10 @@ function ensureString(value: string | undefined, fallback = "unknown"): string {
 async function captureResponseData(upstream: Response): Promise<Record<string, unknown> | undefined> {
     try {
         const cloned = upstream.clone();
+        const contentType = cloned.headers.get('content-type') || '';
+        if (contentType.includes('text/event-stream')) {
+            return undefined; // avoid consuming SSE
+        }
         const text = await cloned.text();
         if (!text) return undefined;
         try {

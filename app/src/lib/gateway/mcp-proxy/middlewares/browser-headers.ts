@@ -68,7 +68,7 @@ export function filterIncomingHeaders(incoming: Headers): Headers {
     return headers;
 }
 
-export const browserHeaders: MiddlewareHandler<{ Variables: BrowserHeadersVariables & AuthResolutionVariables }> = async (c, next) => {
+export const browserHeaders: MiddlewareHandler<{ Variables: BrowserHeadersVariables & AuthResolutionVariables & { targetUpstream?: URL } }> = async (c, next) => {
     const prepared = filterIncomingHeaders(c.req.raw.headers);
 
     // Add browser-like headers
@@ -82,8 +82,22 @@ export const browserHeaders: MiddlewareHandler<{ Variables: BrowserHeadersVariab
     prepared.set('sec-fetch-dest', 'empty');
     prepared.set('sec-fetch-mode', 'cors');
     prepared.set('sec-fetch-site', 'cross-site');
-    prepared.set('referer', 'https://mcpay.fun');
-    prepared.set('origin', 'https://mcpay.fun');
+    // Dynamic referer/origin based on target upstream when available
+    try {
+        const originalUrl = new URL(c.req.url);
+        const upstream = c.get('targetUpstream') as URL | undefined;
+        const refererUrl = upstream || originalUrl;
+        prepared.set('referer', refererUrl.origin);
+        prepared.set('origin', refererUrl.origin);
+    } catch {
+        prepared.set('referer', 'https://mcpay.fun');
+        prepared.set('origin', 'https://mcpay.fun');
+    }
+
+    // Add basic Client Hints for better bot heuristics
+    if (!prepared.has('sec-ch-ua')) prepared.set('sec-ch-ua', '"Chromium";v="120", "Not A(Brand";v="24", "Google Chrome";v="120"');
+    if (!prepared.has('sec-ch-ua-mobile')) prepared.set('sec-ch-ua-mobile', '?0');
+    if (!prepared.has('sec-ch-ua-platform')) prepared.set('sec-ch-ua-platform', '"macOS"');
 
     // Attach user metadata header if available
     const user = c.get('user') as UserWithWallet | undefined;

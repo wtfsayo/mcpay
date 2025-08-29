@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from "hono";
+import env from "@/lib/gateway/env";
 import type { AuthType } from "@/types";
 import type { AuthResolutionVariables } from "@/lib/gateway/mcp-proxy/middlewares/auth-resolution";
 import type { InspectToolCallVariables } from "@/lib/gateway/mcp-proxy/middlewares/inspect-tool-call";
@@ -19,10 +20,17 @@ interface RateLimitConfig {
 }
 
 const DEFAULT_CONFIG: RateLimitConfig = {
-    capacity: 30, // ~30 req/min burst
-    refillPerSecond: 0.5, // 30 tokens per minute
-    minDelayMs: 1000 // at least 1s between requests
+    capacity: 30,
+    refillPerSecond: 0.5,
+    minDelayMs: 1000
 };
+
+function getConfig(): RateLimitConfig {
+    const capacity = typeof env.RATE_LIMIT_CAPACITY === 'number' ? env.RATE_LIMIT_CAPACITY : DEFAULT_CONFIG.capacity;
+    const refillPerSecond = typeof env.RATE_LIMIT_REFILL_PER_SECOND === 'number' ? env.RATE_LIMIT_REFILL_PER_SECOND : DEFAULT_CONFIG.refillPerSecond;
+    const minDelayMs = typeof env.RATE_LIMIT_MIN_DELAY_MS === 'number' ? env.RATE_LIMIT_MIN_DELAY_MS : DEFAULT_CONFIG.minDelayMs;
+    return { capacity, refillPerSecond, minDelayMs };
+}
 
 const buckets = new Map<string, TokenBucket>();
 
@@ -67,7 +75,7 @@ async function sleep(ms: number): Promise<void> {
 }
 
 export const rateLimit: MiddlewareHandler<Ctx> = async (c, next) => {
-    const cfg = DEFAULT_CONFIG;
+    const cfg = getConfig();
 
     const hostname = getHostnameFromContext(c);
     if (!hostname) {

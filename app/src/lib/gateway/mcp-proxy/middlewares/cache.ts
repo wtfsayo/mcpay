@@ -1,4 +1,5 @@
 import { MiddlewareHandler } from "hono";
+import type { ForwardVariables } from "@/lib/gateway/mcp-proxy/middlewares/forward";
 
 // Shared cache entry format so a later "cache write" step can store entries here
 export interface CacheEntry {
@@ -15,12 +16,25 @@ export interface CacheEntry {
 // In-memory response cache. This is intentionally module-scoped to persist across requests.
 export const responseCache = new Map<string, CacheEntry>();
 
+let lastCleanupAt = 0;
+const CLEANUP_INTERVAL_MS = 60000; // 1 minute
+
 // Variables exposed to the request context so later middlewares/handlers can write into the cache
 export type CacheVariables = {
     cacheKey?: string;
 };
 
 const DEFAULT_CACHE_TTL = 30000; // 30s
+
+function computeTTLForUrl(url: string): number {
+    try {
+        const hostname = new URL(url).hostname.toLowerCase();
+        if (hostname.includes('coingecko')) return 60000; // 1 min for CoinGecko
+        return 45000; // 45s default for other APIs
+    } catch {
+        return DEFAULT_CACHE_TTL;
+    }
+}
 
 // Compute cache key as method:url:bodyHash
 export function getCacheKey(url: string, method: string, body?: ArrayBuffer): string {
@@ -50,27 +64,39 @@ export function getCachedResponse(cacheKey: string): Response | null {
     });
 }
 
+function cleanupExpired(now: number): void {
+    for (const [key, entry] of responseCache) {
+        if (now > entry.timestamp + entry.ttl) {
+            responseCache.delete(key);
+        }
+    }
+    lastCleanupAt = now;
+}
+
 // Read-through cache middleware: only for GET. On hit returns immediately. On miss, lets the chain continue.
-export const cacheRead: MiddlewareHandler<{ Variables: CacheVariables }> = async (c, next) => {
+export const cacheRead: MiddlewareHandler<{ Variables: CacheVariables & ForwardVariables }> = async (c, next) => {
     if (c.req.raw.method !== 'GET') {
         return next();
     }
 
-    // Clone and read body for hash calculation (GET bodies are rare but supported by spec)
-    let body: ArrayBuffer | undefined = undefined;
-    try {
-        const cloned = c.req.raw.clone();
-        if (cloned.body) {
-            body = await cloned.arrayBuffer();
+    // If a cache key was computed by forward middleware, use it; otherwise compute here
+    let cacheKey = c.get('cacheKey') as string | undefined;
+    if (!cacheKey) {
+        // Clone and read body for hash calculation (GET bodies are rare but supported by spec)
+        let body: ArrayBuffer | undefined = undefined;
+        try {
+            const cloned = c.req.raw.clone();
+            if (cloned.body) {
+                body = await cloned.arrayBuffer();
+            }
+        } catch {
+            // Ignore body read errors; proceed without body hash
         }
-    } catch {
-        // Ignore body read errors; proceed without body hash
+        cacheKey = getCacheKey(c.req.url, c.req.raw.method, body);
+        c.set('cacheKey', cacheKey);
     }
 
-    const cacheKey = getCacheKey(c.req.url, c.req.raw.method, body);
-    c.set('cacheKey', cacheKey);
-
-    const cached = getCachedResponse(cacheKey);
+    const cached = cacheKey ? getCachedResponse(cacheKey) : null;
     if (cached) {
         return cached;
     }
@@ -79,7 +105,7 @@ export const cacheRead: MiddlewareHandler<{ Variables: CacheVariables }> = async
 };
 
 // Cache write middleware: runs after downstream handler. Stores successful GET responses when cacheKey is present.
-export const cacheWrite: MiddlewareHandler<{ Variables: CacheVariables }> = async (c, next) => {
+export const cacheWrite: MiddlewareHandler<{ Variables: CacheVariables & ForwardVariables }> = async (c, next) => {
     if (c.req.raw.method !== 'GET') {
         return next();
     }
@@ -106,6 +132,9 @@ export const cacheWrite: MiddlewareHandler<{ Variables: CacheVariables }> = asyn
         const headersObj: Record<string, string> = {};
         cloned.headers.forEach((v, k) => { headersObj[k] = v; });
 
+        const upstreamUrl = (c.get('upstreamUrl') as string | undefined) || c.req.url;
+        const ttl = computeTTLForUrl(upstreamUrl);
+
         const entry: CacheEntry = {
             response: {
                 status: res.status,
@@ -114,12 +143,17 @@ export const cacheWrite: MiddlewareHandler<{ Variables: CacheVariables }> = asyn
                 body
             },
             timestamp: Date.now(),
-            ttl: DEFAULT_CACHE_TTL
+            ttl
         };
 
         responseCache.set(cacheKey, entry);
         // Mark the outgoing response for observability (MISS + STORE)
         c.res.headers.set('x-mcpay-cache', 'MISS');
+
+        const now = Date.now();
+        if (now - lastCleanupAt > CLEANUP_INTERVAL_MS) {
+            cleanupExpired(now);
+        }
     } catch {
         // Ignore caching errors
     }

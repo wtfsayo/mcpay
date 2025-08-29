@@ -1,5 +1,6 @@
 import { fromBaseUnits } from "@/lib/commons";
 import { extractApiKey } from "@/lib/gateway/auth-utils";
+import { txOperations, withTransaction } from "@/lib/gateway/db/actions";
 import { createExactPaymentRequirements, decodePayment, settle, verifyPayment, x402Version } from "@/lib/gateway/payments";
 import type { AuthType, PricingEntry, ToolCall, UserWithWallet } from "@/types";
 import { settleResponseHeader, type SupportedNetwork } from "@/types/x402";
@@ -133,6 +134,38 @@ export const paymentGate = async (
             });
         }
 
+        // Persist a pending payment record (idempotent by signature)
+        try {
+            const signedHeader = c.req.header("X-PAYMENT");
+            if (signedHeader && pickedPricing && toolCall.toolId) {
+                await withTransaction(async (tx) => {
+                    const existing = await txOperations.getPaymentBySignature(signedHeader)(tx);
+                    if (!existing) {
+                        let payerAddress: string | undefined = undefined;
+                        try {
+                            const decodedForPayer = decodePayment(signedHeader);
+                            payerAddress = decodedForPayer.payload.authorization.from;
+                        } catch {}
+
+                        const user = c.get('user') as UserWithWallet | null;
+                        await txOperations.createPayment({
+                            toolId: toolCall.toolId as string,
+                            userId: user?.id,
+                            amountRaw: pickedPricing.maxAmountRequiredRaw,
+                            tokenDecimals: pickedPricing.tokenDecimals,
+                            currency: pickedPricing.assetAddress,
+                            network: pickedPricing.network,
+                            status: 'pending',
+                            signature: signedHeader,
+                            paymentData: payerAddress ? { payer: payerAddress } : undefined,
+                        })(tx);
+                    }
+                });
+            }
+        } catch {
+            // best-effort only
+        }
+
         // Settle payment
         const signed = c.req.header("X-PAYMENT");
         if (!signed) {
@@ -167,6 +200,47 @@ export const paymentGate = async (
 
         // Success – attach settlement header and continue
         c.header("X-PAYMENT-RESPONSE", settleResponseHeader(settleResponse));
+        try {
+            const prevExpose = c.res?.headers.get('Access-Control-Expose-Headers');
+            const exposeVal = prevExpose && prevExpose.length > 0
+                ? `${prevExpose}, X-PAYMENT-RESPONSE`
+                : 'X-PAYMENT-RESPONSE';
+            c.header('Access-Control-Expose-Headers', exposeVal);
+        } catch {
+            c.header('Access-Control-Expose-Headers', 'X-PAYMENT-RESPONSE');
+        }
+
+        // Mark payment completed in DB (idempotent)
+        try {
+            const signedHeader = c.req.header("X-PAYMENT");
+            if (signedHeader && pickedPricing && toolCall.toolId) {
+                await withTransaction(async (tx) => {
+                    const existing = await txOperations.getPaymentBySignature(signedHeader)(tx);
+                    if (existing) {
+                        await txOperations.updatePaymentStatus(existing.id, 'completed', settleResponse.transaction)(tx);
+                    } else {
+                        const user = c.get('user') as UserWithWallet | null;
+                        await txOperations.createPayment({
+                            toolId: toolCall.toolId as string,
+                            userId: user?.id,
+                            amountRaw: pickedPricing.maxAmountRequiredRaw,
+                            tokenDecimals: pickedPricing.tokenDecimals,
+                            currency: pickedPricing.assetAddress,
+                            network: pickedPricing.network,
+                            transactionHash: settleResponse.transaction,
+                            status: 'completed',
+                            signature: signedHeader,
+                            paymentData: {
+                                payer: settleResponse.payer,
+                                network: settleResponse.network,
+                            },
+                        })(tx);
+                    }
+                });
+            }
+        } catch {
+            // best-effort only
+        }
         await next();
     } catch (e) {
         // In case of unexpected error, fail open (no 402) to avoid blocking non-paid routes
