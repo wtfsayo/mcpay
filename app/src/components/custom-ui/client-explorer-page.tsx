@@ -217,7 +217,6 @@ export default function ClientExplorerPage() {
                     <TableHead className={`${th} font-mono`}>Tool</TableHead>
                     <TableHead className={`${th} font-mono`}>Amount</TableHead>
                     <TableHead className={`${th} font-mono`}>Network</TableHead>
-                    <TableHead className={`${th} font-mono`}>User</TableHead>
                     <TableHead className={`${th} font-mono`}>Date</TableHead>
                     <TableHead className={`${th} font-mono text-right pr-0`}>Transaction</TableHead>
                   </TableRow>
@@ -305,11 +304,6 @@ export default function ClientExplorerPage() {
                           <span className="font-mono text-sm border border-foreground-muted px-2 py-0.5 rounded text-foreground-muted">
                               {r.network}
                             </span>
-                          </TableCell>
-
-                          {/* User */}
-                          <TableCell className={`${td}`}>
-                            <div className="text-[0.95rem] whitespace-nowrap">{r.user}</div>
                           </TableCell>
 
                           {/* Date: relative, tooltip shows full */}
