@@ -167,32 +167,32 @@ graph TB
 graph TB
     subgraph "Next.js App Structure"
         subgraph "Route Handlers (/api)"
-            A1[/api/servers<br/>Registry API]
-            A2[/api/chat<br/>Builder Chat]
-            A3[/api/analytics<br/>Usage Data]
-            A4[/api/auth<br/>Authentication]
-            A5[/api/users<br/>User Management]
+            A1["/api/servers<br/>Registry API"]
+            A2["/api/chat<br/>Builder Chat"]
+            A3["/api/analytics<br/>Usage Data"]
+            A4["/api/auth<br/>Authentication"]
+            A5["/api/users<br/>User Management"]
         end
 
         subgraph "Core Routes"
-            B1[/mcp/:id/*<br/>MCP Proxy]
-            B2[/requirements<br/>Payment Requirements]
-            B3[/validate<br/>Payment Validation]
-            B4[/ping<br/>Server Discovery]
+            B1["/mcp/:id/*<br/>MCP Proxy"]
+            B2["/requirements<br/>Payment Requirements"]
+            B3["/validate<br/>Payment Validation"]
+            B4["/ping<br/>Server Discovery"]
         end
 
         subgraph "UI Pages"
-            C1[/<br/>Homepage]
-            C2[/servers<br/>Registry Browse]
-            C3[/build<br/>MCP Builder]
-            C4[/register<br/>Server Registration]
+            C1["/<br/>Homepage"]
+            C2["/servers<br/>Registry Browse"]
+            C3["/build<br/>MCP Builder"]
+            C4["/register<br/>Server Registration"]
         end
 
         subgraph "Backend Services"
-            D1[Gateway Layer<br/>lib/gateway/]
-            D2[Database<br/>Drizzle ORM]
-            D3[Authentication<br/>Better-auth]
-            D4[Payment Strategies<br/>CDP/Testing]
+            D1["Gateway Layer<br/>lib/gateway/"]
+            D2["Database<br/>Drizzle ORM"]
+            D3["Authentication<br/>Better-auth"]
+            D4["Payment Strategies<br/>CDP/Testing"]
         end
     end
 
